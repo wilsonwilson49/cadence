@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -32,5 +32,15 @@ check(fmtR(openRanges(thu, hrs, [[+dayAt(thu, 600), +dayAt(thu, 660)]], 0)) === 
 check(fmtR(openRanges(thu, hrs, [], +dayAt(thu, 722))) === '12:5-17:0', 'open ranges skip the past');
 check(openRanges(d('2026-10-03'), hrs, [], 0).length === 0, 'no open time on days off');
 check(openRanges(thu, hrs, [[+thu, +dayAt(thu, 1440)]], 0).length === 0, 'closed all-day blocks the day');
+// Until done: every day from the start until the first check-off; past days keep only what happened.
+const today = startOfDay(new Date()), k = n => dateKey(addDays(today, n));
+const ud = newTask({ mode: 'untilDone', startDate: iso(addDays(today, -3)) });
+check(occurs(ud, today) && occurs(ud, addDays(today, 5)) && !occurs(ud, addDays(today, -1)), 'until done: today and future, not empty past days');
+ud.missed = { [k(-2)]: iso(new Date()) };
+check(occurs(ud, addDays(today, -2)), 'until done: a missed past day stays visible');
+ud.completions = { [k(0)]: iso(new Date()) };
+check(occurs(ud, today) && !occurs(ud, addDays(today, 1)) && nextOccurrence(ud, addDays(today, 1)) === null, 'until done: gone after it is checked off');
+const lt = newTask({ mode: 'longTerm', startDate: iso(today), recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: iso(addDays(today, 10)) } } } });
+check(occurs(lt, addDays(today, 10)) && !occurs(lt, addDays(today, 11)) && planSummary(lt).includes('10 days left'), 'long-term: every day through the end date');
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

@@ -17,6 +17,8 @@ struct TaskEditor: View {
     @State private var syncDefaultApplied = false
     /// Once you pick open/closed yourself, switching Task/Event no longer changes it.
     @State private var busyChosen = false
+    @State private var hasDue: Bool
+    @State private var dueDate: Date
     @State private var saving = false
     @State private var error: String?
     @State private var confirmDelete = false
@@ -31,6 +33,8 @@ struct TaskEditor: View {
         _task = State(initialValue: task)
         _hasTime = State(initialValue: task.timeMinutes != nil)
         _time = State(initialValue: dayAt(task.startDate, minutes: task.timeMinutes ?? 9 * 60))
+        _hasDue = State(initialValue: task.dueDate != nil)
+        _dueDate = State(initialValue: task.dueDate ?? task.startDate.adding(days: 7))
         switch task.recurrence.end {
         case .never:
             _endMode = State(initialValue: 0); _endDate = State(initialValue: task.startDate.adding(months: 3)); _endCount = State(initialValue: 10)
@@ -48,6 +52,7 @@ struct TaskEditor: View {
                 Spacer()
                 Picker("", selection: Binding(get: { task.isEvent ? "event" : "task" }, set: { k in
                     task.kind = k
+                    if k == "event" { task.mode = nil }   // events have no check-off, so no "until done"/long-term
                     if !busyChosen { task.busy = k == "event" }   // events start closed, tasks open
                     if k == "event" && isNew {
                         if !hasTime { hasTime = true; time = dayAt(task.startDate, minutes: 9 * 60) }
@@ -124,10 +129,28 @@ struct TaskEditor: View {
                     }
                 } else {
                 Section("Repeat") {
-                    Picker("Repeats", selection: $task.recurrence.frequency) {
-                        ForEach(Frequency.allCases) { Text($0.label).tag($0) }
+                    Picker("Repeats", selection: repeatChoice) {
+                        ForEach(Frequency.allCases) { Text($0.label).tag($0.rawValue) }
+                        if !task.isEvent {
+                            Divider()
+                            Text("Long-term: every day until a date").tag("longTerm")
+                            Text("Every day until it's done").tag("untilDone")
+                        }
                     }
-                    if task.recurrence.isRepeating {
+                    if task.isLongTerm {
+                        DatePicker("Every day until", selection: $endDate, in: task.startDate..., displayedComponents: .date)
+                        Label("On your checklist and reminds you every day until \(endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) (\(max(0, Calendar.current.dateComponents([.day], from: task.startDate.startOfDay, to: endDate.startOfDay).day ?? 0) + 1) days). Check off each day on its own.",
+                              systemImage: "repeat")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if task.isUntilDone {
+                        Toggle("Has a due date", isOn: $hasDue)
+                        if hasDue {
+                            DatePicker("Due by", selection: $dueDate, in: task.startDate..., displayedComponents: .date)
+                        }
+                        Label("On your checklist and reminds you every day\(hasDue ? " (and keeps going past the due date)" : "") until you check it off once. Then it's gone.",
+                              systemImage: "flame")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if task.recurrence.isRepeating {
                         Stepper(value: $task.recurrence.interval, in: 1...99) {
                             Text(task.recurrence.interval == 1 ? "Every \(task.recurrence.frequency.unit)"
                                  : "Every \(task.recurrence.interval) \(task.recurrence.frequency.unit)s")
@@ -294,6 +317,25 @@ struct TaskEditor: View {
 
     private var isGoogleSynced: Bool { task.source == "google" && task.googleEventID != nil && google.isConnected }
 
+    /// The Repeats menu: a frequency, or one of the "keep reminding me" types.
+    private var repeatChoice: Binding<String> {
+        Binding(get: { task.mode ?? task.recurrence.frequency.rawValue }, set: { v in
+            switch v {
+            case "longTerm":
+                task.mode = v
+                task.recurrence.frequency = .daily; task.recurrence.interval = 1; task.recurrence.weekdays = []
+                endMode = 1
+                if endDate <= task.startDate { endDate = task.startDate.adding(days: 30) }
+            case "untilDone":
+                task.mode = v
+                task.recurrence.frequency = .none
+            default:
+                task.mode = nil
+                task.recurrence.frequency = Frequency(rawValue: v) ?? .none
+            }
+        })
+    }
+
     private var previewRecurrence: Recurrence {
         var r = task.recurrence
         r.end = endMode == 1 ? .onDate(endDate) : endMode == 2 ? .afterCount(endCount) : .never
@@ -307,6 +349,13 @@ struct TaskEditor: View {
         t.timeMinutes = hasTime ? time.minutesSinceMidnight : nil
         t.recurrence = previewRecurrence
         if t.recurrence.frequency != .weekly { t.recurrence.weekdays = [] }
+        if t.isEvent { t.mode = nil }
+        if t.isLongTerm {
+            t.recurrence = Recurrence(frequency: .daily, interval: 1, weekdays: [], end: .onDate(max(endDate, t.startDate).startOfDay))
+        } else if t.isUntilDone {
+            t.recurrence = Recurrence()
+        }
+        t.dueDate = t.isUntilDone && hasDue ? dueDate.startOfDay : nil
         // "During" reminders only make sense inside a timed task's span.
         t.reminderOffsets = t.reminderOffsets.filter { $0 >= 0 || (t.timeMinutes != nil && -$0 < t.durationMinutes) }
         if t.reminderOffsets.isEmpty { t.reminderOffsets = [0] }

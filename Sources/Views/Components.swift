@@ -188,10 +188,10 @@ struct ChecklistRow: View {
                     } else if !compact {
                         Label("Any time", systemImage: "sun.horizon")
                     }
-                    if occ.task.recurrence.isRepeating && !compact {
-                        Label(occ.task.recurrence.summary(start: occ.task.startDate), systemImage: "repeat")
-                            .lineLimit(1)
+                    if let plan = occ.task.planSummary, !compact {
+                        Label(plan, systemImage: occ.task.isUntilDone ? "flame" : "repeat").lineLimit(1)
                     }
+                    if occ.task.isPastDue { Text("Past due").foregroundStyle(.red).fontWeight(.medium) }
                     if occ.isOverdue { Text("Overdue").foregroundStyle(.red).fontWeight(.medium) }
                     if occ.task.source == "calendly" { Label("Calendly", systemImage: "person.2") }
                     if occ.task.source == "google" { Label("Google", systemImage: "calendar") }
@@ -447,8 +447,8 @@ struct ItemDetail: View {
                     } else {
                         Label("All day", systemImage: "sun.horizon")
                     }
-                    if occ.task.recurrence.isRepeating {
-                        Label(occ.task.recurrence.summary(start: occ.task.startDate), systemImage: "repeat")
+                    if let plan = occ.task.planSummary {
+                        Label(plan, systemImage: "repeat")
                     }
                     if !occ.task.notes.isEmpty { Text(occ.task.notes).foregroundStyle(.secondary).padding(.top, 2) }
                     Text("\(occ.task.source == "calendly" ? "From Calendly" : occ.task.source == "google" ? "From Google Calendar" : "Event") · \(occ.task.isSilent ? "no reminders" : "reminds you") · not on your checklist")
@@ -474,8 +474,8 @@ struct ItemDetail: View {
                     } else {
                         Label("Any time", systemImage: "sun.horizon")
                     }
-                    if occ.task.recurrence.isRepeating {
-                        Label(occ.task.recurrence.summary(start: occ.task.startDate), systemImage: "repeat")
+                    if let plan = occ.task.planSummary {
+                        Label(plan, systemImage: "repeat")
                     }
                     if !occ.task.notes.isEmpty { Text(occ.task.notes).foregroundStyle(.secondary).padding(.top, 2) }
                     if let r = store.reflection(for: occ) {

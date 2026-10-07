@@ -122,11 +122,29 @@ function patternIndex(task, d, s) {
   return count;
 }
 
+/** Long-term: every day until an end date (each day is its own check-off). Until done: one task that
+ *  shows up every day until it's checked off once, then disappears. */
+export const isLongTerm = task => task.mode === 'longTerm';
+export const isUntilDone = task => task.mode === 'untilDone';
+
+/** The day an until-done task was finished (its earliest check-off), or null. */
+export function finishedKey(task) {
+  const keys = Object.keys(task.completions || {});
+  return keys.length ? keys.sort()[0] : null;
+}
+
 export function occurs(task, day) {
   if (task.archived) return false;
   const d = startOfDay(day);
   const s = startOfDay(task.startDate);
   if (d < s) return false;
+  if (isUntilDone(task)) {
+    // Every day from its start until the day it's checked off. Past days only keep what happened on them.
+    const key = dateKey(d), done = finishedKey(task);
+    if (done && key > done) return false;
+    if (d < startOfDay(new Date())) return key === done || Boolean(task.missed && task.missed[key]);
+    return true;
+  }
   const repeating = task.recurrence.frequency !== 'none';
   const end = endOf(task.recurrence);
   if (repeating && end.type === 'onDate' && d > startOfDay(end.date)) return false;
@@ -139,11 +157,31 @@ export function nextOccurrence(task, from = new Date()) {
   let day = startOfDay(Math.max(startOfDay(from), startOfDay(task.startDate)));
   for (let i = 0; i < 400; i++) {
     if (occurs(task, day)) return day;
-    if (task.recurrence.frequency === 'none') return null;
+    if (task.recurrence.frequency === 'none' && !isUntilDone(task)) return null;
     day = addDays(day, 1);
   }
   return null;
 }
+
+/** How a task repeats, in words: covers the long-term and until-done types too. */
+export function planSummary(task) {
+  if (isUntilDone(task)) {
+    if (finishedKey(task)) return 'Every day until done · finished';
+    if (!task.dueDate) return 'Every day until done';
+    const left = daysBetween(new Date(), task.dueDate);
+    return `Every day until done · due ${fmtDay(task.dueDate, { month: 'short', day: 'numeric' })}${left > 1 ? ` (${left} days left)` : left === 1 ? ' (tomorrow)' : left === 0 ? ' (today)' : ''}`;
+  }
+  if (isLongTerm(task)) {
+    const e = endOf(task.recurrence);
+    if (e.type !== 'onDate') return 'Long-term · every day';
+    const left = daysBetween(new Date(), e.date);
+    return `Long-term · every day until ${fmtDay(e.date, { month: 'short', day: 'numeric' })}${left > 0 ? ` (${left} day${left === 1 ? '' : 's'} left)` : left === 0 ? ' (last day)' : ''}`;
+  }
+  return task.recurrence.frequency === 'none' ? '' : recurrenceSummary(task.recurrence, task.startDate);
+}
+
+/** An until-done task past its due date that still isn't finished. */
+export const pastDue = task => isUntilDone(task) && task.dueDate && !finishedKey(task) && startOfDay(task.dueDate) < startOfDay(new Date());
 
 export function recurrenceSummary(rec, start) {
   const n = Math.max(1, rec.interval || 1);

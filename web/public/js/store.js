@@ -321,7 +321,7 @@ class Store {
   overdue() {
     const today = M.startOfDay(new Date());
     return [...this.tasks.values()]
-      .filter(t => !t.archived && !M.isEvent(t) && t.recurrence.frequency === 'none' && M.startOfDay(t.startDate) < today && !M.hasHistory(t))
+      .filter(t => !t.archived && !M.isEvent(t) && !M.isUntilDone(t) && t.recurrence.frequency === 'none' && M.startOfDay(t.startDate) < today && !M.hasHistory(t))
       .map(t => M.makeOccurrence(t, t.startDate))
       .sort((a, b) => a.day - b.day);
   }

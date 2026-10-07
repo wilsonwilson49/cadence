@@ -168,7 +168,9 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   const meta = [];
   if (showDate || o.overdue) meta.push(`<span class="${o.overdue ? 'red' : ''}">${M.fmtDay(o.day, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`);
   meta.push(o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : compact ? '' : `<span>${ic('sun')}Any time</span>`);
-  if (t.recurrence.frequency !== 'none' && !compact) meta.push(`<span>${ic('repeat')}${esc(M.recurrenceSummary(t.recurrence, t.startDate))}</span>`);
+  const plan = M.planSummary(t);
+  if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
+  if (M.pastDue(t)) meta.push(`<span class="red"><b>Past due</b></span>`);
   if (o.overdue) meta.push('<span class="red"><b>Overdue</b></span>');
   if (t.source === 'calendly') meta.push(`<span>${ic('people')}Calendly</span>`);
   if (t.source === 'google') meta.push(`<span>${ic('cal')}Google</span>`);
@@ -454,22 +456,26 @@ function todoView() {
     if (!body) body = empty('cal', t.search ? 'No matches' : 'No upcoming events', t.search ? '' : 'Create one with New event, or connect Google Calendar or Calendly in Settings.');
   } else {
     const tasks = [...store.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && match(x.title));
-    const repeating = tasks.filter(x => x.recurrence.frequency !== 'none').sort((a, b) => a.title.localeCompare(b.title));
-    const once = tasks.filter(x => x.recurrence.frequency === 'none').sort((a, b) => b.startDate.localeCompare(a.startDate));
+    const untilDone = tasks.filter(x => M.isUntilDone(x)).sort((a, b) => b.startDate.localeCompare(a.startDate));
+    const repeating = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency !== 'none').sort((a, b) => a.title.localeCompare(b.title));
+    const once = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency === 'none').sort((a, b) => b.startDate.localeCompare(a.startDate));
     const row = x => {
       const next = M.nextOccurrence(x);
       const doneCount = Object.keys(x.completions || {}).length;
-      const status = next ? `<span>${ic('right')}Next: ${M.fmtDay(next, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`
+      const status = M.isUntilDone(x) ? (doneCount ? `<span class="green">${ic('check')}Done ${M.fmtDay(M.parseKey(M.finishedKey(x)), { month: 'short', day: 'numeric' })}</span>`
+          : M.pastDue(x) ? `<span class="red">${ic('alert')}Past due</span>` : `<span>${ic('flame')}Not done yet</span>`)
+        : next ? `<span>${ic('right')}Next: ${M.fmtDay(next, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`
         : x.recurrence.frequency === 'none' && !doneCount && M.startOfDay(x.startDate) < M.startOfDay(new Date()) ? `<span class="red">${ic('alert')}Overdue</span>`
         : doneCount ? `<span class="green">${ic('check')}Done</span>` : '';
       return `<div class="crow"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:${color(x.color)}"></span>
         <div class="grow"><div class="title">${esc(x.title)}</div><div class="meta">
-          <span>${ic('repeat')}${esc(M.recurrenceSummary(x.recurrence, x.startDate))}</span>
+          <span>${ic('repeat')}${esc(M.planSummary(x) || 'Once')}</span>
           <span>${ic('clock')}${x.timeMinutes != null ? M.fmtTimeMinutes(x.timeMinutes) : 'Any time'}</span>${status}
-          ${x.recurrence.frequency !== 'none' ? `<span>${doneCount} done</span>` : ''}</div></div>
+          ${x.recurrence.frequency !== 'none' && !M.isUntilDone(x) ? `<span>${doneCount} done</span>` : ''}</div></div>
         <button class="btn sm" data-act="edit" data-task="${x.id}">Edit</button>
         <button class="btn ghost sm icon danger" data-act="delete-task" data-task="${x.id}" title="Delete task">${ic('trash')}</button></div>`;
     };
+    if (untilDone.length) body += `<div><div class="section-title">${ic('flame')}Every day until done <span class="count">${untilDone.length}</span></div><div class="card">${untilDone.map(row).join('')}</div></div>`;
     if (repeating.length) body += `<div><div class="section-title">${ic('repeat')}Recurring <span class="count">${repeating.length}</span></div><div class="card">${repeating.map(row).join('')}</div></div>`;
     if (once.length) body += `<div><div class="section-title">${ic('check')}One-time <span class="count">${once.length}</span></div><div class="card">${once.map(row).join('')}</div></div>`;
     if (!body) body = empty('list', t.search ? 'No matches' : 'No tasks yet', '');
@@ -869,7 +875,7 @@ function detailDialog(m) {
     const from = t.source === 'calendly' ? 'From Calendly' : t.source === 'google' ? 'From Google Calendar' : 'Event';
     body = `<div class="muted">${ic('cal')} ${M.fmtDay(o.day)}</div>
       <div class="muted">${ic('clock')} ${o.start ? `${M.fmtTime(o.start)} – ${M.fmtTime(o.end)}` : 'All day'}</div>
-      ${t.recurrence.frequency !== 'none' ? `<div class="muted">${ic('repeat')} ${esc(M.recurrenceSummary(t.recurrence, t.startDate))}</div>` : ''}
+      ${M.planSummary(t) ? `<div class="muted">${ic('repeat')} ${esc(M.planSummary(t))}</div>` : ''}
       ${t.notes ? `<div>${esc(t.notes)}</div>` : ''}
       <div class="small muted">${from} · ${M.isBusy(t) ? 'closed: blocks this time' : 'open: just for info'} · ${M.isSilent(t) ? 'no reminders' : 'reminds you'} · not on your checklist</div>`;
     buttons = `${t.externalURL ? `<a class="btn" href="${esc(t.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open</a>` : ''}
@@ -880,7 +886,7 @@ function detailDialog(m) {
     const o = it.o, t = o.task, r = store.reflectionFor(o, o.missed ? 'missed' : 'done');
     body = `<div class="muted">${ic('cal')} ${M.fmtDay(o.day)}</div>
       <div class="muted">${ic('clock')} ${o.start ? `${M.fmtTime(o.start)} – ${M.fmtTime(o.end)}` : 'Any time'}</div>
-      ${t.recurrence.frequency !== 'none' ? `<div class="muted">${ic('repeat')} ${esc(M.recurrenceSummary(t.recurrence, t.startDate))}</div>` : ''}
+      ${M.planSummary(t) ? `<div class="muted">${ic('repeat')} ${esc(M.planSummary(t))}</div>` : ''}
       ${t.notes ? `<div>${esc(t.notes)}</div>` : ''}<div class="small muted">${M.isBusy(t) ? 'Closed: blocks this time' : 'Open: just for info, you’re still free then'}</div>${r ? `<div class="muted" style="font-style:italic">“${esc(r.text)}”</div>` : ''}`;
     buttons = `${o.done ? `<button class="btn" data-act="toggle" data-occ="${esc(o.id)}">Mark not done</button>` : `<button class="btn primary" data-act="toggle" data-occ="${esc(o.id)}">Complete…</button>`}
       ${o.missed ? `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">Undo “didn’t do it”</button>` : o.done ? '' : `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">${ic('x')} Didn’t do it…</button>`}
@@ -913,6 +919,7 @@ function openEditor(task, isNew) {
     hasTime: task.timeMinutes != null,
     time: `${String(Math.floor((task.timeMinutes ?? 540) / 60)).padStart(2, '0')}:${String((task.timeMinutes ?? 540) % 60).padStart(2, '0')}`,
     endMode: end.type, endDate: M.dateKey(end.date ?? M.addMonths(M.parseKey(M.dateKey(task.startDate)), 3)), endCount: end.count ?? 10,
+    hasDue: Boolean(task.dueDate), dueDate: M.dateKey(task.dueDate ?? M.addDays(M.parseKey(M.dateKey(task.startDate)), 7)),
   });
 }
 
@@ -956,11 +963,18 @@ function editorDialog(m) {
       <div class="small muted">Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.</div>
       ${d.externalURL ? `<a class="small" href="${esc(d.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : ''}</div>` : `
     <div class="fieldset"><div class="legend">Repeat</div>
-      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      ${r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
-      ${r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
+      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${!d.mode && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
+        ${M.isEvent(d) ? '' : `<optgroup label="Keep reminding me"><option value="longTerm" ${d.mode === 'longTerm' ? 'selected' : ''}>Long-term: every day until a date</option>
+          <option value="untilDone" ${d.mode === 'untilDone' ? 'selected' : ''}>Every day until it’s done</option></optgroup>`}</select></label>
+      ${d.mode === 'longTerm' ? `<label class="field"><span>Every day until</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
+      ${d.mode === 'untilDone' ? `<label class="field"><span>&nbsp;</span><label class="check"><input type="checkbox" data-edit="hasDue" data-rerender ${m.hasDue ? 'checked' : ''}>Has a due date</label></label>` : ''}
+      ${!d.mode && r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
+      ${d.mode === 'longTerm' ? `<div class="small muted">${ic('repeat')} On your checklist and reminds you every day until ${M.fmtDay(M.parseKey(m.endDate), { weekday: 'short', month: 'short', day: 'numeric' })} (${Math.max(0, M.daysBetween(M.parseKey(m.date), M.parseKey(m.endDate))) + 1} days). Check off each day on its own.</div>` : ''}
+      ${d.mode === 'untilDone' ? `${m.hasDue ? `<label class="field" style="max-width:220px"><span>Due by</span><input class="input" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"></label>` : ''}
+        <div class="small muted">${ic('flame')} On your checklist and reminds you every day${m.hasDue ? ' (and keeps going past the due date)' : ''} until you check it off once. Then it’s gone.</div>` : ''}
+      ${!d.mode && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
         <button type="button" class="btn sm" data-act="edit-weekdays">Weekdays</button></div>` : ''}
-      ${r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
+      ${!d.mode && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
           <option value="never" ${m.endMode === 'never' ? 'selected' : ''}>Never</option><option value="onDate" ${m.endMode === 'onDate' ? 'selected' : ''}>On a date</option>
           <option value="afterCount" ${m.endMode === 'afterCount' ? 'selected' : ''}>After a number of times</option></select></label>
         ${m.endMode === 'onDate' ? `<label class="field"><span>End date</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
@@ -999,7 +1013,17 @@ function readEditorInputs() {
   if (val('hasTime')) m.hasTime = val('hasTime').checked;
   if (val('time')?.value) m.time = val('time').value;
   if (val('duration')) m.draft.durationMinutes = Number(val('duration').value);
-  if (val('frequency')) {
+  if (val('hasDue')) m.hasDue = val('hasDue').checked;
+  if (val('dueDate')?.value) m.dueDate = val('dueDate').value;
+  const fv = val('frequency')?.value;
+  if (fv === 'longTerm' || fv === 'untilDone') {
+    if (m.draft.mode !== fv) {
+      m.draft.mode = fv;
+      m.draft.recurrence = { ...m.draft.recurrence, frequency: fv === 'longTerm' ? 'daily' : 'none', interval: 1, weekdays: [] };
+      if (fv === 'longTerm') { m.endMode = 'onDate'; if (m.endDate <= m.date) m.endDate = M.dateKey(M.addDays(M.parseKey(m.date), 30)); }
+    }
+  } else if (val('frequency')) {
+    delete m.draft.mode;
     const f = val('frequency').value;
     if (f === 'weekly' && m.draft.recurrence.frequency !== 'weekly' && !m.draft.recurrence.weekdays.length) m.draft.recurrence.weekdays = [M.weekday(M.parseKey(m.date))];
     m.draft.recurrence.frequency = f;
@@ -1027,6 +1051,14 @@ async function saveEditor() {
   t.recurrence.end = m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} };
   if (t.recurrence.frequency === 'weekly' && !t.recurrence.weekdays.length) t.recurrence.weekdays = [M.weekday(M.parseKey(m.date))];
   if (t.recurrence.frequency !== 'weekly') t.recurrence.weekdays = [];
+  if (M.isEvent(t)) delete t.mode;
+  if (t.mode === 'longTerm') {
+    if (m.endDate < m.date) { m.error = 'The end date has to be on or after the start date.'; renderModal(); return; }
+    t.recurrence = { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } };
+  } else if (t.mode === 'untilDone') {
+    t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+  } else delete t.mode;
+  if (t.mode === 'untilDone' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
   t.reminderOffsets = t.reminderOffsets.filter(o => o >= 0 || (t.timeMinutes != null && -o < t.durationMinutes));
   if (!t.reminderOffsets.length) t.reminderOffsets = [0];
   const day0 = M.parseKey(m.date);
@@ -1193,6 +1225,7 @@ const actions = {
     readEditorInputs();
     const m = ui.modal, k = el.dataset.kind;
     m.draft.kind = k;
+    if (k === 'event') delete m.draft.mode;   // events have no check-off, so no "until done"/long-term
     if (!m.busyChosen) m.draft.busy = k === 'event';   // events start closed, tasks open
     if (k === 'event' && m.isNew) {
       if (!m.hasTime) { m.hasTime = true; m.time = '09:00'; }

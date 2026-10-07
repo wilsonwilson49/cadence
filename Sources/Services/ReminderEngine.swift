@@ -185,6 +185,8 @@ final class ReminderEngine: ObservableObject {
         } else {
             body = offset >= 1440 ? "Coming up \(occ.day.formatted(.dateTime.weekday(.wide)))" : "On today's checklist"
         }
+        // Long-term and until-done tasks say where they stand, since they come back every day.
+        if occ.task.isUntilDone || occ.task.isLongTerm, let plan = occ.task.planSummary { body += " · \(plan)" }
         body += ". Check it off with a reflection when you're done."
         return AlertContent(kind: .task, title: occ.task.title, body: body,
                             symbol: "checkmark.circle", tint: occ.task.color.color, occurrence: occ)

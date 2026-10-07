@@ -194,6 +194,12 @@ struct PlanTask: Codable, Identifiable, Hashable {
 
     /// "task" or "event"; nil means: event if imported, otherwise task.
     var kind: String?
+    /// "longTerm": every day until an end date (each day its own check-off).
+    /// "untilDone": shows up every day until it's checked off once, then disappears. nil: a normal task.
+    var mode: String?
+    /// Optional due date for an until-done task (it keeps going past it, marked "Past due").
+    var dueDate: Date?
+
     /// Closed (true) items block their time; open (false) ones are just for info.
     /// nil means the default: events closed, tasks open.
     var busy: Bool?
@@ -206,6 +212,35 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var isBusy: Bool { busy ?? isEvent }
     /// Checked off or marked "didn't do" at least once (imports never hide items with history).
     var hasHistory: Bool { !completions.isEmpty || !(missed ?? [:]).isEmpty }
+    var isLongTerm: Bool { mode == "longTerm" }
+    var isUntilDone: Bool { mode == "untilDone" }
+    /// The day an until-done task was finished (its earliest check-off).
+    var finishedKey: String? { completions.keys.min() }
+    /// An until-done task past its due date that still isn't finished.
+    var isPastDue: Bool {
+        guard isUntilDone, let due = dueDate, finishedKey == nil else { return false }
+        return due.startOfDay < Date().startOfDay
+    }
+
+    /// How it repeats, in words, including the long-term and until-done types. Same as planSummary() on the web.
+    var planSummary: String? {
+        let cal = Calendar.current
+        let short: (Date) -> String = { $0.formatted(.dateTime.month(.abbreviated).day()) }
+        if isUntilDone {
+            if finishedKey != nil { return "Every day until done · finished" }
+            guard let due = dueDate else { return "Every day until done" }
+            let left = cal.dateComponents([.day], from: Date().startOfDay, to: due.startOfDay).day ?? 0
+            let tail = left > 1 ? " (\(left) days left)" : left == 1 ? " (tomorrow)" : left == 0 ? " (today)" : ""
+            return "Every day until done · due \(short(due))\(tail)"
+        }
+        if isLongTerm {
+            guard case .onDate(let end) = recurrence.end else { return "Long-term · every day" }
+            let left = cal.dateComponents([.day], from: Date().startOfDay, to: end.startOfDay).day ?? 0
+            let tail = left > 0 ? " (\(left) day\(left == 1 ? "" : "s") left)" : left == 0 ? " (last day)" : ""
+            return "Long-term · every day until \(short(end))\(tail)"
+        }
+        return recurrence.isRepeating ? recurrence.summary(start: startDate) : nil
+    }
 }
 
 /// One concrete instance of a (possibly repeating) task on a given day.

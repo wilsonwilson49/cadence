@@ -135,7 +135,9 @@ function reminderContent(occ, offset) {
   } else {
     body = offset >= 1440 ? `Coming up ${M.fmtDay(occ.day, { weekday: 'long' })}` : "On today's checklist";
   }
-  return { kind: 'task', title: occ.task.title, body: `${body}. Check it off with a reflection when you're done.`,
+  // Long-term and until-done tasks say where they stand, since they come back every day.
+  const plan = M.isUntilDone(occ.task) || M.isLongTerm(occ.task) ? ` · ${M.planSummary(occ.task)}` : '';
+  return { kind: 'task', title: occ.task.title, body: `${body}${plan}. Check it off with a reflection when you're done.`,
     tint: M.COLORS[occ.task.color] || '#0a84ff', occurrence: occ, tag: occ.id };
 }
 

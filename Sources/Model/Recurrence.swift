@@ -128,6 +128,13 @@ extension PlanTask {
         let d = day.startOfDay
         let s = startDate.startOfDay
         guard d >= s else { return false }
+        if isUntilDone {
+            // Every day from its start until the day it's checked off. Past days only keep what happened on them.
+            let key = DateKey.string(d)
+            if let done = finishedKey, key > done { return false }
+            if d < Date().startOfDay { return key == finishedKey || missed?[key] != nil }
+            return true
+        }
         if case .onDate(let end) = recurrence.end, recurrence.isRepeating, d > end.startOfDay { return false }
         guard matchesPattern(d, start: s) else { return false }
         if case .afterCount(let limit) = recurrence.end, recurrence.isRepeating {
@@ -179,7 +186,7 @@ extension PlanTask {
         var day = max(from.startOfDay, startDate.startOfDay)
         for _ in 0..<400 {
             if occurs(on: day) { return day }
-            if !recurrence.isRepeating { return nil }
+            if !recurrence.isRepeating && !isUntilDone { return nil }
             day = day.adding(days: 1)
         }
         return nil

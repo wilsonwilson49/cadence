@@ -248,7 +248,7 @@ final class Store: ObservableObject {
     /// One-off tasks from earlier days that were never checked off.
     func overdue(today: Date = Date()) -> [Occurrence] {
         let t = today.startOfDay
-        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.recurrence.isRepeating && $0.startDate.startOfDay < t && !$0.hasHistory }
+        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.isUntilDone && !$0.recurrence.isRepeating && $0.startDate.startOfDay < t && !$0.hasHistory }
             .map { Occurrence(task: $0, day: $0.startDate.startOfDay) }
             .sorted { $0.day < $1.day }
     }

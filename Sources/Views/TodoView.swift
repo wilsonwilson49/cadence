@@ -110,9 +110,16 @@ struct TodoView: View {
 
     @ViewBuilder private var taskList: some View {
         let tasks = store.tasks.filter { $0.archived != true && !$0.isEvent && matches($0.title) }
-        let repeating = tasks.filter(\.recurrence.isRepeating).sorted { $0.title < $1.title }
-        let oneOff = tasks.filter { !$0.recurrence.isRepeating }.sorted { $0.startDate > $1.startDate }
+        let untilDone = tasks.filter(\.isUntilDone).sorted { $0.startDate > $1.startDate }
+        let repeating = tasks.filter { !$0.isUntilDone && $0.recurrence.isRepeating }.sorted { $0.title < $1.title }
+        let oneOff = tasks.filter { !$0.isUntilDone && !$0.recurrence.isRepeating }.sorted { $0.startDate > $1.startDate }
         if tasks.isEmpty { emptyState }
+        if !untilDone.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionTitle(text: "Every day until done", symbol: "flame", count: untilDone.count)
+                Card { VStack(spacing: 0) { taskRows(untilDone) } }
+            }
+        }
         if !repeating.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 SectionTitle(text: "Recurring", symbol: "repeat", count: repeating.count)
@@ -183,9 +190,17 @@ private struct TaskDefinitionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title).font(.body.weight(.medium))
                 HStack(spacing: 10) {
-                    Label(task.recurrence.summary(start: task.startDate), systemImage: "repeat")
+                    Label(task.planSummary ?? "Once", systemImage: "repeat")
                     Label(task.timeMinutes.map { timeString(minutes: $0) } ?? "Any time", systemImage: "clock")
-                    if let next = task.nextOccurrence() {
+                    if task.isUntilDone {
+                        if let k = task.finishedKey, let d = DateKey.date(k) {
+                            Label("Done \(d.formatted(.dateTime.month(.abbreviated).day()))", systemImage: "checkmark.circle").foregroundStyle(.green)
+                        } else if task.isPastDue {
+                            Label("Past due", systemImage: "exclamationmark.circle").foregroundStyle(.red)
+                        } else {
+                            Label("Not done yet", systemImage: "flame")
+                        }
+                    } else if let next = task.nextOccurrence() {
                         Label("Next: " + next.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()),
                               systemImage: "arrow.forward.circle")
                     } else if !task.recurrence.isRepeating && !task.hasHistory && task.startDate.startOfDay < Date().startOfDay {
@@ -207,7 +222,7 @@ private struct TaskDefinitionRow: View {
                     Image(systemName: ch.symbol).font(.caption).foregroundStyle(.secondary).help(ch.label)
                 }
             }
-            if task.recurrence.isRepeating {
+            if task.recurrence.isRepeating && !task.isUntilDone {
                 Text("\(task.completions.count) done").font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
             Button("Edit") { model.edit(task) }.controlSize(.small)
