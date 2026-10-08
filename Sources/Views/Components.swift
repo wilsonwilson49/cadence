@@ -567,11 +567,11 @@ struct ScheduleItem: Identifiable {
 
 @MainActor
 func schedule(on day: Date, store: Store, google: GoogleCalendar) -> [ScheduleItem] {
-    let own = store.events(on: day).map { o in
+    let own = store.events(on: day).filter { google.isShown($0.task) }.map { o in
         ScheduleItem(item: .task(o), title: o.task.title, start: o.start, end: o.end, color: o.task.color.color,
                      source: o.task.source, link: o.task.externalURL.flatMap(URL.init(string:)), notes: o.task.notes.isEmpty ? nil : o.task.notes)
     }
-    let g = google.events(on: day).map { e in
+    let g = google.visibleEvents(on: day).map { e in
         ScheduleItem(item: .google(e), title: e.title, start: e.isAllDay ? nil : e.start, end: e.isAllDay ? nil : e.end, color: e.color,
                      source: "google", link: e.link, notes: e.location)
     }
@@ -676,5 +676,40 @@ struct OpenStripes: View {
             ctx.stroke(p, with: .color(color.opacity(opacity)), lineWidth: 3)
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// The "Calendars" button on Week, Month and Booking: show or hide each calendar (synced to every device).
+struct CalendarsMenu: View {
+    @EnvironmentObject private var store: Store
+    @EnvironmentObject private var google: GoogleCalendar
+    @State private var open = false
+
+    var body: some View {
+        let list = google.toggleableCalendars()
+        let shown = list.filter { google.isShown($0.key) }.count
+        Button { open.toggle() } label: {
+            Label(shown < list.count ? "Calendars \(shown)/\(list.count)" : "Calendars", systemImage: "square.stack.3d.up")
+        }
+        .tint(shown < list.count ? .accentColor : nil)
+        .help("Show or hide calendars")
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Show on Week, Month & Booking").font(.caption).foregroundStyle(.secondary)
+                ForEach(list, id: \.key) { c in
+                    Toggle(isOn: Binding(get: { google.isShown(c.key) }, set: { google.setShown(c.key, $0) })) {
+                        HStack(spacing: 7) {
+                            RoundedRectangle(cornerRadius: 3).fill(c.color).frame(width: 10, height: 10)
+                            Text(c.name).lineLimit(1)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                }
+                Text("Hidden calendars don't count against your open time. Your checklist and reminders aren't affected.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 260)
+        }
     }
 }

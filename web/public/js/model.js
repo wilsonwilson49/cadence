@@ -27,6 +27,16 @@ export function eventNotes(description, location) {
   return text || String(location || '').trim();
 }
 
+/** Calendar toggles: each item belongs to one calendar key. 'tasks' and 'events' are your own Cadence items,
+ *  'calendly' the Calendly imports, and 'google:<id>' a Google calendar ('google:primary' for your main one). */
+export const googleCalendarKey = (calId, primaryId) =>
+  !calId || calId === 'primary' || calId === primaryId ? 'google:primary' : `google:${calId}`;
+export function calendarKeyOf(task, primaryId) {
+  if (task.source === 'google') return googleCalendarKey(task.sourceCalendar, primaryId);
+  if (task.source === 'calendly') return 'calendly';
+  return isEvent(task) ? 'events' : 'tasks';
+}
+
 /** Checked off or marked "didn't do" at least once (imports never hide items with history). */
 export const hasHistory = task => Object.keys(task.completions || {}).length > 0 || Object.keys(task.missed || {}).length > 0;
 export const isSilent = task => !(task.channels && task.channels.length);
@@ -288,6 +298,7 @@ export const DEFAULT_SETTINGS = {
   minReflectionWords: 20, showGoogleEvents: true, googleEventReminderMinutes: 0,
   autoImportCalendars: true, importDaysAhead: 14,
   availability: { weekdays: [2, 3, 4, 5, 6], startMinutes: 540, endMinutes: 1020, bufferMinutes: 10 },
+  hiddenCalendars: [],
 };
 
 export const CHANNELS = [

@@ -401,11 +401,43 @@ final class GoogleCalendar: ObservableObject {
             .sorted { ($0.isAllDay ? 0 : 1, $0.start, $0.title) < ($1.isAllDay ? 0 : 1, $1.start, $1.title) }
     }
 
-    /// Busy intervals across the selected calendars (Google free/busy API).
+    // MARK: Calendar toggles (synced: hiding a calendar hides it on every device)
+
+    var primaryCalendarID: String? { calendars.first(where: \.primary)?.id }
+    func isShown(_ key: String) -> Bool { !store.settings.hiddenCalendars.contains(key) }
+    func setShown(_ key: String, _ on: Bool) {
+        var hidden = Set(store.settings.hiddenCalendars)
+        if on { hidden.remove(key) } else { hidden.insert(key) }
+        store.settings.hiddenCalendars = hidden.sorted()
+    }
+    func isShown(_ task: PlanTask) -> Bool { isShown(calendarKey(of: task, primary: primaryCalendarID)) }
+    /// What the calendar views draw. The checklist and reminders ignore the toggles.
+    func visibleOccurrences(on day: Date) -> [Occurrence] { store.occurrences(on: day).filter { isShown($0.task) } }
+    func visibleEvents(on day: Date) -> [GoogleEvent] {
+        events(on: day).filter { isShown(googleCalendarKey($0.calendarID, primary: primaryCalendarID)) }
+    }
+    /// Every calendar the toggles list: (key, name, color).
+    func toggleableCalendars() -> [(key: String, name: String, color: Color)] {
+        var list: [(key: String, name: String, color: Color)] = [("tasks", "Tasks", .blue), ("events", "Events", .teal)]
+        if store.tasks.contains(where: { $0.source == "calendly" && $0.archived != true }) { list.append(("calendly", "Calendly", .purple)) }
+        func add(_ id: String) {
+            let key = googleCalendarKey(id, primary: primaryCalendarID)
+            guard !list.contains(where: { $0.key == key }) else { return }
+            let c = calendars.first { $0.id == id || (id == "primary" && $0.primary) }
+            list.append((key, c?.summary ?? (id == "primary" ? "Google Calendar" : id), c?.colorHex.flatMap(Color.init(hex:)) ?? .blue))
+        }
+        if isConnected { selectedCalendarIDs.forEach(add) }
+        for t in store.tasks where t.source == "google" && t.archived != true { add(t.sourceCalendar ?? "primary") }
+        return list
+    }
+
+    /// Busy intervals across the selected calendars (Google free/busy API), minus calendars switched off.
     func busyIntervals(from: Date, to: Date) async throws -> [DateInterval] {
+        let ids = selectedCalendarIDs.filter { isShown(googleCalendarKey($0, primary: primaryCalendarID)) }
+        guard !ids.isEmpty else { return [] }
         if viaServer {
             let list = try await server("POST", "/api/google/freebusy", [], [
-                "from": Self.iso.string(from: from), "to": Self.iso.string(from: to), "calendars": store.settings.googleCalendarIDs,
+                "from": Self.iso.string(from: from), "to": Self.iso.string(from: to), "calendars": ids,
             ]) as? [[String: Any]] ?? []
             return list.compactMap { b in
                 guard let s = (b["start"] as? String).flatMap(Self.parseISO), let e = (b["end"] as? String).flatMap(Self.parseISO), e > s else { return nil }
@@ -415,7 +447,7 @@ final class GoogleCalendar: ObservableObject {
         let body: [String: Any] = [
             "timeMin": Self.iso.string(from: from),
             "timeMax": Self.iso.string(from: to),
-            "items": selectedCalendarIDs.map { ["id": $0] },
+            "items": ids.map { ["id": $0] },
         ]
         let json = try await api("POST", "/freeBusy", body: body)
         var result: [DateInterval] = []

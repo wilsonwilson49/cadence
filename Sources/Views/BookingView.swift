@@ -39,6 +39,7 @@ struct BookingView: View {
         let total = week.reduce(0) { $0 + $1.total }
         VStack(spacing: 0) {
             ScreenHeader(title: "Booking", subtitle: "Your open time for the next 7 days. Click any green stretch to book it.") {
+                CalendarsMenu()
                 Button { Task { await loadBusy() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     .disabled(loading)
                 Button { copyOpenTimes(week) } label: { Label("Copy open times", systemImage: "doc.on.doc") }
@@ -95,7 +96,7 @@ struct BookingView: View {
             }
         }
         .onAppear { google.ensure(from: Date().startOfDay, to: Date().startOfDay.adding(days: 8)) }
-        .task(id: google.isConnected) { await loadBusy() }
+        .task(id: "\(google.isConnected)|\(store.settings.hiddenCalendars)") { await loadBusy() }   // busy times depend on which calendars count
     }
 
     // MARK: Pieces
@@ -304,11 +305,11 @@ struct BookingView: View {
             let next = day.adding(days: 1)
             var items: [WeekView.Placed] = []
             var allDay: [CalendarItem] = []
-            for occ in store.occurrences(on: day) {
+            for occ in google.visibleOccurrences(on: day) {
                 if let s = occ.start, let e = occ.end { items.append(WeekView.Placed(item: .task(occ), start: s, end: e, day: day)) }
                 else { allDay.append(.task(occ)) }
             }
-            for ev in google.events(on: day) {
+            for ev in google.visibleEvents(on: day) {
                 if ev.isAllDay { allDay.append(.google(ev)) }
                 else { items.append(WeekView.Placed(item: .google(ev), start: ev.start, end: ev.end, day: day)) }
             }

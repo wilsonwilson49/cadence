@@ -268,9 +268,9 @@ function homeView() {
 // ---------- Events (calendar-only items: your own + imported + Google) ----------
 function scheduleOn(day) {
   const list = [
-    ...store.eventsOn(day).map(o => ({ id: `t|${o.id}`, title: o.task.title, start: o.start, end: o.end, allDay: !o.start,
+    ...store.eventsOn(day).filter(o => store.taskShown(o.task)).map(o => ({ id: `t|${o.id}`, title: o.task.title, start: o.start, end: o.end, allDay: !o.start,
       color: color(o.task.color), source: o.task.source, link: o.task.externalURL, notes: o.task.notes, silent: M.isSilent(o.task), busy: o.busy })),
-    ...store.googleEventsOn(day).map(e => ({ id: `g|${e.id}`, title: e.title, start: e.isAllDay ? null : e.startDate, end: e.isAllDay ? null : e.endDate,
+    ...store.visibleGoogleEventsOn(day).map(e => ({ id: `g|${e.id}`, title: e.title, start: e.isAllDay ? null : e.startDate, end: e.isAllDay ? null : e.endDate,
       allDay: e.isAllDay, color: e.colorHex || '#0a84ff', source: 'google', link: e.link, notes: e.location, busy: !e.transparent })),
   ];
   return list.sort((a, b) => (a.allDay === b.allDay ? (a.start || 0) - (b.start || 0) : a.allDay ? -1 : 1));
@@ -322,11 +322,37 @@ function todayView() {
   </div>`;
 }
 
+// ---------- Calendar toggles ----------
+/** Every calendar the views can show: [key, name, color]. */
+function calendarList() {
+  const g = store.google, pid = store.primaryCalendarId;
+  const list = [['tasks', 'Tasks', '#0a84ff'], ['events', 'Events', '#30b0c7']];
+  if (store.calendly.connected || [...store.tasks.values()].some(t => t.source === 'calendly' && !t.archived)) list.push(['calendly', 'Calendly', '#bf5af2']);
+  const add = (id, fallback) => {
+    const key = M.googleCalendarKey(id, pid);
+    if (list.some(x => x[0] === key)) return;
+    const c = g.calendars?.find(c => c.id === id || ((!id || id === 'primary') && c.primary));
+    list.push([key, c?.summary || fallback || id, c?.colorHex || '#0a84ff']);
+  };
+  if (g.connected) for (const id of store.googleCalendarIDs.length ? store.googleCalendarIDs : ['primary']) add(id, 'Google Calendar');
+  for (const t of store.tasks.values()) if (t.source === 'google' && !t.archived) add(t.sourceCalendar || 'primary', 'Google Calendar');
+  return list;
+}
+
+function calendarsMenu() {
+  const list = calendarList(), shown = list.filter(([k]) => store.calendarShown(k)).length;
+  return `<div class="calmenu"><button class="btn ${shown < list.length ? 'filtered' : ''}" data-act="cal-menu" title="Show or hide calendars">${ic('layers')} Calendars${shown < list.length ? ` <span class="count">${shown}/${list.length}</span>` : ''}</button>
+    ${ui.calMenu ? `<div class="calmenu-pop"><div class="small muted" style="margin-bottom:6px">Show on Week, Month &amp; Booking</div>
+      ${list.map(([k, l, c]) => `<label class="check"><input type="checkbox" data-act-change="cal-toggle" value="${esc(k)}" ${store.calendarShown(k) ? 'checked' : ''}>
+        <span class="sw" style="background:${c}"></span><span class="ellipsis">${esc(l)}</span></label>`).join('')}
+      <div class="tiny muted" style="margin-top:6px">Hidden calendars don’t count against your open time. Your checklist and reminders aren’t affected.</div></div>` : ''}</div>`;
+}
+
 // ---------- Week ----------
 function calItemsTimed(day) {
   const items = [];
-  for (const o of store.occurrencesOn(day)) if (o.start) items.push({ kind: o.event ? 'event' : 'task', o, start: o.start, end: o.end, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` });
-  for (const e of store.googleEventsOn(day)) if (!e.isAllDay) items.push({ kind: 'google', e, start: e.startDate, end: e.endDate, title: e.title, color: e.colorHex || '#0a84ff', done: false, id: `g|${e.id}` });
+  for (const o of store.visibleOccurrencesOn(day)) if (o.start) items.push({ kind: o.event ? 'event' : 'task', o, start: o.start, end: o.end, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` });
+  for (const e of store.visibleGoogleEventsOn(day)) if (!e.isAllDay) items.push({ kind: 'google', e, start: e.startDate, end: e.endDate, title: e.title, color: e.colorHex || '#0a84ff', done: false, id: `g|${e.id}` });
   items.sort((a, b) => a.start - b.start || b.end - a.end);
   // Greedy lanes inside clusters of overlapping items.
   const out = []; let cluster = [], laneEnds = [], clusterEnd = 0;
@@ -347,8 +373,8 @@ const chipFor = it => `<div class="chip ${it.done ? 'done' : ''} ${it.missed ? '
 
 function allDayItems(day) {
   return [
-    ...store.occurrencesOn(day).filter(o => !o.start).map(o => ({ kind: o.event ? 'event' : 'task', o, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
-    ...store.googleEventsOn(day).filter(e => e.isAllDay).map(e => ({ kind: 'google', e, title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
+    ...store.visibleOccurrencesOn(day).filter(o => !o.start).map(o => ({ kind: o.event ? 'event' : 'task', o, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
+    ...store.visibleGoogleEventsOn(day).filter(e => e.isAllDay).map(e => ({ kind: 'google', e, title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
   ];
 }
 
@@ -360,7 +386,7 @@ function weekView() {
   const now = new Date();
   return `<div class="week">
     <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">Double-click an empty slot — or inside an existing block — to add a task at that time.</div></div>
-      <div class="row"><button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
+      <div class="row">${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
       <button class="btn" data-act="week-today">Today</button><button class="btn icon" data-act="week-next" title="Next week">${ic('right')}</button></div></div>
     <div class="week-head"><div></div>${days.map(d => {
       const open = store.tasksOn(d).filter(o => !o.resolved).length;
@@ -396,8 +422,8 @@ function monthView() {
   store.ensureGoogle(days[0], M.addDays(days[41], 1));
   const cells = days.map(d => {
     const items = [
-      ...store.occurrencesOn(d).map(o => ({ kind: o.event ? 'event' : 'task', title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
-      ...store.googleEventsOn(d).map(e => ({ kind: 'google', title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
+      ...store.visibleOccurrencesOn(d).map(o => ({ kind: o.event ? 'event' : 'task', title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
+      ...store.visibleGoogleEventsOn(d).map(e => ({ kind: 'google', title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
     ];
     const max = 4, shown = items.length > max ? max - 1 : max;
     const tasks = store.tasksOn(d);
@@ -412,7 +438,7 @@ function monthView() {
   const tasks = store.tasksOn(sel), events = scheduleOn(sel);
   return `<div class="month"><div class="month-main">
     <div class="header"><div class="grow"><h1>${M.fmtDay(ui.month, { month: 'long', year: 'numeric' })}</h1><div class="sub">Click a day to see it, double-click to add a task.</div></div>
-      <div class="row"><button class="btn icon" data-act="month-prev">${ic('left')}</button><button class="btn" data-act="month-today">Today</button><button class="btn icon" data-act="month-next">${ic('right')}</button></div></div>
+      <div class="row">${calendarsMenu()}<button class="btn icon" data-act="month-prev">${ic('left')}</button><button class="btn" data-act="month-today">Today</button><button class="btn icon" data-act="month-next">${ic('right')}</button></div></div>
     <div class="dows">${M.WEEKDAY_SHORT.map(w => `<div>${w.toUpperCase()}</div>`).join('')}</div>
     <div class="mgrid">${cells}</div></div>
     <aside class="daypanel stack" style="gap:12px">
@@ -610,7 +636,7 @@ function bookingView() {
     return `<div class="ot-col ${M.isToday(d.day) ? 'today' : ''}" style="height:${(h1 - h0) * OT_HOUR}px">${parts.join('')}</div>`;
   };
   return `<div class="header"><div class="grow"><h1>Booking</h1><div class="sub">Your open time for the next 7 days. Click any green stretch to book it.</div></div>
-      <button class="btn" data-act="busy-refresh" ${b.loading ? 'disabled' : ''}>${ic('refresh', b.loading ? 'spinning' : '')} Refresh</button>
+      ${calendarsMenu()}<button class="btn" data-act="busy-refresh" ${b.loading ? 'disabled' : ''}>${ic('refresh', b.loading ? 'spinning' : '')} Refresh</button>
       <button class="btn" data-act="copy-avail" ${total ? '' : 'disabled'}>${ic('copy')} Copy open times</button></div>
     <div class="page stack" style="max-width:1200px">
       ${!store.google.connected ? `<div class="callout warn"><span class="big">${ic('cal')}</span><div class="grow"><b>Google Calendar isn’t connected</b>
@@ -1237,6 +1263,7 @@ const actions = {
   'edit-busy': el => { readEditorInputs(); ui.modal.draft.busy = el.dataset.busy === '1'; ui.modal.busyChosen = true; renderModal(); },
   'new-at': el => { const d = new Date(Number(el.dataset.at)); newTaskAt(d, Math.min(1435, Math.floor(M.minutesOf(d) / 5) * 5)); },
   edit: el => { const t = store.tasks.get(el.dataset.task); if (t) openEditor(t, false); },
+  'cal-menu': () => { ui.calMenu = !ui.calMenu; render(); },
   'refl-filter': el => { ui.reflFilter = el.dataset.f; render(); },
   toggle: el => toggleOcc(el.dataset.occ, el.dataset.ctx),
   miss: el => missOcc(el.dataset.occ, el.dataset.ctx),
@@ -1367,6 +1394,7 @@ const actions = {
 // Single click on a week block opens details; double click adds a task at that moment.
 let blockClickTimer = null;
 document.addEventListener('click', e => {
+  if (ui.calMenu && !e.target.closest('.calmenu')) { ui.calMenu = false; render(); }
   const block = e.target.closest('.block');
   if (block) {
     clearTimeout(blockClickTimer);
@@ -1438,6 +1466,11 @@ document.addEventListener('change', e => {
     return;
   }
   if (el.dataset.actChange === 'browser-reminders') { store.setDevice('browserReminders', el.checked); render(); return; }
+  if (el.dataset.actChange === 'cal-toggle') {
+    store.setCalendarShown(el.value, el.checked);
+    ui.booking.loadedFor = null;   // busy times depend on which calendars count
+    return;
+  }
   if (el.dataset.actChange === 'gcal') {
     const ids = [...document.querySelectorAll('[data-act-change="gcal"]:checked')].map(x => x.value);
     store.setDevice('googleCalendarIDs', ids);

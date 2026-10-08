@@ -24,6 +24,7 @@ struct MonthView: View {
             VStack(spacing: 0) {
                 ScreenHeader(title: month.formatted(.dateTime.month(.wide).year()),
                              subtitle: "Click a day to see it, double-click to add a task.") {
+                    CalendarsMenu()
                     CalendarNav(onPrev: { month = month.adding(months: -1) },
                                 onToday: { month = Date().startOfMonth; selected = Date().startOfDay },
                                 onNext: { month = month.adding(months: 1) })
@@ -74,8 +75,8 @@ private struct MonthCell: View {
     let maxItems: Int
 
     var body: some View {
-        let items = store.occurrences(on: day).map(CalendarItem.task)
-            + google.events(on: day).map(CalendarItem.google)
+        let items = google.visibleOccurrences(on: day).map(CalendarItem.task)
+            + google.visibleEvents(on: day).map(CalendarItem.google)
         let shown = items.count > maxItems ? max(0, maxItems - 1) : maxItems
         VStack(alignment: .leading, spacing: 2) {
             HStack {

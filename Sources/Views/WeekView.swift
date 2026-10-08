@@ -22,6 +22,7 @@ struct WeekView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(title: title, subtitle: "Double-click an empty slot to add a task there.") {
+                CalendarsMenu()
                 Button { model.newEvent(on: weekStart.isSameDay(Date().startOfWeek) ? Date() : weekStart) } label: {
                     Label("New Event", systemImage: "calendar.badge.plus")
                 }
@@ -88,8 +89,8 @@ struct WeekView: View {
 
     private func allDayRow(_ colW: CGFloat) -> some View {
         let columns: [[CalendarItem]] = days.map { day in
-            store.occurrences(on: day).filter { $0.start == nil }.map(CalendarItem.task)
-                + google.events(on: day).filter(\.isAllDay).map(CalendarItem.google)
+            google.visibleOccurrences(on: day).filter { $0.start == nil }.map(CalendarItem.task)
+                + google.visibleEvents(on: day).filter(\.isAllDay).map(CalendarItem.google)
         }
         let rows = min(4, columns.map(\.count).max() ?? 0)
         return HStack(alignment: .top, spacing: 0) {
@@ -181,10 +182,10 @@ struct WeekView: View {
 
     private func placed(_ day: Date) -> [Placed] {
         var items: [Placed] = []
-        for occ in store.occurrences(on: day) {
+        for occ in google.visibleOccurrences(on: day) {
             if let s = occ.start, let e = occ.end { items.append(Placed(item: .task(occ), start: s, end: e, day: day)) }
         }
-        for ev in google.events(on: day) where !ev.isAllDay {
+        for ev in google.visibleEvents(on: day) where !ev.isAllDay {
             items.append(Placed(item: .google(ev), start: ev.start, end: ev.end, day: day))
         }
         items.sort { ($0.start, $1.end) < ($1.start, $0.end) }

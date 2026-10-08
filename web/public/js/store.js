@@ -384,6 +384,27 @@ class Store {
     }
   }
 
+  // ---------- calendar toggles (synced, so hiding a calendar hides it on every device) ----------
+  get primaryCalendarId() { return this.google.calendars?.find(c => c.primary)?.id; }
+  calendarShown(key) { return !(this.settings.hiddenCalendars || []).includes(key); }
+  taskShown(t) { return this.calendarShown(M.calendarKeyOf(t, this.primaryCalendarId)); }
+  setCalendarShown(key, on) {
+    const hidden = new Set(this.settings.hiddenCalendars || []);
+    if (on) hidden.delete(key); else hidden.add(key);
+    this.updateSettings({ hiddenCalendars: [...hidden] });
+  }
+  /** What the calendar views draw: everything except hidden calendars. (The checklist and reminders ignore the toggles.) */
+  visibleOccurrencesOn(day) { return this.occurrencesOn(day).filter(o => this.taskShown(o.task)); }
+  visibleGoogleEventsOn(day) {
+    return this.googleEventsOn(day).filter(e => this.calendarShown(M.googleCalendarKey(e.calendarID, this.primaryCalendarId)));
+  }
+  /** Google calendars to check for busy times: this device's picks minus hidden ones (null = none left). */
+  get busyCalendarIDs() {
+    const ids = this.googleCalendarIDs.length ? this.googleCalendarIDs : ['primary'];
+    const shown = ids.filter(id => this.calendarShown(M.googleCalendarKey(id, this.primaryCalendarId)));
+    return shown.length ? shown : null;
+  }
+
   googleEventsOn(day) {
     if (!this.google.connected || !this.settings.showGoogleEvents) return [];
     const s = M.startOfDay(day), e = M.addDays(s, 1);
@@ -428,7 +449,9 @@ class Store {
   refreshGoogleView() { this.google.months.clear(); this.ensureGoogle(M.addDays(new Date(), -40), M.addDays(new Date(), 75)); }
 
   disconnectGoogle = () => api('/api/google/disconnect', { method: 'POST', body: {} }).then(() => this.refreshGoogle());
-  freeBusy = (from, to) => api('/api/google/freebusy', { method: 'POST', body: { from: M.iso(from), to: M.iso(to), calendars: this.googleCalendarIDs } });
+  freeBusy = (from, to) => this.busyCalendarIDs
+    ? api('/api/google/freebusy', { method: 'POST', body: { from: M.iso(from), to: M.iso(to), calendars: this.busyCalendarIDs } })
+    : Promise.resolve([]);
   /** Push a Cadence edit of a synced event to Google; refresh the calendars afterwards. */
   async updateGoogleEvent(e) {
     const r = await api('/api/google/events/update', { method: 'POST', body: { ...e, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } });

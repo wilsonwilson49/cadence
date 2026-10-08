@@ -15,6 +15,7 @@ struct SettingsView: View {
 
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var loginItemOn = SMAppService.mainApp.status == .enabled
+    @State private var runInBackground = WindowManager.runsInBackground
     @State private var loginError: String?
     @State private var showSecret = false
 
@@ -177,7 +178,12 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.orange)
             }
             if let loginError { Text(loginError).font(.caption).foregroundStyle(.red) }
-            Text("Recommended: reminders only fire while Cadence is running. Closing the window keeps it in the menu bar.")
+            Toggle("Run in the background", isOn: Binding(get: { runInBackground }, set: { runInBackground = $0; WindowManager.runsInBackground = $0 }))
+            Text(runInBackground
+                 ? "When you close the window, Cadence leaves the Dock and keeps running in the menu bar, so reminders, nudges and check-ins keep coming. When it starts at login it opens quietly. Open it any time from the menu bar icon."
+                 : "Cadence stays in the Dock when you close the window. It keeps running either way; quit it from the menu bar icon.")
+                .font(.caption).foregroundStyle(.secondary)
+            Text("Recommended: turn on both, since reminders only fire while Cadence is running.")
                 .font(.caption).foregroundStyle(.secondary)
         } header: {
             Text("Startup")

@@ -73,7 +73,9 @@ final class AppModel: ObservableObject {
         #if DEBUG
         DebugDriver.prepare(self)
         #endif
-        if !LaunchOptions.has("-background") { windows.showMain() }
+        // Opened at login with background mode on: stay in the menu bar (the check-in below still appears).
+        if !LaunchOptions.has("-background") && !(WindowManager.runsInBackground && AppDelegate.launchedAtLogin) { windows.showMain() }
+        else { windows.updateDockIcon() }
         if store.settings.checkInOnLaunch && !LaunchOptions.has("-noCheckIn") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.engine.triggerCheckIn(reason: .launch) }
         }
@@ -168,7 +170,29 @@ final class WindowManager: NSObject, NSWindowDelegate {
             .environmentObject(m.calendly).environmentObject(m.importer)
     }
 
+    // MARK: Running in the background
+
+    /// On (the default): with no Cadence window open, the Dock icon goes away and Cadence keeps running in
+    /// the menu bar, so reminders and check-ins keep working. Starting at login opens quietly (no window).
+    static var runsInBackground: Bool {
+        get { UserDefaults.standard.object(forKey: "runInBackground") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "runInBackground"); AppModel.shared.windows.updateDockIcon() }
+    }
+
+    /// Dock icon only while a window is on screen (or always, with background mode off).
+    func updateDockIcon() {
+        let visible = [mainWindow, checkInWindow].contains { $0?.isVisible == true }
+        let policy: NSApplication.ActivationPolicy = !Self.runsInBackground || visible ? .regular : .accessory
+        if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Let the window finish closing, then drop the Dock icon if nothing else is open.
+        DispatchQueue.main.async { [weak self] in self?.updateDockIcon() }
+    }
+
     func showMain() {
+        if !LaunchOptions.has("-noActivate") && Self.runsInBackground { NSApp.setActivationPolicy(.regular) }
         if mainWindow == nil {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -181,6 +205,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
             w.setContentSize(NSSize(width: 1180, height: 760))
             w.center()
             w.setFrameAutosaveName("CadenceMain")
+            w.delegate = self
             mainWindow = w
         }
         if !LaunchOptions.has("-noActivate") { NSApp.activate(ignoringOtherApps: true) }
@@ -201,6 +226,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
             w.isMovableByWindowBackground = true
             w.isReleasedWhenClosed = false
             w.level = .floating
+            w.delegate = self
             w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             w.contentViewController = NSHostingController(rootView: AnyView(root))
             w.setContentSize(NSSize(width: 560, height: 620))
@@ -214,5 +240,6 @@ final class WindowManager: NSObject, NSWindowDelegate {
     func closeCheckIn() {
         checkInWindow?.orderOut(nil)
         model?.engine.resetNudgeTimer()
+        updateDockIcon()
     }
 }

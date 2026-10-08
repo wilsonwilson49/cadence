@@ -278,6 +278,21 @@ struct Reflection: Codable, Identifiable, Hashable {
     var isMissed: Bool { outcome == "missed" }
 }
 
+// MARK: - Calendar toggles
+
+/// Each item belongs to one calendar: "tasks" / "events" (your own Cadence items), "calendly", or
+/// "google:<id>" ("google:primary" for your main Google calendar). Same keys as the web app (model.js).
+func googleCalendarKey(_ id: String?, primary: String?) -> String {
+    guard let id, id != "primary", id != primary else { return "google:primary" }
+    return "google:\(id)"
+}
+
+func calendarKey(of task: PlanTask, primary: String?) -> String {
+    if task.source == "google" { return googleCalendarKey(task.sourceCalendar, primary: primary) }
+    if task.source == "calendly" { return "calendly" }
+    return task.isEvent ? "events" : "tasks"
+}
+
 // MARK: - Open hours (Booking)
 
 struct Availability: Codable, Hashable {
@@ -338,6 +353,9 @@ struct AppSettings: Codable {
     // Booking (open hours)
     var availability = Availability()
 
+    /// Calendars switched off with the Calendars toggles (keys from calendarKey(of:primary:)).
+    var hiddenCalendars: [String] = []
+
     init() {}
 
     // Tolerant decoding so adding a setting never wipes an existing data file.
@@ -365,6 +383,7 @@ struct AppSettings: Codable {
         availability = c.value(.availability, d.availability)
         autoImportCalendars = c.value(.autoImportCalendars, d.autoImportCalendars)
         importDaysAhead = c.value(.importDaysAhead, d.importDaysAhead)
+        hiddenCalendars = c.value(.hiddenCalendars, d.hiddenCalendars)
     }
 }
 
@@ -389,6 +408,7 @@ struct SyncedSettings: Codable, Equatable {
     var availability: Availability
     var autoImportCalendars: Bool
     var importDaysAhead: Int
+    var hiddenCalendars: [String]
 
     init(_ s: AppSettings) {
         nudgeEnabled = s.nudgeEnabled; nudgeIntervalMinutes = s.nudgeIntervalMinutes
@@ -400,6 +420,7 @@ struct SyncedSettings: Codable, Equatable {
         showGoogleEvents = s.showGoogleEvents; googleEventReminderMinutes = s.googleEventReminderMinutes
         availability = s.availability
         autoImportCalendars = s.autoImportCalendars; importDaysAhead = s.importDaysAhead
+        hiddenCalendars = s.hiddenCalendars
     }
 
     init(from decoder: Decoder) throws {
@@ -423,6 +444,7 @@ struct SyncedSettings: Codable, Equatable {
         availability = c.value(.availability, availability)
         autoImportCalendars = c.value(.autoImportCalendars, autoImportCalendars)
         importDaysAhead = c.value(.importDaysAhead, importDaysAhead)
+        hiddenCalendars = c.value(.hiddenCalendars, hiddenCalendars)
     }
 
     func apply(to s: inout AppSettings) {
@@ -435,6 +457,7 @@ struct SyncedSettings: Codable, Equatable {
         s.showGoogleEvents = showGoogleEvents; s.googleEventReminderMinutes = googleEventReminderMinutes
         s.availability = availability
         s.autoImportCalendars = autoImportCalendars; s.importDaysAhead = importDaysAhead
+        s.hiddenCalendars = hiddenCalendars
     }
 }
 

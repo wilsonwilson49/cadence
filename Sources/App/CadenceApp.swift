@@ -27,10 +27,21 @@ struct CadenceApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// True when macOS opened Cadence as a login item (rather than you opening it).
+    static var launchedAtLogin = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        Self.launchedAtLogin = event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         NSApp.setActivationPolicy(.regular)
         AppModel.shared.start()
+        // Reminders run on a timer; keep App Nap from delaying it while Cadence has no window open.
+        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep],
+                                                         reason: "Cadence reminders and check-ins")
     }
+
+    private var activity: NSObjectProtocol?
 
     /// Clicking the Dock icon brings the main window back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
