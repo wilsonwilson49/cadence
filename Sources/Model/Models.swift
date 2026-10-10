@@ -215,10 +215,10 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var isLongTerm: Bool { mode == "longTerm" }
     var isUntilDone: Bool { mode == "untilDone" }
     /// The day an until-done task was finished (its earliest check-off).
-    var finishedKey: String? { completions.keys.min() }
+    var finishedKey: String? { finish()?.key }
     /// An until-done task past its due date that still isn't finished.
     var isPastDue: Bool {
-        guard isUntilDone, let due = dueDate, finishedKey == nil else { return false }
+        guard isUntilDone, !recurrence.isRepeating, let due = dueDate, finish() == nil else { return false }
         return due.startOfDay < Date().startOfDay
     }
 
@@ -227,11 +227,16 @@ struct PlanTask: Codable, Identifiable, Hashable {
         let cal = Calendar.current
         let short: (Date) -> String = { $0.formatted(.dateTime.month(.abbreviated).day()) }
         if isUntilDone {
-            if finishedKey != nil { return "Every day until done · finished" }
-            guard let due = dueDate else { return "Every day until done" }
+            var base = "Every day until done"
+            if recurrence.isRepeating {
+                let r = recurrence.summary(start: startDate)
+                base = "Until done · a new one " + (r.hasPrefix("Every ") ? "every " + r.dropFirst(6) : r.prefix(1).lowercased() + r.dropFirst())
+            }
+            if let f = finish() { return "\(base) · \(f.missed ? "not done" : "finished")" }
+            guard let due = dueDate, !recurrence.isRepeating else { return base }
             let left = cal.dateComponents([.day], from: Date().startOfDay, to: due.startOfDay).day ?? 0
             let tail = left > 1 ? " (\(left) days left)" : left == 1 ? " (tomorrow)" : left == 0 ? " (today)" : ""
-            return "Every day until done · due \(short(due))\(tail)"
+            return "\(base) · due \(short(due))\(tail)"
         }
         if isLongTerm {
             guard case .onDate(let end) = recurrence.end else { return "Long-term · every day" }
@@ -276,6 +281,69 @@ struct Reflection: Codable, Identifiable, Hashable {
 
     var wordCount: Int { countWords(text) }
     var isMissed: Bool { outcome == "missed" }
+}
+
+// MARK: - Task presets
+
+/// A saved combination of conditions to start new tasks from. Dates are relative to the start day
+/// (spanDays: repeat end / long-term end, dueDays: due date). Same JSON as the web app's taskPresets.
+struct TaskPreset: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var kind: String? = "task"
+    var title = ""
+    var notes = ""
+    var timeMinutes: Int?
+    var durationMinutes = 30
+    var recurrence = Recurrence()
+    var reminderOffsets: [Int] = [0]
+    var channels: [AlertChannel] = [.notification, .banner]
+    var color: TaskColor = .blue
+    var busy: Bool?
+    var mode: String?
+    var spanDays: Int?
+    var dueDays: Int?
+
+    init(id: UUID = UUID(), name: String, kind: String? = "task", timeMinutes: Int? = nil, durationMinutes: Int = 30,
+         recurrence: Recurrence = Recurrence(), reminderOffsets: [Int] = [0], color: TaskColor = .blue,
+         busy: Bool? = nil, mode: String? = nil, dueDays: Int? = nil) {
+        self.id = id; self.name = name; self.kind = kind; self.timeMinutes = timeMinutes; self.durationMinutes = durationMinutes
+        self.recurrence = recurrence; self.reminderOffsets = reminderOffsets; self.color = color
+        self.busy = busy; self.mode = mode; self.dueDays = dueDays
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.value(.id, UUID()); name = c.value(.name, "Preset"); kind = c.value(.kind, "task")
+        title = c.value(.title, ""); notes = c.value(.notes, "")
+        timeMinutes = c.value(.timeMinutes, nil); durationMinutes = c.value(.durationMinutes, 30)
+        recurrence = c.value(.recurrence, Recurrence()); reminderOffsets = c.value(.reminderOffsets, [0])
+        channels = c.value(.channels, [.notification, .banner]); color = c.value(.color, .blue)
+        busy = c.value(.busy, nil); mode = c.value(.mode, nil); spanDays = c.value(.spanDays, nil); dueDays = c.value(.dueDays, nil)
+    }
+
+    private static func fixed(_ n: Int) -> UUID { UUID(uuidString: String(format: "B0B0B0B0-0000-4000-8000-%012d", n))! }
+    static let defaults: [TaskPreset] = [
+        TaskPreset(id: fixed(1), name: "Homework", durationMinutes: 60, color: .orange, busy: false, mode: "untilDone", dueDays: 2),
+        TaskPreset(id: fixed(2), name: "Daily habit", recurrence: Recurrence(frequency: .daily), color: .green, busy: false),
+        TaskPreset(id: fixed(3), name: "Weekly chore (until done)", recurrence: Recurrence(frequency: .weekly), color: .teal, busy: false, mode: "untilDone"),
+        TaskPreset(id: fixed(4), name: "Meeting", kind: "event", timeMinutes: 600, reminderOffsets: [10], color: .purple, busy: true),
+    ]
+
+    /// Short description for Settings (same wording as the web).
+    var summary: String {
+        var parts = [kind == "event" ? "Event" : "Task"]
+        if mode == "longTerm" { parts.append("every day for \((spanDays ?? 29) + 1) days") }
+        else if !recurrence.isRepeating { parts.append("once") }
+        else if recurrence.frequency == .weekly && recurrence.weekdays.isEmpty { parts.append(recurrence.interval > 1 ? "every \(recurrence.interval) weeks" : "weekly") }
+        else { var r = recurrence; r.end = .never; let t = r.summary(start: Date()); parts.append(t.prefix(1).lowercased() + t.dropFirst()) }
+        if mode == "untilDone" { parts.append("kept on the list until done") }
+        if let d = dueDays { parts.append("due in \(d) day\(d == 1 ? "" : "s")") }
+        if let m = timeMinutes { parts.append("at \(timeString(minutes: m))") }
+        if channels.isEmpty { parts.append("no notifications") }
+        if kind == "event" || busy == true { parts.append(busy == true ? "closed" : "open") }
+        return parts.joined(separator: " · ")
+    }
 }
 
 // MARK: - Calendar toggles
@@ -356,6 +424,8 @@ struct AppSettings: Codable {
     /// Calendars switched off with the Calendars toggles (keys from calendarKey(of:primary:)).
     var hiddenCalendars: [String] = []
 
+    var taskPresets: [TaskPreset] = TaskPreset.defaults
+
     init() {}
 
     // Tolerant decoding so adding a setting never wipes an existing data file.
@@ -384,6 +454,7 @@ struct AppSettings: Codable {
         autoImportCalendars = c.value(.autoImportCalendars, d.autoImportCalendars)
         importDaysAhead = c.value(.importDaysAhead, d.importDaysAhead)
         hiddenCalendars = c.value(.hiddenCalendars, d.hiddenCalendars)
+        taskPresets = c.value(.taskPresets, d.taskPresets)
     }
 }
 
@@ -409,6 +480,7 @@ struct SyncedSettings: Codable, Equatable {
     var autoImportCalendars: Bool
     var importDaysAhead: Int
     var hiddenCalendars: [String]
+    var taskPresets: [TaskPreset]
 
     init(_ s: AppSettings) {
         nudgeEnabled = s.nudgeEnabled; nudgeIntervalMinutes = s.nudgeIntervalMinutes
@@ -421,6 +493,7 @@ struct SyncedSettings: Codable, Equatable {
         availability = s.availability
         autoImportCalendars = s.autoImportCalendars; importDaysAhead = s.importDaysAhead
         hiddenCalendars = s.hiddenCalendars
+        taskPresets = s.taskPresets
     }
 
     init(from decoder: Decoder) throws {
@@ -445,6 +518,7 @@ struct SyncedSettings: Codable, Equatable {
         autoImportCalendars = c.value(.autoImportCalendars, autoImportCalendars)
         importDaysAhead = c.value(.importDaysAhead, importDaysAhead)
         hiddenCalendars = c.value(.hiddenCalendars, hiddenCalendars)
+        taskPresets = c.value(.taskPresets, taskPresets)
     }
 
     func apply(to s: inout AppSettings) {
@@ -458,6 +532,7 @@ struct SyncedSettings: Codable, Equatable {
         s.availability = availability
         s.autoImportCalendars = autoImportCalendars; s.importDaysAhead = importDaysAhead
         s.hiddenCalendars = hiddenCalendars
+        s.taskPresets = taskPresets
     }
 }
 

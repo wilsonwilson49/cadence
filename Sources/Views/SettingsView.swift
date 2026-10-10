@@ -30,6 +30,7 @@ struct SettingsView: View {
             googleSection
             calendlySection
             importSection
+            presetsSection
             availabilitySection
             dataSection
         }
@@ -49,8 +50,8 @@ struct SettingsView: View {
                     Button("Sign out", role: .destructive) { sync.signOut() }
                 }
             } else {
-                TextField("Username", text: $sync.draftUsername)
-                SecureField("Password", text: $syncPassword)
+                TextField("Username", text: $sync.draftUsername).multilineTextAlignment(.leading)
+                SecureField("Password", text: $syncPassword).multilineTextAlignment(.leading)
                 HStack {
                     if sync.isSigningIn { ProgressView().controlSize(.small) }
                     Spacer()
@@ -249,12 +250,12 @@ struct SettingsView: View {
                     Link("Open Google Cloud Console", destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
                 }
                 .font(.callout)
-                TextField("Client ID", text: $store.settings.googleClientID, prompt: Text("…apps.googleusercontent.com"))
+                TextField("Client ID", text: $store.settings.googleClientID, prompt: Text("…apps.googleusercontent.com")).multilineTextAlignment(.leading)
                 HStack {
                     if showSecret {
-                        TextField("Client secret", text: $store.settings.googleClientSecret)
+                        TextField("Client secret", text: $store.settings.googleClientSecret).multilineTextAlignment(.leading)
                     } else {
-                        SecureField("Client secret", text: $store.settings.googleClientSecret)
+                        SecureField("Client secret", text: $store.settings.googleClientSecret).multilineTextAlignment(.leading)
                     }
                     Button { showSecret.toggle() } label: { Image(systemName: showSecret ? "eye.slash" : "eye") }
                         .buttonStyle(.borderless)
@@ -305,7 +306,7 @@ struct SettingsView: View {
                     .font(.callout)
                 Link("Open Calendly API settings", destination: URL(string: "https://calendly.com/integrations/api_webhooks")!)
                 HStack {
-                    SecureField("Personal Access Token", text: $calendlyToken)
+                    SecureField("Personal Access Token", text: $calendlyToken).multilineTextAlignment(.leading)
                     Button("Connect") { Task { await calendly.connect(token: calendlyToken); if calendly.isConnected { calendlyToken = ""; await importer.importNow() } } }
                         .buttonStyle(.borderedProminent)
                         .disabled(calendlyToken.trimmingCharacters(in: .whitespaces).isEmpty || calendly.isWorking)
@@ -336,6 +337,32 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         } header: {
             Text("Calendar imports")
+        }
+    }
+
+    private var presetsSection: some View {
+        Section {
+            if store.settings.taskPresets.isEmpty {
+                Text("No presets. Make one from the New Task window.").foregroundStyle(.secondary)
+            }
+            ForEach($store.settings.taskPresets) { $p in
+                HStack(spacing: 10) {
+                    Circle().fill(p.color.color).frame(width: 10, height: 10)
+                    TextField("Name", text: $p.name).labelsHidden().frame(maxWidth: 200).multilineTextAlignment(.leading)
+                    Text(p.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Spacer()
+                    Button(role: .destructive) { store.settings.taskPresets.removeAll { $0.id == p.id } } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete preset")
+                }
+            }
+        } header: {
+            Text("Task presets")
+        } footer: {
+            Text("Saved combinations of conditions (repeat, keep until done, due date, reminders, color…). Pick one at the top of the New Task window, or save the current one there with “Save as preset”.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

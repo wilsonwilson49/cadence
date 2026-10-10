@@ -116,7 +116,7 @@ struct TodoView: View {
         if tasks.isEmpty { emptyState }
         if !untilDone.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                SectionTitle(text: "Every day until done", symbol: "flame", count: untilDone.count)
+                SectionTitle(text: "Kept on your list until done", symbol: "flame", count: untilDone.count)
                 Card { VStack(spacing: 0) { taskRows(untilDone) } }
             }
         }
@@ -193,8 +193,10 @@ private struct TaskDefinitionRow: View {
                     Label(task.planSummary ?? "Once", systemImage: "repeat")
                     Label(task.timeMinutes.map { timeString(minutes: $0) } ?? "Any time", systemImage: "clock")
                     if task.isUntilDone {
-                        if let k = task.finishedKey, let d = DateKey.date(k) {
-                            Label("Done \(d.formatted(.dateTime.month(.abbreviated).day()))", systemImage: "checkmark.circle").foregroundStyle(.green)
+                        if let f = task.finish(), let d = DateKey.date(f.key) {
+                            Label("\(f.missed ? "Not done" : "Done") \(d.formatted(.dateTime.month(.abbreviated).day()))",
+                                  systemImage: f.missed ? "xmark.circle" : "checkmark.circle")
+                                .foregroundStyle(f.missed ? Color.red : Color.green)
                         } else if task.isPastDue {
                             Label("Past due", systemImage: "exclamationmark.circle").foregroundStyle(.red)
                         } else {

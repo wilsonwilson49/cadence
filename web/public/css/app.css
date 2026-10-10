@@ -486,3 +486,9 @@ main.enter > * { animation: rise .26s cubic-bezier(.2, .8, .2, 1) both; }
 .calmenu-pop .check { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .calmenu-pop .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ---------- Task presets ---------- */
+.preset-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent); }
+.preset-row > .i { color: var(--accent); }
+.preset-row select.input { flex: 1; min-width: 160px; width: auto; }

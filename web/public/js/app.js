@@ -188,7 +188,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
     ${hasRefl ? `<span class="muted" title="Reflection saved">${ic('quote')}</span>` : ''}
     ${ctx === 'checkin' ? '' : `<div class="actions">
       <button class="btn ghost sm" data-act="edit" data-task="${t.id}">Edit</button>
-      ${t.recurrence.frequency !== 'none' ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
+      ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
     </div>`}
   </div>`;
 }
@@ -488,7 +488,9 @@ function todoView() {
     const row = x => {
       const next = M.nextOccurrence(x);
       const doneCount = Object.keys(x.completions || {}).length;
-      const status = M.isUntilDone(x) ? (doneCount ? `<span class="green">${ic('check')}Done ${M.fmtDay(M.parseKey(M.finishedKey(x)), { month: 'short', day: 'numeric' })}</span>`
+      const fin = M.isUntilDone(x) && M.finishOf(x);
+      const status = M.isUntilDone(x) ? (fin ? (fin.missed ? `<span class="red">${ic('x')}Not done ${M.fmtDay(M.parseKey(fin.key), { month: 'short', day: 'numeric' })}</span>`
+          : `<span class="green">${ic('check')}Done ${M.fmtDay(M.parseKey(fin.key), { month: 'short', day: 'numeric' })}</span>`)
           : M.pastDue(x) ? `<span class="red">${ic('alert')}Past due</span>` : `<span>${ic('flame')}Not done yet</span>`)
         : next ? `<span>${ic('right')}Next: ${M.fmtDay(next, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`
         : x.recurrence.frequency === 'none' && !doneCount && M.startOfDay(x.startDate) < M.startOfDay(new Date()) ? `<span class="red">${ic('alert')}Overdue</span>`
@@ -501,7 +503,7 @@ function todoView() {
         <button class="btn sm" data-act="edit" data-task="${x.id}">Edit</button>
         <button class="btn ghost sm icon danger" data-act="delete-task" data-task="${x.id}" title="Delete task">${ic('trash')}</button></div>`;
     };
-    if (untilDone.length) body += `<div><div class="section-title">${ic('flame')}Every day until done <span class="count">${untilDone.length}</span></div><div class="card">${untilDone.map(row).join('')}</div></div>`;
+    if (untilDone.length) body += `<div><div class="section-title">${ic('flame')}Kept on your list until done <span class="count">${untilDone.length}</span></div><div class="card">${untilDone.map(row).join('')}</div></div>`;
     if (repeating.length) body += `<div><div class="section-title">${ic('repeat')}Recurring <span class="count">${repeating.length}</span></div><div class="card">${repeating.map(row).join('')}</div></div>`;
     if (once.length) body += `<div><div class="section-title">${ic('check')}One-time <span class="count">${once.length}</span></div><div class="card">${once.map(row).join('')}</div></div>`;
     if (!body) body = empty('list', t.search ? 'No matches' : 'No tasks yet', '');
@@ -756,6 +758,15 @@ function settingsView() {
         <button class="btn ${ui.importing ? 'busy' : ''}" data-act="import-now" ${ui.importing || !(store.google.connected || store.calendly.connected) ? 'disabled' : ''}>${ic('sync', ui.importing ? 'spinning' : '')} ${ui.importing ? 'Importing…' : 'Import now'}</button></div>
     </div></div>
 
+    <div id="presets"><h3>Task presets</h3><div class="card">
+      <div class="srow small muted">Saved combinations of conditions (repeat, keep until done, due date, reminders, color…). Pick one at the top of the New Task window, or save the current one there with “Save as preset”.</div>
+      ${(s.taskPresets || []).map(p => `<div class="srow"><span class="dot" style="width:10px;height:10px;border-radius:50%;flex:none;background:${color(p.color)}"></span>
+        <input class="input" style="max-width:220px" value="${esc(p.name)}" data-preset-name="${p.id}" aria-label="Preset name">
+        <span class="small muted grow">${esc(presetSummary(p))}</span>
+        <button class="btn ghost sm icon danger" data-act="preset-delete" data-id="${p.id}" title="Delete preset">${ic('trash')}</button></div>`).join('')
+        || '<div class="srow muted">No presets. Make one from the New Task window.</div>'}
+    </div></div>
+
     <div id="open-hours"><h3>Open hours</h3><div class="card">
       <div class="srow small muted">When you’re normally free to be booked. Booking shows what’s left of these hours after your closed tasks and events.</div>
       <div class="srow"><span>Days</span><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button class="${a.weekdays.includes(w) ? 'on' : ''}" data-act="avail-day" data-w="${w}" title="${M.WEEKDAY_SHORT[w - 1]}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div></div>
@@ -917,7 +928,7 @@ function detailDialog(m) {
     buttons = `${o.done ? `<button class="btn" data-act="toggle" data-occ="${esc(o.id)}">Mark not done</button>` : `<button class="btn primary" data-act="toggle" data-occ="${esc(o.id)}">Complete…</button>`}
       ${o.missed ? `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">Undo “didn’t do it”</button>` : o.done ? '' : `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">${ic('x')} Didn’t do it…</button>`}
       <button class="btn" data-act="edit" data-task="${t.id}">Edit…</button>
-      ${t.recurrence.frequency !== 'none' ? `<button class="btn" data-act="skip" data-occ="${esc(o.id)}">Skip</button>` : ''}
+      ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn" data-act="skip" data-occ="${esc(o.id)}">Skip</button>` : ''}
       ${t.source ? `<button class="btn" data-act="make-kind" data-task="${t.id}" data-kind="event" title="Take it off your checklist">${ic('cal')} Make it an event</button>` : ''}`;
   } else {
     const e = it.e;
@@ -949,6 +960,67 @@ function openEditor(task, isNew) {
   });
 }
 
+// --- task presets: a saved set of conditions to start new tasks from ---
+function presetRow(m) {
+  const presets = store.settings.taskPresets || [];
+  return `<div class="preset-row">${ic('stack')}
+    ${m.isNew && presets.length ? `<select class="input" data-edit="preset"><option value="">Start from a preset…</option>
+      ${presets.map(p => `<option value="${p.id}" ${m.preset === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>` : `<span class="small muted grow">${presets.length ? '' : 'No presets yet.'}</span>`}
+    ${m.namingPreset ? `<input class="input" data-edit="presetName" placeholder="Preset name" value="${esc(m.presetName)}" style="width:170px">
+      <button type="button" class="btn sm primary" data-act="preset-save">Save preset</button><button type="button" class="btn sm" data-act="preset-cancel">Cancel</button>`
+      : `<button type="button" class="btn sm" data-act="preset-new" title="Save these conditions (repeat, keep until done, reminders, color…) to reuse">${ic('plus')} Save as preset</button>`}</div>
+    ${m.presetSaved ? `<div class="small green" style="margin-top:-8px">${ic('check')} Saved “${esc(m.presetSaved)}”. Pick it from the preset menu next time.</div>` : ''}`;
+}
+
+function presetSummary(p) {
+  const rec = p.recurrence || { frequency: 'none' }, parts = [p.kind === 'event' ? 'Event' : 'Task'];
+  if (p.mode === 'longTerm') parts.push(`every day for ${(p.spanDays ?? 29) + 1} days`);
+  else if (rec.frequency === 'none') parts.push('once');
+  else if (rec.frequency === 'weekly' && !rec.weekdays?.length) parts.push((rec.interval || 1) > 1 ? `every ${rec.interval} weeks` : 'weekly');
+  else { const t = M.recurrenceSummary({ ...rec, end: { never: {} } }, new Date()); parts.push(t[0].toLowerCase() + t.slice(1)); }
+  if (p.mode === 'untilDone') parts.push('kept on the list until done');
+  if (p.dueDays != null) parts.push(`due in ${p.dueDays} day${p.dueDays === 1 ? '' : 's'}`);
+  if (p.timeMinutes != null) parts.push(`at ${M.fmtTimeMinutes(p.timeMinutes)}`);
+  if (!p.channels?.length) parts.push('no notifications');
+  if (p.kind === 'event' || p.busy) parts.push(p.busy ? 'closed' : 'open');
+  return parts.join(' · ');
+}
+
+function presetFromEditor(m, name) {
+  const d = m.draft, day = M.parseKey(m.date), r = d.recurrence;
+  const p = {
+    id: M.uuid(), name, kind: M.isEvent(d) ? 'event' : 'task', title: d.title.trim(), notes: d.notes || '', durationMinutes: d.durationMinutes,
+    recurrence: { frequency: r.frequency, interval: r.interval || 1, weekdays: r.frequency === 'weekly' ? [...r.weekdays] : [],
+      end: m.endMode === 'afterCount' && r.frequency !== 'none' ? { afterCount: { _0: m.endCount } } : { never: {} } },
+    reminderOffsets: [...d.reminderOffsets], channels: [...d.channels], color: d.color, busy: M.isBusy(d),
+  };
+  if (m.hasTime) p.timeMinutes = editorStartMinutes(m);
+  if (d.mode) p.mode = d.mode;
+  if (m.endMode === 'onDate' && r.frequency !== 'none') p.spanDays = Math.max(0, M.daysBetween(day, M.parseKey(m.endDate)));
+  if (d.mode === 'untilDone' && r.frequency === 'none' && m.hasDue) p.dueDays = Math.max(0, M.daysBetween(day, M.parseKey(m.dueDate)));
+  return p;
+}
+
+function applyPreset(m, p) {
+  const d = m.draft, day = M.parseKey(m.date), rec = p.recurrence || {};
+  Object.assign(d, {
+    kind: p.kind === 'event' ? 'event' : 'task', title: d.title.trim() ? d.title : (p.title || ''), notes: d.notes?.trim() ? d.notes : (p.notes || ''),
+    durationMinutes: p.durationMinutes || 30, color: p.color || 'blue', busy: p.busy ?? p.kind === 'event',
+    recurrence: { frequency: rec.frequency || 'none', interval: rec.interval || 1, weekdays: [...(rec.weekdays || [])], end: { never: {} } },
+    reminderOffsets: [...(p.reminderOffsets?.length ? p.reminderOffsets : [0])], channels: [...(p.channels || [])],
+  });
+  if (p.mode) d.mode = p.mode; else delete d.mode;
+  m.hasTime = p.timeMinutes != null;
+  if (m.hasTime) m.time = `${String(Math.floor(p.timeMinutes / 60)).padStart(2, '0')}:${String(p.timeMinutes % 60).padStart(2, '0')}`;
+  m.endMode = p.spanDays != null ? 'onDate' : rec.end?.afterCount ? 'afterCount' : 'never';
+  if (rec.end?.afterCount) m.endCount = rec.end.afterCount._0;
+  if (p.spanDays != null) m.endDate = M.dateKey(M.addDays(day, p.spanDays));
+  m.hasDue = p.dueDays != null;
+  if (m.hasDue) m.dueDate = M.dateKey(M.addDays(day, p.dueDays));
+  m.busyChosen = true; m.preset = p.id; m.presetSaved = null;
+  if (M.isEvent(d)) m.syncGoogle = store.google.connected;
+}
+
 function editorStartMinutes(m) { const [h, mi] = m.time.split(':').map(Number); return h * 60 + mi; }
 
 function editorOverlaps(m) {
@@ -961,7 +1033,7 @@ function editorOverlaps(m) {
 }
 
 function editorDialog(m) {
-  const d = m.draft, r = d.recurrence;
+  const d = m.draft, r = d.recurrence, lt = d.mode === 'longTerm', persist = d.mode === 'untilDone';
   const unit = M.FREQUENCIES.find(f => f[0] === r.frequency)[2];
   const overlaps = editorOverlaps(m);
   const preview = { ...r, end: m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} } };
@@ -971,6 +1043,7 @@ function editorDialog(m) {
       <div class="seg"><button type="button" class="${M.isEvent(d) ? '' : 'on'}" data-act="edit-kind" data-kind="task">${ic('list')} Task</button>
       <button type="button" class="${M.isEvent(d) ? 'on' : ''}" data-act="edit-kind" data-kind="event">${ic('cal')} Event</button></div></div>
     <div class="small muted" style="margin-top:-6px">${M.isEvent(d) ? 'Events show on your calendars only: no checkbox, no reflection.' : 'Tasks go on your checklist; checking one off asks for a short reflection.'}</div>
+    ${presetRow(m)}
     <label class="field"><span>Title</span><input class="input" data-edit="title" value="${esc(d.title)}" placeholder="What do you need to do?" autofocus required></label>
     <label class="field"><span>Notes</span><textarea class="input" data-edit="notes" rows="2" placeholder="Optional details">${esc(d.notes)}</textarea></label>
     <div class="fieldset"><div class="legend">When</div>
@@ -988,24 +1061,26 @@ function editorDialog(m) {
     ${d.source === 'google' && !m.isNew ? `<div class="fieldset"><div class="legend">${ic('sync')} Synced with Google Calendar</div>
       <div class="small muted">Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.</div>
       ${d.externalURL ? `<a class="small" href="${esc(d.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : ''}</div>` : `
-    <div class="fieldset"><div class="legend">Repeat</div>
-      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${!d.mode && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
-        ${M.isEvent(d) ? '' : `<optgroup label="Keep reminding me"><option value="longTerm" ${d.mode === 'longTerm' ? 'selected' : ''}>Long-term: every day until a date</option>
-          <option value="untilDone" ${d.mode === 'untilDone' ? 'selected' : ''}>Every day until it’s done</option></optgroup>`}</select></label>
-      ${d.mode === 'longTerm' ? `<label class="field"><span>Every day until</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
-      ${d.mode === 'untilDone' ? `<label class="field"><span>&nbsp;</span><label class="check"><input type="checkbox" data-edit="hasDue" data-rerender ${m.hasDue ? 'checked' : ''}>Has a due date</label></label>` : ''}
-      ${!d.mode && r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
-      ${d.mode === 'longTerm' ? `<div class="small muted">${ic('repeat')} On your checklist and reminds you every day until ${M.fmtDay(M.parseKey(m.endDate), { weekday: 'short', month: 'short', day: 'numeric' })} (${Math.max(0, M.daysBetween(M.parseKey(m.date), M.parseKey(m.endDate))) + 1} days). Check off each day on its own.</div>` : ''}
-      ${d.mode === 'untilDone' ? `${m.hasDue ? `<label class="field" style="max-width:220px"><span>Due by</span><input class="input" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"></label>` : ''}
-        <div class="small muted">${ic('flame')} On your checklist and reminds you every day${m.hasDue ? ' (and keeps going past the due date)' : ''} until you check it off once. Then it’s gone.</div>` : ''}
-      ${!d.mode && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
+    <div class="fieldset"><div class="legend">Repeat &amp; conditions</div>
+      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${!lt && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
+        ${M.isEvent(d) ? '' : `<optgroup label="Keep reminding me"><option value="longTerm" ${lt ? 'selected' : ''}>Long-term: every day until a date</option></optgroup>`}</select></label>
+      ${lt ? `<label class="field"><span>Every day until</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
+      ${!lt && r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
+      ${lt ? `<div class="small muted">${ic('repeat')} On your checklist and reminds you every day until ${M.fmtDay(M.parseKey(m.endDate), { weekday: 'short', month: 'short', day: 'numeric' })} (${Math.max(0, M.daysBetween(M.parseKey(m.date), M.parseKey(m.endDate))) + 1} days). Check off each day on its own.</div>` : ''}
+      ${!lt && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
         <button type="button" class="btn sm" data-act="edit-weekdays">Weekdays</button></div>` : ''}
-      ${!d.mode && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
+      ${!lt && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
           <option value="never" ${m.endMode === 'never' ? 'selected' : ''}>Never</option><option value="onDate" ${m.endMode === 'onDate' ? 'selected' : ''}>On a date</option>
           <option value="afterCount" ${m.endMode === 'afterCount' ? 'selected' : ''}>After a number of times</option></select></label>
         ${m.endMode === 'onDate' ? `<label class="field"><span>End date</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
         ${m.endMode === 'afterCount' ? `<label class="field"><span>Times</span><input class="input" type="number" min="1" max="999" data-edit="endCount" data-rerender value="${m.endCount}"></label>` : ''}</div>
         <div class="small muted">${esc(M.recurrenceSummary(preview, M.parseKey(m.date)))}</div>` : ''}
+      ${M.isEvent(d) || lt ? '' : `<label class="check" style="margin-top:4px"><input type="checkbox" data-edit="persist" data-rerender ${persist ? 'checked' : ''}>${ic('flame')} Keep it on my list every day until it’s done</label>
+        ${persist ? `<div class="small muted" style="margin-top:-4px">${r.frequency === 'none'
+          ? 'It shows up and reminds you every day until you check it off or mark it “didn’t do it”. Then it’s gone.'
+          : 'Each one shows up and reminds you every day until you check it off or mark it “didn’t do it”, or until the next one arrives and takes its place.'}</div>
+          ${r.frequency === 'none' ? `<div class="row" style="flex-wrap:wrap"><label class="check"><input type="checkbox" data-edit="hasDue" data-rerender ${m.hasDue ? 'checked' : ''}>Has a due date</label>
+            ${m.hasDue ? `<input class="input" style="width:auto" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"><span class="small muted">It keeps going past the due date, marked “Past due”.</span>` : ''}</div>` : ''}` : ''}`}
     </div>
     `}
     <div class="fieldset"><div class="legend">Reminders</div>
@@ -1034,6 +1109,7 @@ function readEditorInputs() {
   const root = $('#modal');
   const val = k => root.querySelector(`[data-edit="${k}"]`);
   if (val('title')) m.draft.title = val('title').value;
+  if (val('presetName')) m.presetName = val('presetName').value;
   if (val('notes')) m.draft.notes = val('notes').value;
   if (val('date')?.value) m.date = val('date').value;
   if (val('hasTime')) m.hasTime = val('hasTime').checked;
@@ -1041,19 +1117,22 @@ function readEditorInputs() {
   if (val('duration')) m.draft.durationMinutes = Number(val('duration').value);
   if (val('hasDue')) m.hasDue = val('hasDue').checked;
   if (val('dueDate')?.value) m.dueDate = val('dueDate').value;
-  const fv = val('frequency')?.value;
-  if (fv === 'longTerm' || fv === 'untilDone') {
-    if (m.draft.mode !== fv) {
-      m.draft.mode = fv;
-      m.draft.recurrence = { ...m.draft.recurrence, frequency: fv === 'longTerm' ? 'daily' : 'none', interval: 1, weekdays: [] };
-      if (fv === 'longTerm') { m.endMode = 'onDate'; if (m.endDate <= m.date) m.endDate = M.dateKey(M.addDays(M.parseKey(m.date), 30)); }
+  const fv = val('frequency')?.value, wasLongTerm = m.draft.mode === 'longTerm';
+  if (fv === 'longTerm') {
+    if (!wasLongTerm) {
+      m.draft.mode = 'longTerm';
+      m.draft.recurrence = { ...m.draft.recurrence, frequency: 'daily', interval: 1, weekdays: [] };
+      m.endMode = 'onDate'; if (m.endDate <= m.date) m.endDate = M.dateKey(M.addDays(M.parseKey(m.date), 30));
     }
   } else if (val('frequency')) {
-    delete m.draft.mode;
+    if (wasLongTerm) { delete m.draft.mode; m.endMode = 'never'; }
     const f = val('frequency').value;
     if (f === 'weekly' && m.draft.recurrence.frequency !== 'weekly' && !m.draft.recurrence.weekdays.length) m.draft.recurrence.weekdays = [M.weekday(M.parseKey(m.date))];
     m.draft.recurrence.frequency = f;
   }
+  // "Keep it on my list until it's done" works with any repeat except long-term.
+  const pv = val('persist');
+  if (pv && !wasLongTerm && fv !== 'longTerm') { if (pv.checked) m.draft.mode = 'untilDone'; else if (m.draft.mode === 'untilDone') delete m.draft.mode; }
   if (val('interval')) m.draft.recurrence.interval = Math.min(99, Math.max(1, Number(val('interval').value) || 1));
   if (val('endMode')) m.endMode = val('endMode').value;
   if (val('endDate')?.value) m.endDate = val('endDate').value;
@@ -1081,10 +1160,8 @@ async function saveEditor() {
   if (t.mode === 'longTerm') {
     if (m.endDate < m.date) { m.error = 'The end date has to be on or after the start date.'; renderModal(); return; }
     t.recurrence = { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } };
-  } else if (t.mode === 'untilDone') {
-    t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
-  } else delete t.mode;
-  if (t.mode === 'untilDone' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
+  } else if (t.mode !== 'untilDone') delete t.mode;
+  if (t.mode === 'untilDone' && t.recurrence.frequency === 'none' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
   t.reminderOffsets = t.reminderOffsets.filter(o => o >= 0 || (t.timeMinutes != null && -o < t.durationMinutes));
   if (!t.reminderOffsets.length) t.reminderOffsets = [0];
   const day0 = M.parseKey(m.date);
@@ -1259,6 +1336,20 @@ const actions = {
       m.draft.reminderOffsets = [10];
     }
     renderModal();
+  },
+  'preset-new': () => { readEditorInputs(); const m = ui.modal; m.namingPreset = true; m.presetName = m.draft.title.trim() || ''; m.presetSaved = null; renderModal(); setTimeout(() => $('[data-edit="presetName"]')?.focus()); },
+  'preset-cancel': () => { readEditorInputs(); ui.modal.namingPreset = false; renderModal(); },
+  'preset-save': () => {
+    readEditorInputs();
+    const m = ui.modal, name = ($('[data-edit="presetName"]')?.value || '').trim() || 'My preset';
+    store.updateSettings({ taskPresets: [...(store.settings.taskPresets || []), presetFromEditor(m, name)] });
+    m.namingPreset = false; m.presetSaved = name; renderModal();
+  },
+  'preset-delete': el => {
+    const p = (store.settings.taskPresets || []).find(x => x.id === el.dataset.id);
+    if (!p) return;
+    store.updateSettings({ taskPresets: store.settings.taskPresets.filter(x => x.id !== p.id) });
+    toast(`Deleted preset “${p.name}”`, { icon: 'trash', undo: () => store.updateSettings({ taskPresets: [...store.settings.taskPresets, p] }) });
   },
   'edit-busy': el => { readEditorInputs(); ui.modal.draft.busy = el.dataset.busy === '1'; ui.modal.busyChosen = true; renderModal(); },
   'new-at': el => { const d = new Date(Number(el.dataset.at)); newTaskAt(d, Math.min(1435, Math.floor(M.minutesOf(d) / 5) * 5)); },
@@ -1448,7 +1539,19 @@ document.addEventListener('change', e => {
   if (el.dataset.bind === 'todoRange') { ui.todo.range = Number(el.value); render(); return; }
   if (el.dataset.bind === 'todoCompleted') { ui.todo.showCompleted = el.checked; render(); return; }
   if (el.closest('[data-form="editor"]')) {
+    if (el.dataset.edit === 'preset') {
+      const p = (store.settings.taskPresets || []).find(x => x.id === el.value);
+      readEditorInputs();
+      if (p) applyPreset(ui.modal, p);
+      renderModal();
+      return;
+    }
     if ('rerender' in el.dataset) { readEditorInputs(); renderModal(); }
+    return;
+  }
+  if (el.dataset.presetName) {
+    const name = el.value.trim();
+    if (name) store.updateSettings({ taskPresets: store.settings.taskPresets.map(p => p.id === el.dataset.presetName ? { ...p, name } : p) });
     return;
   }
   if (el.dataset.setting) {

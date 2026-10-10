@@ -36,10 +36,16 @@ check(openRanges(thu, hrs, [[+thu, +dayAt(thu, 1440)]], 0).length === 0, 'closed
 const today = startOfDay(new Date()), k = n => dateKey(addDays(today, n));
 const ud = newTask({ mode: 'untilDone', startDate: iso(addDays(today, -3)) });
 check(occurs(ud, today) && occurs(ud, addDays(today, 5)) && !occurs(ud, addDays(today, -1)), 'until done: today and future, not empty past days');
-ud.missed = { [k(-2)]: iso(new Date()) };
-check(occurs(ud, addDays(today, -2)), 'until done: a missed past day stays visible');
 ud.completions = { [k(0)]: iso(new Date()) };
 check(occurs(ud, today) && !occurs(ud, addDays(today, 1)) && nextOccurrence(ud, addDays(today, 1)) === null, 'until done: gone after it is checked off');
+const um = newTask({ mode: 'untilDone', startDate: iso(addDays(today, -3)), missed: { [k(-1)]: iso(new Date()) } });
+check(occurs(um, addDays(today, -1)) && !occurs(um, today), 'until done: "didn\'t do it" ends it too');
+// Repeating + until done: weekly from 3 days ago, so the next one arrives in 4 days.
+const uw = newTask({ mode: 'untilDone', startDate: iso(addDays(today, -3)), recurrence: { frequency: 'weekly', interval: 1, weekdays: [], end: { never: {} } } });
+check(occurs(uw, today) && occurs(uw, addDays(today, 3)) && occurs(uw, addDays(today, 4)), 'repeating until done: carries over until the next one');
+uw.completions = { [k(0)]: iso(new Date()) };
+check(occurs(uw, today) && !occurs(uw, addDays(today, 1)) && !occurs(uw, addDays(today, 3)) && occurs(uw, addDays(today, 4)) && occurs(uw, addDays(today, 6)),
+  'repeating until done: finished one disappears, the next repeat comes back');
 const lt = newTask({ mode: 'longTerm', startDate: iso(today), recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: iso(addDays(today, 10)) } } } });
 check(occurs(lt, addDays(today, 10)) && !occurs(lt, addDays(today, 11)) && planSummary(lt).includes('10 days left'), 'long-term: every day through the end date');
 console.log(fail ? `${fail} failed` : 'all passed');

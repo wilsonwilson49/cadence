@@ -126,15 +126,45 @@ extension PlanTask {
     func occurs(on day: Date) -> Bool {
         if archived == true { return false }
         let d = day.startOfDay
+        guard d >= startDate.startOfDay else { return false }
+        guard isUntilDone else { return occursByPattern(d) }
+        // Until done: shows every day from its repeat day until it's settled (checked off or "didn't do it");
+        // the next repeat replaces it. Past days only keep the day it was settled. Same rule as model.js.
+        guard let rep = repStart(on: d) else { return false }
+        let key = DateKey.string(d), from = DateKey.string(rep)
+        if settledKeys.contains(where: { $0 >= from && $0 < key }) { return false }
+        if d < Date().startOfDay { return completions[key] != nil || missed?[key] != nil }
+        return true
+    }
+
+    /// Check-off and "didn't do it" day keys.
+    var settledKeys: [String] { Array(completions.keys) + Array((missed ?? [:]).keys) }
+
+    /// Where an until-done task's current one started: the latest repeat day on or before `day`.
+    func repStart(on day: Date) -> Date? {
+        let s = startDate.startOfDay
+        var c = day.startOfDay
+        for _ in 0..<400 {
+            guard c >= s else { return nil }
+            if occursByPattern(c) { return c }
+            c = c.adding(days: -1)
+        }
+        return nil
+    }
+
+    /// How the current one (as of `day`) was settled: the first check-off or "didn't do it" since it started.
+    func finish(on day: Date = Date()) -> (key: String, missed: Bool)? {
+        guard let rep = repStart(on: day) else { return nil }
+        let from = DateKey.string(rep)
+        guard let k = settledKeys.filter({ $0 >= from }).min() else { return nil }
+        return (k, completions[k] == nil)
+    }
+
+    /// The plain repeat schedule (no until-done carry-over).
+    func occursByPattern(_ d: Date) -> Bool {
+        if archived == true { return false }
         let s = startDate.startOfDay
         guard d >= s else { return false }
-        if isUntilDone {
-            // Every day from its start until the day it's checked off. Past days only keep what happened on them.
-            let key = DateKey.string(d)
-            if let done = finishedKey, key > done { return false }
-            if d < Date().startOfDay { return key == finishedKey || missed?[key] != nil }
-            return true
-        }
         if case .onDate(let end) = recurrence.end, recurrence.isRepeating, d > end.startOfDay { return false }
         guard matchesPattern(d, start: s) else { return false }
         if case .afterCount(let limit) = recurrence.end, recurrence.isRepeating {

@@ -467,16 +467,16 @@ private struct BookingSheet: View {
             }
             .padding([.horizontal, .top], 20)
             Form {
-                TextField("Title", text: $title, prompt: Text("Meeting"))
+                TextField("Title", text: $title, prompt: Text("Meeting")).multilineTextAlignment(.leading)
                 DatePicker("Starts", selection: $start, displayedComponents: .hourAndMinute)
                 Picker("Length", selection: $minutes) {
                     ForEach(Self.lengths, id: \.self) { m in
                         Text(m < 60 ? "\(m) min" : (m % 60 == 0 ? "\(m / 60) hr" : "\(m / 60) hr \(m % 60) min")).tag(m)
                     }
                 }
-                TextField("Invitee name (optional)", text: $name)
-                TextField("Invitee email (optional)", text: $email)
-                TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...4)
+                TextField("Invitee name (optional)", text: $name).multilineTextAlignment(.leading)
+                TextField("Invitee email (optional)", text: $email).multilineTextAlignment(.leading)
+                TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...4).multilineTextAlignment(.leading)
                 if google.isConnected {
                     Toggle("Add a Google Meet link", isOn: $addMeet)
                     Text("Saved to Google Calendar as a closed event. If you add an email, Google sends them an invitation.")

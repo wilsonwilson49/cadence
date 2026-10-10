@@ -132,29 +132,49 @@ function patternIndex(task, d, s) {
   return count;
 }
 
-/** Long-term: every day until an end date (each day is its own check-off). Until done: one task that
- *  shows up every day until it's checked off once, then disappears. */
+/** Long-term: every day until an end date (each day is its own check-off).
+ *  Until done ("keep it on my list"): each one stays on the list every day until it's checked off or marked
+ *  not done, or until the next repeat arrives (the next one takes over). */
 export const isLongTerm = task => task.mode === 'longTerm';
 export const isUntilDone = task => task.mode === 'untilDone';
 
-/** The day an until-done task was finished (its earliest check-off), or null. */
-export function finishedKey(task) {
-  const keys = Object.keys(task.completions || {});
-  return keys.length ? keys.sort()[0] : null;
+/** Where an until-done task's current one started: the latest repeat day on or before `day` (its start if it doesn't repeat). */
+export function repStartOn(task, day) {
+  const s = startOfDay(task.startDate);
+  for (let c = startOfDay(day), i = 0; c >= s && i < 400; c = addDays(c, -1), i++) if (occursByPattern(task, c)) return c;
+  return null;
 }
+
+/** How the current one (as of `day`) was settled: { key, missed } for the first check-off or "didn't do it", or null. */
+export function finishOf(task, day = new Date()) {
+  const rep = repStartOn(task, day);
+  if (!rep) return null;
+  const from = dateKey(rep);
+  const keys = [...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].filter(k => k >= from).sort();
+  return keys.length ? { key: keys[0], missed: !(task.completions && task.completions[keys[0]]) } : null;
+}
+export const finishedKey = (task, day) => finishOf(task, day)?.key ?? null;
 
 export function occurs(task, day) {
   if (task.archived) return false;
   const d = startOfDay(day);
+  if (d < startOfDay(task.startDate)) return false;
+  if (!isUntilDone(task)) return occursByPattern(task, d);
+  // Until done: shows every day from its repeat day until it's settled (checked off or "didn't do it");
+  // the next repeat replaces it. Past days only keep the day it was settled.
+  const rep = repStartOn(task, d);
+  if (!rep) return false;
+  const key = dateKey(d), from = dateKey(rep);
+  const settled = [...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].some(k => k >= from && k < key);
+  if (settled) return false;
+  if (d < startOfDay(new Date())) return Boolean((task.completions && task.completions[key]) || (task.missed && task.missed[key]));
+  return true;
+}
+
+/** The plain repeat schedule (no until-done carry-over). */
+function occursByPattern(task, d) {
   const s = startOfDay(task.startDate);
   if (d < s) return false;
-  if (isUntilDone(task)) {
-    // Every day from its start until the day it's checked off. Past days only keep what happened on them.
-    const key = dateKey(d), done = finishedKey(task);
-    if (done && key > done) return false;
-    if (d < startOfDay(new Date())) return key === done || Boolean(task.missed && task.missed[key]);
-    return true;
-  }
   const repeating = task.recurrence.frequency !== 'none';
   const end = endOf(task.recurrence);
   if (repeating && end.type === 'onDate' && d > startOfDay(end.date)) return false;
@@ -176,10 +196,13 @@ export function nextOccurrence(task, from = new Date()) {
 /** How a task repeats, in words: covers the long-term and until-done types too. */
 export function planSummary(task) {
   if (isUntilDone(task)) {
-    if (finishedKey(task)) return 'Every day until done · finished';
-    if (!task.dueDate) return 'Every day until done';
+    const repeats = task.recurrence.frequency !== 'none';
+    const base = repeats ? `Until done · a new one ${recurrenceSummary(task.recurrence, task.startDate).replace(/^Every /, 'every ').replace(/^(Daily|Weekly|Monthly|Yearly)/, m => m.toLowerCase())}` : 'Every day until done';
+    const f = finishOf(task);
+    if (f) return `${base} · ${f.missed ? 'not done' : 'finished'}`;
+    if (!task.dueDate || repeats) return base;
     const left = daysBetween(new Date(), task.dueDate);
-    return `Every day until done · due ${fmtDay(task.dueDate, { month: 'short', day: 'numeric' })}${left > 1 ? ` (${left} days left)` : left === 1 ? ' (tomorrow)' : left === 0 ? ' (today)' : ''}`;
+    return `${base} · due ${fmtDay(task.dueDate, { month: 'short', day: 'numeric' })}${left > 1 ? ` (${left} days left)` : left === 1 ? ' (tomorrow)' : left === 0 ? ' (today)' : ''}`;
   }
   if (isLongTerm(task)) {
     const e = endOf(task.recurrence);
@@ -191,7 +214,7 @@ export function planSummary(task) {
 }
 
 /** An until-done task past its due date that still isn't finished. */
-export const pastDue = task => isUntilDone(task) && task.dueDate && !finishedKey(task) && startOfDay(task.dueDate) < startOfDay(new Date());
+export const pastDue = task => isUntilDone(task) && task.recurrence.frequency === 'none' && task.dueDate && !finishOf(task) && startOfDay(task.dueDate) < startOfDay(new Date());
 
 export function recurrenceSummary(rec, start) {
   const n = Math.max(1, rec.interval || 1);
@@ -299,6 +322,22 @@ export const DEFAULT_SETTINGS = {
   autoImportCalendars: true, importDaysAhead: 14,
   availability: { weekdays: [2, 3, 4, 5, 6], startMinutes: 540, endMinutes: 1020, bufferMinutes: 10 },
   hiddenCalendars: [],
+  // Task presets: saved combinations of conditions to start new tasks from. Dates are stored relative to the
+  // start day (spanDays: repeat end / long-term end, dueDays: due date). Same shape as TaskPreset on the Mac.
+  taskPresets: [
+    { id: 'B0B0B0B0-0000-4000-8000-000000000001', name: 'Homework', kind: 'task', title: '', notes: '', durationMinutes: 60,
+      recurrence: { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } }, reminderOffsets: [0], channels: ['notification', 'banner'],
+      color: 'orange', busy: false, mode: 'untilDone', dueDays: 2 },
+    { id: 'B0B0B0B0-0000-4000-8000-000000000002', name: 'Daily habit', kind: 'task', title: '', notes: '', durationMinutes: 30,
+      recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { never: {} } }, reminderOffsets: [0], channels: ['notification', 'banner'],
+      color: 'green', busy: false },
+    { id: 'B0B0B0B0-0000-4000-8000-000000000003', name: 'Weekly chore (until done)', kind: 'task', title: '', notes: '', durationMinutes: 30,
+      recurrence: { frequency: 'weekly', interval: 1, weekdays: [], end: { never: {} } }, reminderOffsets: [0], channels: ['notification', 'banner'],
+      color: 'teal', busy: false, mode: 'untilDone' },
+    { id: 'B0B0B0B0-0000-4000-8000-000000000004', name: 'Meeting', kind: 'event', title: '', notes: '', timeMinutes: 600, durationMinutes: 30,
+      recurrence: { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } }, reminderOffsets: [10], channels: ['notification', 'banner'],
+      color: 'purple', busy: true },
+  ],
 };
 
 export const CHANNELS = [

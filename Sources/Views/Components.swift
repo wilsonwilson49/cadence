@@ -235,7 +235,7 @@ struct OccurrenceMenu: View {
             Button("Didn't do it… (reflect on why)") { model.beginReflection(occ, missed: true) }
         }
         Button("Edit task…") { model.edit(occ.task) }
-        if occ.task.recurrence.isRepeating {
+        if occ.task.recurrence.isRepeating && !occ.task.isUntilDone {
             Button("Skip this occurrence") { store.skip(occ) }
         }
         Divider()
@@ -491,7 +491,7 @@ struct ItemDetail: View {
                             .buttonStyle(.borderedProminent)
                     }
                     Button("Edit…") { dismiss(); DispatchQueue.main.async { model.edit(occ.task) } }
-                    if occ.task.recurrence.isRepeating {
+                    if occ.task.recurrence.isRepeating && !occ.task.isUntilDone {
                         Button("Skip") { store.skip(occ); dismiss() }
                     }
                     if occ.task.isImported {

@@ -18,6 +18,10 @@ struct TaskEditor: View {
     /// Once you pick open/closed yourself, switching Task/Event no longer changes it.
     @State private var busyChosen = false
     @State private var hasDue: Bool
+    @State private var appliedPreset: String?
+    @State private var namingPreset = false
+    @State private var presetName = ""
+    @State private var presetSaved: String?
     @State private var dueDate: Date
     @State private var saving = false
     @State private var error: String?
@@ -74,9 +78,12 @@ struct TaskEditor: View {
                 .padding(.horizontal, 20)
 
             Form {
+                presetSection
+                // Text fields are left-aligned throughout: grouped forms right-align them by default, and macOS
+                // doesn't draw a trailing space in a right-aligned field until the next character is typed.
                 Section {
-                    TextField("Title", text: $task.title, prompt: Text("What do you need to do?"))
-                    TextField("Notes", text: $task.notes, prompt: Text("Optional details"), axis: .vertical)
+                    TextField("Title", text: $task.title, prompt: Text("What do you need to do?")).multilineTextAlignment(.leading)
+                    TextField("Notes", text: $task.notes, prompt: Text("Optional details"), axis: .vertical).multilineTextAlignment(.leading)
                         .lineLimit(2...5)
                 }
 
@@ -128,27 +135,18 @@ struct TaskEditor: View {
                         if let u = task.externalURL.flatMap(URL.init(string:)) { Link("Open in Google Calendar", destination: u) }
                     }
                 } else {
-                Section("Repeat") {
+                Section("Repeat & conditions") {
                     Picker("Repeats", selection: repeatChoice) {
                         ForEach(Frequency.allCases) { Text($0.label).tag($0.rawValue) }
                         if !task.isEvent {
                             Divider()
                             Text("Long-term: every day until a date").tag("longTerm")
-                            Text("Every day until it's done").tag("untilDone")
                         }
                     }
                     if task.isLongTerm {
                         DatePicker("Every day until", selection: $endDate, in: task.startDate..., displayedComponents: .date)
                         Label("On your checklist and reminds you every day until \(endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) (\(max(0, Calendar.current.dateComponents([.day], from: task.startDate.startOfDay, to: endDate.startOfDay).day ?? 0) + 1) days). Check off each day on its own.",
                               systemImage: "repeat")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else if task.isUntilDone {
-                        Toggle("Has a due date", isOn: $hasDue)
-                        if hasDue {
-                            DatePicker("Due by", selection: $dueDate, in: task.startDate..., displayedComponents: .date)
-                        }
-                        Label("On your checklist and reminds you every day\(hasDue ? " (and keeps going past the due date)" : "") until you check it off once. Then it's gone.",
-                              systemImage: "flame")
                             .font(.caption).foregroundStyle(.secondary)
                     } else if task.recurrence.isRepeating {
                         Stepper(value: $task.recurrence.interval, in: 1...99) {
@@ -170,6 +168,25 @@ struct TaskEditor: View {
                         }
                         Text(previewRecurrence.summary(start: task.startDate))
                             .font(.caption).foregroundStyle(.secondary)
+                    }
+                    // "Keep it on my list until it's done" works with any repeat except long-term.
+                    if !task.isEvent && !task.isLongTerm {
+                        Toggle(isOn: Binding(get: { task.isUntilDone }, set: { task.mode = $0 ? "untilDone" : nil })) {
+                            Label("Keep it on my list every day until it's done", systemImage: "flame")
+                        }
+                        if task.isUntilDone {
+                            Text(task.recurrence.isRepeating
+                                 ? "Each one shows up and reminds you every day until you check it off or mark it “didn't do it”, or until the next one arrives and takes its place."
+                                 : "It shows up and reminds you every day until you check it off or mark it “didn't do it”. Then it's gone.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            if !task.recurrence.isRepeating {
+                                Toggle("Has a due date", isOn: $hasDue)
+                                if hasDue {
+                                    DatePicker("Due by", selection: $dueDate, in: task.startDate..., displayedComponents: .date)
+                                    Text("It keeps going past the due date, marked “Past due”.").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -317,6 +334,87 @@ struct TaskEditor: View {
 
     private var isGoogleSynced: Bool { task.source == "google" && task.googleEventID != nil && google.isConnected }
 
+    // MARK: Presets
+
+    @ViewBuilder private var presetSection: some View {
+        Section {
+            HStack(spacing: 10) {
+                Image(systemName: "square.stack").foregroundStyle(Color.accentColor)
+                if isNew && !store.settings.taskPresets.isEmpty {
+                    Menu(appliedPreset ?? "Start from a preset…") {
+                        ForEach(store.settings.taskPresets) { p in
+                            Button(p.name) { apply(p) }
+                        }
+                    }
+                    .fixedSize()
+                }
+                Spacer()
+                if let presetSaved {
+                    Label("Saved “\(presetSaved)”", systemImage: "checkmark").font(.caption).foregroundStyle(.green)
+                }
+                Button { presetName = task.title.trimmingCharacters(in: .whitespaces); namingPreset = true } label: {
+                    Label("Save as preset", systemImage: "plus")
+                }
+                .help("Save these conditions (repeat, keep until done, reminders, color…) to reuse")
+            }
+        }
+        .alert("Save as preset", isPresented: $namingPreset) {
+            TextField("Preset name", text: $presetName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                let name = presetName.trimmingCharacters(in: .whitespaces)
+                store.settings.taskPresets.append(makePreset(name: name.isEmpty ? "My preset" : name))
+                presetSaved = name.isEmpty ? "My preset" : name
+            }
+        } message: {
+            Text("Saves this task's conditions (repeat, keep until done, due date, reminders, color, open/closed) to start new tasks from.")
+        }
+    }
+
+    private func makePreset(name: String) -> TaskPreset {
+        let day = task.startDate.startOfDay
+        let days: (Date) -> Int = { max(0, Calendar.current.dateComponents([.day], from: day, to: $0.startOfDay).day ?? 0) }
+        var r = task.recurrence
+        if r.frequency != .weekly { r.weekdays = [] }
+        r.end = endMode == 2 && r.isRepeating ? .afterCount(endCount) : .never
+        var p = TaskPreset(name: name, kind: task.isEvent ? "event" : "task", timeMinutes: hasTime ? time.minutesSinceMidnight : nil,
+                           durationMinutes: task.durationMinutes, recurrence: r, reminderOffsets: task.reminderOffsets.sorted(),
+                           color: task.color, busy: task.isBusy, mode: task.mode)
+        p.title = task.title.trimmingCharacters(in: .whitespaces)
+        p.notes = task.notes
+        p.channels = AlertChannel.allCases.filter { task.channels.contains($0) }
+        if endMode == 1 && r.isRepeating { p.spanDays = days(endDate) }
+        if task.isUntilDone && !r.isRepeating && hasDue { p.dueDays = days(dueDate) }
+        return p
+    }
+
+    private func apply(_ p: TaskPreset) {
+        let day = task.startDate.startOfDay
+        task.kind = p.kind == "event" ? "event" : "task"
+        if task.title.trimmingCharacters(in: .whitespaces).isEmpty { task.title = p.title }
+        if task.notes.trimmingCharacters(in: .whitespaces).isEmpty { task.notes = p.notes }
+        task.durationMinutes = p.durationMinutes
+        task.color = p.color
+        task.busy = p.busy ?? (p.kind == "event")
+        busyChosen = true
+        var r = p.recurrence
+        r.end = .never
+        task.recurrence = r
+        task.mode = p.mode
+        task.reminderOffsets = Set(p.reminderOffsets.isEmpty ? [0] : p.reminderOffsets)
+        task.channels = Set(p.channels)
+        hasTime = p.timeMinutes != nil
+        if let m = p.timeMinutes { time = dayAt(day, minutes: m) }
+        if let span = p.spanDays { endMode = 1; endDate = day.adding(days: span) }
+        else if case .afterCount(let n) = p.recurrence.end { endMode = 2; endCount = n }
+        else { endMode = 0 }
+        hasDue = p.dueDays != nil
+        if let d = p.dueDays { dueDate = day.adding(days: d) }
+        if task.isEvent { syncGoogle = google.isConnected }
+        appliedPreset = p.name
+        presetSaved = nil
+    }
+
     /// The Repeats menu: a frequency, or one of the "keep reminding me" types.
     private var repeatChoice: Binding<String> {
         Binding(get: { task.mode ?? task.recurrence.frequency.rawValue }, set: { v in
@@ -326,11 +424,8 @@ struct TaskEditor: View {
                 task.recurrence.frequency = .daily; task.recurrence.interval = 1; task.recurrence.weekdays = []
                 endMode = 1
                 if endDate <= task.startDate { endDate = task.startDate.adding(days: 30) }
-            case "untilDone":
-                task.mode = v
-                task.recurrence.frequency = .none
             default:
-                task.mode = nil
+                if task.isLongTerm { task.mode = nil; endMode = 0 }
                 task.recurrence.frequency = Frequency(rawValue: v) ?? .none
             }
         })
@@ -352,10 +447,8 @@ struct TaskEditor: View {
         if t.isEvent { t.mode = nil }
         if t.isLongTerm {
             t.recurrence = Recurrence(frequency: .daily, interval: 1, weekdays: [], end: .onDate(max(endDate, t.startDate).startOfDay))
-        } else if t.isUntilDone {
-            t.recurrence = Recurrence()
         }
-        t.dueDate = t.isUntilDone && hasDue ? dueDate.startOfDay : nil
+        t.dueDate = t.isUntilDone && !t.recurrence.isRepeating && hasDue ? dueDate.startOfDay : nil
         // "During" reminders only make sense inside a timed task's span.
         t.reminderOffsets = t.reminderOffsets.filter { $0 >= 0 || (t.timeMinutes != nil && -$0 < t.durationMinutes) }
         if t.reminderOffsets.isEmpty { t.reminderOffsets = [0] }
