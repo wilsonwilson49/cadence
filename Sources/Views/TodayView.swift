@@ -51,23 +51,37 @@ struct TodayView: View {
                     }
                 }
 
+                // Tasks that stay on until you do them get their own section, apart from what's on for today.
+                let daily = items.filter { !$0.isUntilDone }
+                let ongoing = items.filter(\.isUntilDone)
                 VStack(alignment: .leading, spacing: 6) {
-                    SectionTitle(text: "Today's checklist", symbol: "checklist", count: items.count)
+                    SectionTitle(text: "Today's checklist", symbol: "checklist", count: daily.count)
                     Card {
-                        if items.isEmpty {
+                        if daily.isEmpty {
                             HStack(spacing: 10) {
                                 Image(systemName: "sun.max").font(.title2).foregroundStyle(.orange)
                                 VStack(alignment: .leading) {
-                                    Text("Nothing scheduled for today.")
+                                    Text(ongoing.isEmpty ? "Nothing scheduled for today." : "Nothing else scheduled for today.")
                                     Text("Add a task above, or press ⌘N for one with a time and repeat schedule.")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                             .padding(.vertical, 6)
                         } else {
-                            VStack(spacing: 0) { rows(items) }
+                            VStack(spacing: 0) { rows(daily) }
                         }
                     }
+                }
+                if !ongoing.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(text: "Until done", symbol: "flame", count: ongoing.count)
+                            Text("stays on your list until you check it off or mark it “didn't do it”").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Card { VStack(spacing: 0) { rows(ongoing) } }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Checking an item off asks for a reflection of at least \(store.settings.minReflectionWords) words. They're saved under Reflections.")
                         .font(.caption).foregroundStyle(.secondary)
                 }

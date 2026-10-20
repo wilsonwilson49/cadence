@@ -34,6 +34,7 @@ struct WeekView: View {
                 let colW = max(60, (geo.size.width - gutter - 8) / 7)
                 VStack(spacing: 0) {
                     dayHeader(colW)
+                    UntilDoneStrip(days: days, colW: colW, gutter: gutter)
                     allDayRow(colW)
                     Divider()
                     ScrollViewReader { proxy in
@@ -89,7 +90,7 @@ struct WeekView: View {
 
     private func allDayRow(_ colW: CGFloat) -> some View {
         let columns: [[CalendarItem]] = days.map { day in
-            google.visibleOccurrences(on: day).filter { $0.start == nil }.map(CalendarItem.task)
+            google.visibleOccurrences(on: day).filter { $0.start == nil && !$0.isUntilDone }.map(CalendarItem.task)
                 + google.visibleEvents(on: day).filter(\.isAllDay).map(CalendarItem.google)
         }
         let rows = min(4, columns.map(\.count).max() ?? 0)
@@ -182,7 +183,7 @@ struct WeekView: View {
 
     private func placed(_ day: Date) -> [Placed] {
         var items: [Placed] = []
-        for occ in google.visibleOccurrences(on: day) {
+        for occ in google.visibleOccurrences(on: day) where !occ.isUntilDone {
             if let s = occ.start, let e = occ.end { items.append(Placed(item: .task(occ), start: s, end: e, day: day)) }
         }
         for ev in google.visibleEvents(on: day) where !ev.isAllDay {
@@ -268,5 +269,114 @@ struct TimedBlock: View {
         .help("\(item.isBusy ? "Closed" : "Open (just for info)") · click for details · double-click to add a task at this time")
         .contextMenu { AddDuringMenu(item: item) }
         .popover(isPresented: $showing, arrowEdge: .trailing) { ItemDetail(item: item) { showing = false } }
+    }
+}
+
+/// Until-done tasks in the week as one bar per stretch of days (a new bar when the next repeat takes over),
+/// so they don't fill every day's "any time" cell.
+struct UntilDoneStrip: View {
+    @EnvironmentObject private var store: Store
+    @EnvironmentObject private var google: GoogleCalendar
+    let days: [Date]
+    let colW: CGFloat
+    let gutter: CGFloat
+
+    struct Span: Identifiable {
+        let task: PlanTask
+        let rep: Date
+        var start: Int
+        var end: Int
+        var before: Bool
+        var after = false
+        var id: String { "\(task.id)|\(start)" }
+    }
+
+    private var spans: [Span] {
+        var out: [Span] = []
+        for t in store.tasks where t.isUntilDone && !t.isEvent && t.archived != true && google.isShown(t) {
+            var current: Int?
+            for (i, d) in days.enumerated() {
+                guard t.untilDoneActive(on: d), let rep = t.repStart(on: d) else { current = nil; continue }
+                if let c = current, out[c].rep == rep, out[c].end == i - 1 { out[c].end = i; continue }
+                out.append(Span(task: t, rep: rep, start: i, end: i, before: i == 0 && rep < d.startOfDay))
+                current = out.count - 1
+            }
+        }
+        for i in out.indices where out[i].end == 6 {
+            let next = days[6].adding(days: 1)
+            out[i].after = out[i].task.untilDoneActive(on: next) && out[i].task.repStart(on: next) == out[i].rep
+        }
+        return out.sorted { ($0.start, $1.end - $1.start) < ($1.start, $0.end - $0.start) }
+    }
+
+    var body: some View {
+        // Bars that don't overlap share a row.
+        var rows: [[Span]] = []
+        for s in spans {
+            if let i = rows.firstIndex(where: { ($0.last?.end ?? -1) < s.start }) { rows[i].append(s) } else { rows.append([s]) }
+        }
+        return Group {
+            if !rows.isEmpty {
+            HStack(alignment: .top, spacing: 0) {
+                Text("until\ndone").font(.system(size: 9)).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                    .frame(width: gutter - 8, alignment: .trailing).padding(.trailing, 8)
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        ZStack(alignment: .leading) {
+                            ForEach(row) { s in bar(s) }
+                        }
+                        .frame(width: colW * 7, alignment: .leading)
+                    }
+                }
+                .frame(width: colW * 7, alignment: .leading)
+            }
+            .padding(.vertical, 4)
+            Divider()
+            }
+        }
+    }
+
+    private func bar(_ s: Span) -> some View {
+        let todayIndex = days.firstIndex(where: \.isToday)
+        let day = todayIndex.flatMap { ($0 >= s.start && $0 <= s.end) ? days[$0] : nil } ?? days[s.end]
+        let last = Occurrence(task: s.task, day: days[s.end])
+        let color = s.task.color.color
+        return SpanBar(occ: Occurrence(task: s.task, day: day), days: s.end - s.start + 1, done: last.isDone, missed: last.isMissed,
+                       before: s.before, after: s.after, color: color)
+            .frame(width: colW * CGFloat(s.end - s.start + 1) - (s.before || s.after ? 3 : 6))
+            .offset(x: colW * CGFloat(s.start) + (s.before ? 0 : 3))
+    }
+}
+
+private struct SpanBar: View {
+    let occ: Occurrence
+    let days: Int
+    let done: Bool
+    let missed: Bool
+    let before: Bool
+    let after: Bool
+    let color: Color
+    @State private var showing = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: done ? "checkmark" : missed ? "xmark" : "flame").font(.system(size: 9, weight: .bold)).foregroundStyle(color)
+            Text(occ.task.title).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                .strikethrough(done || missed, color: missed ? .red : nil)
+            Spacer(minLength: 4)
+            if days > 1 { Text("\(days) days").font(.system(size: 10)).foregroundStyle(.secondary) }
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(LinearGradient(colors: [color.opacity(0.28), color.opacity(0.12)], startPoint: .leading, endPoint: .trailing))
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: before ? 0 : 6, bottomLeadingRadius: before ? 0 : 6,
+                                          bottomTrailingRadius: after ? 0 : 6, topTrailingRadius: after ? 0 : 6))
+        .overlay(UnevenRoundedRectangle(topLeadingRadius: before ? 0 : 6, bottomLeadingRadius: before ? 0 : 6,
+                                        bottomTrailingRadius: after ? 0 : 6, topTrailingRadius: after ? 0 : 6)
+            .strokeBorder(color.opacity(0.55), lineWidth: 1))
+        .opacity(done || missed ? 0.6 : 1)
+        .contentShape(Rectangle())
+        .onTapGesture { showing = true }
+        .help("\(occ.task.title) · \(occ.task.planSummary ?? "")")
+        .popover(isPresented: $showing, arrowEdge: .bottom) { ItemDetail(item: .task(occ)) { showing = false } }
     }
 }

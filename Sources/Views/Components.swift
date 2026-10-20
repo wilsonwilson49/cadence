@@ -188,6 +188,9 @@ struct ChecklistRow: View {
                     } else if !compact {
                         Label("Any time", systemImage: "sun.horizon")
                     }
+                    if occ.isUntilDone && !compact && !occ.isResolved {
+                        Label(occ.task.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1)
+                    }
                     if let plan = occ.task.planSummary, !compact {
                         Label(plan, systemImage: occ.task.isUntilDone ? "flame" : "repeat").lineLimit(1)
                     }

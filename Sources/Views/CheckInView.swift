@@ -62,8 +62,13 @@ struct CheckInView: View {
                 }
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { i, occ in
-                            if i > 0 { Divider().padding(.leading, 42) }
+                        let ordered = items.filter { !$0.isUntilDone } + items.filter(\.isUntilDone)
+                        let firstOngoing = ordered.firstIndex(where: \.isUntilDone)
+                        ForEach(Array(ordered.enumerated()), id: \.element.id) { i, occ in
+                            if i == firstOngoing {
+                                Label("Until done", systemImage: "flame").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, i > 0 ? 8 : 2).padding(.bottom, 2)
+                            } else if i > 0 { Divider().padding(.leading, 42) }
                             ChecklistRow(occ: occ, onToggle: { o in
                                 if o.isDone { store.uncomplete(o) } else { withAnimation { reflectingMissed = false; reflecting = o } }
                             }, onMiss: { o in

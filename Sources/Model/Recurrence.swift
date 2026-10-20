@@ -160,6 +160,20 @@ extension PlanTask {
         return (k, completions[k] == nil)
     }
 
+    /// Whether an until-done task was (or will be) on your list on `day`, past days included: for drawing its whole stretch.
+    func untilDoneActive(on day: Date) -> Bool {
+        guard archived != true, let rep = repStart(on: day) else { return false }
+        let key = DateKey.string(day.startOfDay), from = DateKey.string(rep)
+        return !settledKeys.contains { $0 >= from && $0 < key }
+    }
+
+    /// For an until-done occurrence: "On your list since Mon · day 3", so carried-over items read as one task.
+    func carryLabel(on day: Date) -> String {
+        guard let rep = repStart(on: day) else { return "" }
+        let n = (Calendar.current.dateComponents([.day], from: rep, to: day.startOfDay).day ?? 0) + 1
+        return n <= 1 ? "New today" : "On your list since \(rep.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) · day \(n)"
+    }
+
     /// The plain repeat schedule (no until-done carry-over).
     func occursByPattern(_ d: Date) -> Bool {
         if archived == true { return false }

@@ -263,6 +263,9 @@ struct Occurrence: Identifiable, Hashable {
     /// "Didn't do it / couldn't": settles the item like a check-off, without counting as done.
     var isMissed: Bool { !task.isEvent && !isDone && task.missed?[key] != nil }
     var isResolved: Bool { isDone || isMissed }
+    var isUntilDone: Bool { task.isUntilDone }
+    /// Where an until-done task appears on a month grid: the day one starts, the day it's settled, and today.
+    var isUntilDoneMarker: Bool { task.repStart(on: day).map { $0.isSameDay(day) } == true || isResolved || day.isToday }
     var isOverdue: Bool { !task.isEvent && !isResolved && day < Date().startOfDay }
 }
 

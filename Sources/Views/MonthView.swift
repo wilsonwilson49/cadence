@@ -75,7 +75,7 @@ private struct MonthCell: View {
     let maxItems: Int
 
     var body: some View {
-        let items = google.visibleOccurrences(on: day).map(CalendarItem.task)
+        let items = google.visibleOccurrences(on: day).filter { !$0.isUntilDone || $0.isUntilDoneMarker }.map(CalendarItem.task)
             + google.visibleEvents(on: day).map(CalendarItem.google)
         let shown = items.count > maxItems ? max(0, maxItems - 1) : maxItems
         VStack(alignment: .leading, spacing: 2) {

@@ -168,6 +168,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   const meta = [];
   if (showDate || o.overdue) meta.push(`<span class="${o.overdue ? 'red' : ''}">${M.fmtDay(o.day, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`);
   meta.push(o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : compact ? '' : `<span>${ic('sun')}Any time</span>`);
+  if (M.isUntilDone(t) && !compact && !o.resolved) meta.push(`<span>${ic('flame')}${esc(M.carryLabel(t, o.day))}</span>`);
   const plan = M.planSummary(t);
   if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
   if (M.pastDue(t)) meta.push(`<span class="red"><b>Past due</b></span>`);
@@ -290,6 +291,8 @@ function eventRow(ev) {
 function todayView() {
   const today = new Date();
   const items = store.tasksOn(today), overdue = store.overdue(), all = [...overdue, ...items];
+  // Tasks that stay on until you do them get their own section, apart from what's on for today.
+  const daily = items.filter(o => !M.isUntilDone(o.task)), ongoing = items.filter(o => M.isUntilDone(o.task));
   const done = all.filter(o => o.done).length, settled = all.filter(o => o.resolved).length;
   const hour = today.getHours();
   const greet = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -308,10 +311,14 @@ function todayView() {
     <form class="quickadd" data-form="quick">${ic('plus')}<input id="quickAdd" placeholder="Quick add to today — press Return" autocomplete="off"></form>
     ${overdue.length ? `<div><div class="section-title">${ic('alert')}Overdue <span class="count">${overdue.length}</span></div>
       <div class="card">${overdue.map(o => crow(o)).join('')}</div></div>` : ''}
-    <div><div class="section-title">${ic('list')}Today’s checklist <span class="count">${items.length}</span></div>
-      <div class="card">${items.length ? items.map(o => crow(o)).join('')
-        : `<div class="crow"><span style="font-size:22px;color:var(--orange)">${ic('sun')}</span><div><div>Nothing scheduled for today.</div><div class="small muted">Add a task above, or use New Task for one with a time and repeat schedule.</div></div></div>`}</div>
-      <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div></div>
+    <div><div class="section-title">${ic('list')}Today’s checklist <span class="count">${daily.length}</span></div>
+      <div class="card">${daily.length ? daily.map(o => crow(o)).join('')
+        : `<div class="crow"><span style="font-size:22px;color:var(--orange)">${ic('sun')}</span><div><div>${ongoing.length ? 'Nothing else scheduled for today.' : 'Nothing scheduled for today.'}</div><div class="small muted">Add a task above, or use New Task for one with a time and repeat schedule.</div></div></div>`}</div>
+      ${ongoing.length ? '' : `<div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div>`}</div>
+    ${ongoing.length ? `<div><div class="section-title">${ic('flame')}Until done <span class="count">${ongoing.length}</span>
+        <span class="small muted" style="font-weight:400">stays on your list until you check it off or mark it “didn’t do it”</span></div>
+      <div class="card">${ongoing.map(o => crow(o)).join('')}</div>
+      <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div></div>` : ''}
     <div><div class="section-title">${ic('cal')}Schedule <span class="count">${events.length}</span><span class="grow"></span>
       <button class="btn sm" data-act="new-event">${ic('plus')} New event</button></div>
       <div class="card">${events.length ? events.map(eventRow).join('') : '<div class="crow muted">No events today. Events show on your calendars but never on the checklist.</div>'}</div></div>
@@ -351,7 +358,7 @@ function calendarsMenu() {
 // ---------- Week ----------
 function calItemsTimed(day) {
   const items = [];
-  for (const o of store.visibleOccurrencesOn(day)) if (o.start) items.push({ kind: o.event ? 'event' : 'task', o, start: o.start, end: o.end, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` });
+  for (const o of store.visibleOccurrencesOn(day)) if (o.start && !M.isUntilDone(o.task)) items.push({ kind: o.event ? 'event' : 'task', o, start: o.start, end: o.end, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` });
   for (const e of store.visibleGoogleEventsOn(day)) if (!e.isAllDay) items.push({ kind: 'google', e, start: e.startDate, end: e.endDate, title: e.title, color: e.colorHex || '#0a84ff', done: false, id: `g|${e.id}` });
   items.sort((a, b) => a.start - b.start || b.end - a.end);
   // Greedy lanes inside clusters of overlapping items.
@@ -373,9 +380,36 @@ const chipFor = it => `<div class="chip ${it.done ? 'done' : ''} ${it.missed ? '
 
 function allDayItems(day) {
   return [
-    ...store.visibleOccurrencesOn(day).filter(o => !o.start).map(o => ({ kind: o.event ? 'event' : 'task', o, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
+    ...store.visibleOccurrencesOn(day).filter(o => !o.start && !M.isUntilDone(o.task)).map(o => ({ kind: o.event ? 'event' : 'task', o, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
     ...store.visibleGoogleEventsOn(day).filter(e => e.isAllDay).map(e => ({ kind: 'google', e, title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
   ];
+}
+
+/** Split a checklist into what's on for the day and the tasks that stay until done (with a subheading). */
+function splitUntilDone(items) {
+  const daily = items.filter(o => !M.isUntilDone(o.task)), ongoing = items.filter(o => M.isUntilDone(o.task));
+  return [[null, daily], ...(ongoing.length ? [['Until done', ongoing]] : [])];
+}
+
+/** Until-done tasks in a week as one bar per stretch of days (a new bar when the next repeat takes over). */
+function untilDoneSpans(days) {
+  const spans = [];
+  for (const t of store.tasks.values()) {
+    if (!M.isUntilDone(t) || M.isEvent(t) || t.archived || !store.taskShown(t)) continue;
+    let run = null;
+    days.forEach((d, i) => {
+      if (!M.untilDoneActive(t, d)) { run = null; return; }
+      const rep = +M.repStartOn(t, d), o = M.makeOccurrence(t, d);
+      if (run && run.rep === rep && run.end === i - 1) { run.end = i; run.last = o; return; }
+      run = { task: t, rep, start: i, end: i, first: o, last: o, before: i === 0 && rep < +d };
+      spans.push(run);
+    });
+  }
+  for (const r of spans) {
+    const next = M.addDays(days[r.end], 1);
+    r.after = r.end === 6 && M.untilDoneActive(r.task, next) && +M.repStartOn(r.task, next) === r.rep;
+  }
+  return spans.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
 }
 
 function weekView() {
@@ -392,6 +426,19 @@ function weekView() {
       const open = store.tasksOn(d).filter(o => !o.resolved).length;
       return `<div class="d ${M.isToday(d) ? 'today' : ''}"><div class="dow">${M.WEEKDAY_SHORT[d.getDay()].toUpperCase()}</div><div class="num">${d.getDate()}</div><div class="open">${open ? `${open} open` : ''}</div></div>`;
     }).join('')}</div>
+    ${(() => {
+      const spans = untilDoneSpans(days);
+      if (!spans.length) return '';
+      const today = days.findIndex(d => M.isToday(d));
+      return `<div class="week-spans"><div class="lab" style="grid-row:1 / span ${spans.length}">until<br>done</div>${spans.map(r => {
+        const o = today >= r.start && today <= r.end ? M.makeOccurrence(r.task, days[today]) : r.last;
+        const state = r.last.done ? 'done' : r.last.missed ? 'missed' : '';
+        return `<div class="span-bar ${state} ${r.before ? 'from-before' : ''} ${r.after ? 'to-after' : ''}" style="grid-column:${r.start + 2} / ${r.end + 3};--hue:${color(r.task.color)}"
+          data-act="detail" data-item="t|${esc(o.id)}" title="${esc(r.task.title)} · ${esc(M.planSummary(r.task))}">
+          ${ic(state === 'done' ? 'check' : state === 'missed' ? 'x' : 'flame')}<span class="ellipsis">${esc(r.task.title)}</span>
+          ${r.end > r.start ? `<span class="span-days">${r.end - r.start + 1} days</span>` : ''}</div>`;
+      }).join('')}</div>`;
+    })()}
     <div class="week-allday"><div class="lab">any<br>time</div>${days.map(d => {
       const items = allDayItems(d);
       return `<div class="cell">${items.slice(0, items.length > 4 ? 3 : 4).map(chipFor).join('')}${items.length > 4 ? `<div class="more">+${items.length - 3} more</div>` : ''}</div>`;
@@ -422,7 +469,7 @@ function monthView() {
   store.ensureGoogle(days[0], M.addDays(days[41], 1));
   const cells = days.map(d => {
     const items = [
-      ...store.visibleOccurrencesOn(d).map(o => ({ kind: o.event ? 'event' : 'task', title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
+      ...store.visibleOccurrencesOn(d).filter(o => !M.isUntilDone(o.task) || M.untilDoneMarker(o)).map(o => ({ kind: o.event ? 'event' : 'task', title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
       ...store.visibleGoogleEventsOn(d).map(e => ({ kind: 'google', title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
     ];
     const max = 4, shown = items.length > max ? max - 1 : max;
@@ -459,13 +506,18 @@ function todoView() {
   let body = '';
   if (t.mode === 'checklist') {
     const overdue = store.overdue().filter(o => match(o.task.title));
+    // Until-done tasks are listed once (in their own group), not again on every day they carry over to;
+    // a repeating one still shows on the day its next one starts.
+    const ongoing = store.tasksOn(new Date()).filter(o => M.isUntilDone(o.task) && match(o.task.title) && (t.showCompleted || !o.resolved));
     const groups = [...Array(t.range)].map((_, i) => M.addDays(M.startOfDay(new Date()), i))
-      .map(d => [d, store.tasksOn(d).filter(o => match(o.task.title) && (t.showCompleted || !o.resolved))])
+      .map(d => [d, store.tasksOn(d).filter(o => match(o.task.title) && (t.showCompleted || !o.resolved)
+        && (!M.isUntilDone(o.task) || (!M.isToday(d) && M.sameDay(M.repStartOn(o.task, d), d))))])
       .filter(([, list]) => list.length);
     const group = (title, icon, list, showDate) => `<div><div class="section-title">${ic(icon)}${title}
       <span class="small muted" style="font-weight:400">${list.filter(o => o.done).length}/${list.length} done</span></div>
       <div class="card">${list.map(o => crow(o, { showDate })).join('')}</div></div>`;
     if (overdue.length) body += group('Overdue', 'alert', overdue, true);
+    if (ongoing.length) body += group('Until done', 'flame', ongoing, false);
     for (const [d, list] of groups) {
       const title = M.isToday(d) ? 'Today' : M.daysBetween(new Date(), d) === 1 ? 'Tomorrow' : M.fmtDay(d, { weekday: 'long', month: 'short', day: 'numeric' });
       body += group(title, M.isToday(d) ? 'sun' : 'cal', list, false);
@@ -879,7 +931,7 @@ function checkInDialog(m) {
       <div class="grow"><h2>${esc(m.title)}</h2><div class="muted">${M.fmtDay(new Date())} · ${!items.length ? 'nothing scheduled' : done === items.length ? 'all done' : left ? `${left} left` : 'all settled'}</div></div>
       ${ring(done, items.length, 54, 6, 'checkin')}</div>
     ${done && done === items.length ? `<div class="green">${ic('check')} Everything is checked off. Nice work.</div>` : ''}
-    <div class="card" style="max-height:340px;overflow:auto">${items.length ? items.map(o => crow(o, { ctx: 'checkin' })).join('') : '<div class="crow muted">Nothing on today’s checklist. Add something so future-you knows the plan.</div>'}</div>
+    <div class="card" style="max-height:340px;overflow:auto">${items.length ? splitUntilDone(items).map(([label, list]) => (label ? `<div class="crow-sub">${ic('flame')}${label}</div>` : '') + list.map(o => crow(o, { ctx: 'checkin' })).join('')).join('') : '<div class="crow muted">Nothing on today’s checklist. Add something so future-you knows the plan.</div>'}</div>
     ${upcoming.length ? `<div><b>Still ahead on your calendar</b>${upcoming.slice(0, 4).map(e => `<div class="row small" style="margin-top:4px">
       <span style="width:3px;height:16px;background:${e.colorHex || '#0a84ff'};border-radius:2px"></span><span class="muted" style="width:72px">${M.fmtTime(e.startDate)}</span>${esc(e.title)}</div>`).join('')}</div>` : ''}
     </div><div class="foot"><button class="btn" data-act="new-task">${ic('plus')} Add task</button><span class="grow"></span>

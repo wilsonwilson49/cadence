@@ -72,10 +72,19 @@ struct TodoView: View {
         }
         let today = Date().startOfDay
         let days = (0..<range.rawValue).map { today.adding(days: $0) }
+        // Until-done tasks are listed once (in their own group), not again on every day they carry over to;
+        // a repeating one still shows on the day its next one starts.
+        let ongoing = store.checklist(on: today).filter { $0.isUntilDone && matches($0.task.title) && (showCompleted || !$0.isResolved) }
+        if !ongoing.isEmpty {
+            group(title: "Until done", symbol: "flame", items: ongoing, showDate: false)
+        }
         let groups = days.map { day in
-            (day, store.checklist(on: day).filter { matches($0.task.title) && (showCompleted || !$0.isResolved) })
+            (day, store.checklist(on: day).filter { o in
+                matches(o.task.title) && (showCompleted || !o.isResolved)
+                    && (!o.isUntilDone || (!day.isToday && o.task.repStart(on: day).map { $0.isSameDay(day) } == true))
+            })
         }.filter { !$0.1.isEmpty }
-        if groups.isEmpty && overdue.isEmpty {
+        if groups.isEmpty && overdue.isEmpty && ongoing.isEmpty {
             emptyState
         }
         ForEach(groups, id: \.0) { day, items in

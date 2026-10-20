@@ -155,6 +155,27 @@ export function finishOf(task, day = new Date()) {
 }
 export const finishedKey = (task, day) => finishOf(task, day)?.key ?? null;
 
+/** For an until-done occurrence: "On your list since Mon · day 3", so carried-over items read as one task. */
+export function carryLabel(task, day) {
+  const rep = repStartOn(task, day);
+  if (!rep) return '';
+  const n = daysBetween(rep, day) + 1;
+  return n <= 1 ? 'New today' : `On your list since ${fmtDay(rep, { weekday: 'short', month: 'short', day: 'numeric' })} · day ${n}`;
+}
+/** Whether an until-done task was (or will be) on your list on `day`, past days included: for drawing its whole stretch. */
+export function untilDoneActive(task, day) {
+  if (task.archived) return false;
+  const d = startOfDay(day), rep = repStartOn(task, d);
+  if (!rep) return false;
+  const key = dateKey(d), from = dateKey(rep);
+  return ![...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].some(k => k >= from && k < key);
+}
+/** Where an until-done task appears on a month grid: the day one starts, the day it's settled, and today. */
+export function untilDoneMarker(o) {
+  const rep = repStartOn(o.task, o.day);
+  return Boolean(rep && sameDay(rep, o.day)) || o.resolved || isToday(o.day);
+}
+
 export function occurs(task, day) {
   if (task.archived) return false;
   const d = startOfDay(day);
