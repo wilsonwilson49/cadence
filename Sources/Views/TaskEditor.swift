@@ -18,6 +18,9 @@ struct TaskEditor: View {
     /// Once you pick open/closed yourself, switching Task/Event no longer changes it.
     @State private var busyChosen = false
     @State private var hasDue: Bool
+    @State private var cycleGap: Int
+    @State private var cycleWeeks: Bool
+    @State private var cycleTimes: Int
     @State private var appliedPreset: String?
     @State private var namingPreset = false
     @State private var presetName = ""
@@ -38,6 +41,10 @@ struct TaskEditor: View {
         _hasTime = State(initialValue: task.timeMinutes != nil)
         _time = State(initialValue: dayAt(task.startDate, minutes: task.timeMinutes ?? 9 * 60))
         _hasDue = State(initialValue: task.dueDate != nil)
+        let gap = task.cycleGapDays
+        _cycleWeeks = State(initialValue: gap.map { $0 > 0 && $0 % 7 == 0 } ?? true)
+        _cycleGap = State(initialValue: gap.map { $0 > 0 && $0 % 7 == 0 ? $0 / 7 : max(1, $0) } ?? 1)
+        _cycleTimes = State(initialValue: task.cycleTimes ?? 3)
         _dueDate = State(initialValue: task.dueDate ?? task.startDate.adding(days: 7))
         switch task.recurrence.end {
         case .never:
@@ -141,9 +148,20 @@ struct TaskEditor: View {
                         if !task.isEvent {
                             Divider()
                             Text("Long-term: every day until a date").tag("longTerm")
+                            Text("After it's done, with a break").tag("cycle")
                         }
                     }
-                    if task.isLongTerm {
+                    if task.isCycle {
+                        HStack {
+                            Stepper(value: $cycleGap, in: 1...365) { Text("Break before it comes back: \(cycleGap)") }
+                            Picker("", selection: $cycleWeeks) { Text(cycleGap == 1 ? "day" : "days").tag(false); Text(cycleGap == 1 ? "week" : "weeks").tag(true) }
+                                .labelsHidden().fixedSize()
+                        }
+                        Stepper("Times in total: \(cycleTimes)", value: $cycleTimes, in: 1...99)
+                        Label("No dates: it stays on your list every day until you check it off (or mark it “didn't do it”), then takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back — \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total, then it's finished for good.",
+                              systemImage: "flame")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if task.isLongTerm {
                         DatePicker("Every day until", selection: $endDate, in: task.startDate..., displayedComponents: .date)
                         Label("On your checklist and reminds you every day until \(endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) (\(max(0, Calendar.current.dateComponents([.day], from: task.startDate.startOfDay, to: endDate.startOfDay).day ?? 0) + 1) days). Check off each day on its own.",
                               systemImage: "repeat")
@@ -170,7 +188,7 @@ struct TaskEditor: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     // "Keep it on my list until it's done" works with any repeat except long-term.
-                    if !task.isEvent && !task.isLongTerm {
+                    if !task.isEvent && !task.isLongTerm && !task.isCycle {
                         Toggle(isOn: Binding(get: { task.isUntilDone }, set: { task.mode = $0 ? "untilDone" : nil })) {
                             Label("Keep it on my list every day until it's done", systemImage: "flame")
                         }
@@ -383,6 +401,7 @@ struct TaskEditor: View {
         p.title = task.title.trimmingCharacters(in: .whitespaces)
         p.notes = task.notes
         p.channels = AlertChannel.allCases.filter { task.channels.contains($0) }
+        if task.isCycle { p.cycleGapDays = cycleGap * (cycleWeeks ? 7 : 1); p.cycleTimes = cycleTimes }
         if endMode == 1 && r.isRepeating { p.spanDays = days(endDate) }
         if task.isUntilDone && !r.isRepeating && hasDue { p.dueDays = days(dueDate) }
         return p
@@ -401,6 +420,11 @@ struct TaskEditor: View {
         r.end = .never
         task.recurrence = r
         task.mode = p.mode
+        task.cycleGapDays = p.cycleGapDays; task.cycleTimes = p.cycleTimes
+        if let g = p.cycleGapDays {
+            cycleWeeks = g > 0 && g % 7 == 0; cycleGap = cycleWeeks ? g / 7 : max(1, g); cycleTimes = p.cycleTimes ?? 3
+            task.cycleTimes = cycleTimes
+        }
         task.reminderOffsets = Set(p.reminderOffsets.isEmpty ? [0] : p.reminderOffsets)
         task.channels = Set(p.channels)
         hasTime = p.timeMinutes != nil
@@ -417,9 +441,17 @@ struct TaskEditor: View {
 
     /// The Repeats menu: a frequency, or one of the "keep reminding me" types.
     private var repeatChoice: Binding<String> {
-        Binding(get: { task.mode ?? task.recurrence.frequency.rawValue }, set: { v in
+        Binding(get: { task.isLongTerm ? "longTerm" : task.isCycle ? "cycle" : task.recurrence.frequency.rawValue }, set: { v in
+            if v != "cycle" && task.isCycle { task.mode = nil; task.cycleGapDays = nil; task.cycleTimes = nil }
             switch v {
+            case "cycle":
+                // After it's done, with a break: no dates, so no repeat schedule.
+                task.mode = "untilDone"
+                task.recurrence = Recurrence()
+                task.cycleGapDays = cycleGap * (cycleWeeks ? 7 : 1)
+                task.cycleTimes = cycleTimes
             case "longTerm":
+                task.cycleGapDays = nil; task.cycleTimes = nil
                 task.mode = v
                 task.recurrence.frequency = .daily; task.recurrence.interval = 1; task.recurrence.weekdays = []
                 endMode = 1
@@ -448,7 +480,11 @@ struct TaskEditor: View {
         if t.isLongTerm {
             t.recurrence = Recurrence(frequency: .daily, interval: 1, weekdays: [], end: .onDate(max(endDate, t.startDate).startOfDay))
         }
-        t.dueDate = t.isUntilDone && !t.recurrence.isRepeating && hasDue ? dueDate.startOfDay : nil
+        if t.isCycle {
+            t.cycleGapDays = cycleGap * (cycleWeeks ? 7 : 1); t.cycleTimes = cycleTimes
+            t.recurrence = Recurrence()
+        } else { t.cycleGapDays = nil; t.cycleTimes = nil }
+        t.dueDate = t.isUntilDone && !t.isCycle && !t.recurrence.isRepeating && hasDue ? dueDate.startOfDay : nil
         // "During" reminders only make sense inside a timed task's span.
         t.reminderOffsets = t.reminderOffsets.filter { $0 >= 0 || (t.timeMinutes != nil && -$0 < t.durationMinutes) }
         if t.reminderOffsets.isEmpty { t.reminderOffsets = [0] }

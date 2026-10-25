@@ -140,8 +140,35 @@ extension PlanTask {
     /// Check-off and "didn't do it" day keys.
     var settledKeys: [String] { Array(completions.keys) + Array((missed ?? [:]).keys) }
 
+    /// A cycle task's rounds so far (start day, and the day key it was settled, if it was). Same as cycleRounds() on the web.
+    func cycleRounds() -> [(start: Date, settled: String?)] {
+        let keys = settledKeys.sorted()
+        let times = max(1, cycleTimes ?? 1)
+        var rounds: [(start: Date, settled: String?)] = []
+        var start = startDate.startOfDay
+        for _ in 0..<times {
+            let from = DateKey.string(start)
+            let settled = keys.first { $0 >= from }
+            rounds.append((start, settled))
+            guard let k = settled, let d = DateKey.date(k) else { break }
+            start = d.adding(days: max(0, cycleGapDays ?? 0))
+        }
+        return rounds
+    }
+
+    /// Where a cycle task stands: its round, the break before the next one, or finished.
+    func cycleStatus(on day: Date = Date()) -> (round: Int, times: Int, nextStart: Date?, finished: Bool) {
+        let rounds = cycleRounds(), times = max(1, cycleTimes ?? 1)
+        guard let last = rounds.last else { return (1, times, nil, false) }
+        if last.settled != nil && rounds.count >= times { return (times, times, nil, true) }
+        if let k = last.settled, let d = DateKey.date(k) { return (rounds.count + 1, times, d.adding(days: cycleGapDays ?? 0), false) }
+        if last.start > day.startOfDay { return (rounds.count, times, last.start, false) }
+        return (rounds.count, times, nil, false)
+    }
+
     /// Where an until-done task's current one started: the latest repeat day on or before `day`.
     func repStart(on day: Date) -> Date? {
+        if isCycle { return cycleRounds().last { $0.start <= day.startOfDay }?.start }
         let s = startDate.startOfDay
         var c = day.startOfDay
         for _ in 0..<400 {

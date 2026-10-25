@@ -199,6 +199,10 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var mode: String?
     /// Optional due date for an until-done task (it keeps going past it, marked "Past due").
     var dueDate: Date?
+    /// "After it's done, with a break" (an until-done task with no dates): days of break after each round…
+    var cycleGapDays: Int?
+    /// …and how many rounds in total before it's finished for good.
+    var cycleTimes: Int?
 
     /// Closed (true) items block their time; open (false) ones are just for info.
     /// nil means the default: events closed, tasks open.
@@ -214,11 +218,12 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var hasHistory: Bool { !completions.isEmpty || !(missed ?? [:]).isEmpty }
     var isLongTerm: Bool { mode == "longTerm" }
     var isUntilDone: Bool { mode == "untilDone" }
+    var isCycle: Bool { isUntilDone && cycleGapDays != nil }
     /// The day an until-done task was finished (its earliest check-off).
     var finishedKey: String? { finish()?.key }
     /// An until-done task past its due date that still isn't finished.
     var isPastDue: Bool {
-        guard isUntilDone, !recurrence.isRepeating, let due = dueDate, finish() == nil else { return false }
+        guard isUntilDone, !isCycle, !recurrence.isRepeating, let due = dueDate, finish() == nil else { return false }
         return due.startOfDay < Date().startOfDay
     }
 
@@ -226,6 +231,13 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var planSummary: String? {
         let cal = Calendar.current
         let short: (Date) -> String = { $0.formatted(.dateTime.month(.abbreviated).day()) }
+        if isCycle, let gapDays = cycleGapDays {
+            let gap = gapDays > 0 && gapDays % 7 == 0 ? "\(gapDays / 7) week\(gapDays == 7 ? "" : "s")" : "\(gapDays) day\(gapDays == 1 ? "" : "s")"
+            let st = cycleStatus()
+            if st.finished { return "Until done, back \(gap) later · all \(st.times) times done" }
+            if let next = st.nextStart { return "Until done, back \(gap) later · round \(st.round) of \(st.times) on \(short(next))" }
+            return "Until done, back \(gap) later · round \(st.round) of \(st.times)"
+        }
         if isUntilDone {
             var base = "Every day until done"
             if recurrence.isRepeating {
@@ -306,6 +318,8 @@ struct TaskPreset: Codable, Identifiable, Hashable {
     var mode: String?
     var spanDays: Int?
     var dueDays: Int?
+    var cycleGapDays: Int?
+    var cycleTimes: Int?
 
     init(id: UUID = UUID(), name: String, kind: String? = "task", timeMinutes: Int? = nil, durationMinutes: Int = 30,
          recurrence: Recurrence = Recurrence(), reminderOffsets: [Int] = [0], color: TaskColor = .blue,
@@ -323,6 +337,7 @@ struct TaskPreset: Codable, Identifiable, Hashable {
         recurrence = c.value(.recurrence, Recurrence()); reminderOffsets = c.value(.reminderOffsets, [0])
         channels = c.value(.channels, [.notification, .banner]); color = c.value(.color, .blue)
         busy = c.value(.busy, nil); mode = c.value(.mode, nil); spanDays = c.value(.spanDays, nil); dueDays = c.value(.dueDays, nil)
+        cycleGapDays = c.value(.cycleGapDays, nil); cycleTimes = c.value(.cycleTimes, nil)
     }
 
     private static func fixed(_ n: Int) -> UUID { UUID(uuidString: String(format: "B0B0B0B0-0000-4000-8000-%012d", n))! }
@@ -340,7 +355,8 @@ struct TaskPreset: Codable, Identifiable, Hashable {
         else if !recurrence.isRepeating { parts.append("once") }
         else if recurrence.frequency == .weekly && recurrence.weekdays.isEmpty { parts.append(recurrence.interval > 1 ? "every \(recurrence.interval) weeks" : "weekly") }
         else { var r = recurrence; r.end = .never; let t = r.summary(start: Date()); parts.append(t.prefix(1).lowercased() + t.dropFirst()) }
-        if mode == "untilDone" { parts.append("kept on the list until done") }
+        if let g = cycleGapDays { parts.append("back \(g % 7 == 0 ? "\(g / 7) wk" : "\(g) d") after each, \(cycleTimes ?? 3)×") }
+        else if mode == "untilDone" { parts.append("kept on the list until done") }
         if let d = dueDays { parts.append("due in \(d) day\(d == 1 ? "" : "s")") }
         if let m = timeMinutes { parts.append("at \(timeString(minutes: m))") }
         if channels.isEmpty { parts.append("no notifications") }

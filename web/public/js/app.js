@@ -540,8 +540,11 @@ function todoView() {
     const row = x => {
       const next = M.nextOccurrence(x);
       const doneCount = Object.keys(x.completions || {}).length;
-      const fin = M.isUntilDone(x) && M.finishOf(x);
-      const status = M.isUntilDone(x) ? (fin ? (fin.missed ? `<span class="red">${ic('x')}Not done ${M.fmtDay(M.parseKey(fin.key), { month: 'short', day: 'numeric' })}</span>`
+      const fin = M.isUntilDone(x) && M.finishOf(x), cst = M.isCycle(x) && M.cycleStatus(x);
+      const status = cst ? (cst.finished ? `<span class="green">${ic('check')}All ${cst.times} done</span>`
+          : cst.nextStart ? `<span>${ic('clock')}Back ${M.fmtDay(cst.nextStart, { month: 'short', day: 'numeric' })} · round ${cst.round} of ${cst.times}</span>`
+          : `<span>${ic('flame')}Round ${cst.round} of ${cst.times}</span>`)
+        : M.isUntilDone(x) ? (fin ? (fin.missed ? `<span class="red">${ic('x')}Not done ${M.fmtDay(M.parseKey(fin.key), { month: 'short', day: 'numeric' })}</span>`
           : `<span class="green">${ic('check')}Done ${M.fmtDay(M.parseKey(fin.key), { month: 'short', day: 'numeric' })}</span>`)
           : M.pastDue(x) ? `<span class="red">${ic('alert')}Past due</span>` : `<span>${ic('flame')}Not done yet</span>`)
         : next ? `<span>${ic('right')}Next: ${M.fmtDay(next, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`
@@ -1008,6 +1011,8 @@ function openEditor(task, isNew) {
     hasTime: task.timeMinutes != null,
     time: `${String(Math.floor((task.timeMinutes ?? 540) / 60)).padStart(2, '0')}:${String((task.timeMinutes ?? 540) % 60).padStart(2, '0')}`,
     endMode: end.type, endDate: M.dateKey(end.date ?? M.addMonths(M.parseKey(M.dateKey(task.startDate)), 3)), endCount: end.count ?? 10,
+    cycleGap: task.cycleGapDays && task.cycleGapDays % 7 === 0 ? task.cycleGapDays / 7 : (task.cycleGapDays ?? 1),
+    cycleUnit: task.cycleGapDays && task.cycleGapDays % 7 === 0 ? 'weeks' : (task.cycleGapDays != null ? 'days' : 'weeks'), cycleTimes: task.cycleTimes ?? 3,
     hasDue: Boolean(task.dueDate), dueDate: M.dateKey(task.dueDate ?? M.addDays(M.parseKey(M.dateKey(task.startDate)), 7)),
   });
 }
@@ -1030,7 +1035,8 @@ function presetSummary(p) {
   else if (rec.frequency === 'none') parts.push('once');
   else if (rec.frequency === 'weekly' && !rec.weekdays?.length) parts.push((rec.interval || 1) > 1 ? `every ${rec.interval} weeks` : 'weekly');
   else { const t = M.recurrenceSummary({ ...rec, end: { never: {} } }, new Date()); parts.push(t[0].toLowerCase() + t.slice(1)); }
-  if (p.mode === 'untilDone') parts.push('kept on the list until done');
+  if (p.cycleGapDays != null) parts.push(`back ${p.cycleGapDays % 7 === 0 ? `${p.cycleGapDays / 7} wk` : `${p.cycleGapDays} d`} after each, ${p.cycleTimes ?? 3}×`);
+  else if (p.mode === 'untilDone') parts.push('kept on the list until done');
   if (p.dueDays != null) parts.push(`due in ${p.dueDays} day${p.dueDays === 1 ? '' : 's'}`);
   if (p.timeMinutes != null) parts.push(`at ${M.fmtTimeMinutes(p.timeMinutes)}`);
   if (!p.channels?.length) parts.push('no notifications');
@@ -1048,6 +1054,7 @@ function presetFromEditor(m, name) {
   };
   if (m.hasTime) p.timeMinutes = editorStartMinutes(m);
   if (d.mode) p.mode = d.mode;
+  if (M.isCycle(d)) { p.cycleGapDays = m.cycleGap * (m.cycleUnit === 'weeks' ? 7 : 1); p.cycleTimes = m.cycleTimes; }
   if (m.endMode === 'onDate' && r.frequency !== 'none') p.spanDays = Math.max(0, M.daysBetween(day, M.parseKey(m.endDate)));
   if (d.mode === 'untilDone' && r.frequency === 'none' && m.hasDue) p.dueDays = Math.max(0, M.daysBetween(day, M.parseKey(m.dueDate)));
   return p;
@@ -1062,6 +1069,10 @@ function applyPreset(m, p) {
     reminderOffsets: [...(p.reminderOffsets?.length ? p.reminderOffsets : [0])], channels: [...(p.channels || [])],
   });
   if (p.mode) d.mode = p.mode; else delete d.mode;
+  if (p.cycleGapDays != null) {
+    d.cycleGapDays = p.cycleGapDays; d.cycleTimes = p.cycleTimes ?? 3;
+    m.cycleUnit = p.cycleGapDays % 7 === 0 ? 'weeks' : 'days'; m.cycleGap = m.cycleUnit === 'weeks' ? p.cycleGapDays / 7 : p.cycleGapDays; m.cycleTimes = d.cycleTimes;
+  } else { delete d.cycleGapDays; delete d.cycleTimes; }
   m.hasTime = p.timeMinutes != null;
   if (m.hasTime) m.time = `${String(Math.floor(p.timeMinutes / 60)).padStart(2, '0')}:${String(p.timeMinutes % 60).padStart(2, '0')}`;
   m.endMode = p.spanDays != null ? 'onDate' : rec.end?.afterCount ? 'afterCount' : 'never';
@@ -1085,7 +1096,7 @@ function editorOverlaps(m) {
 }
 
 function editorDialog(m) {
-  const d = m.draft, r = d.recurrence, lt = d.mode === 'longTerm', persist = d.mode === 'untilDone';
+  const d = m.draft, r = d.recurrence, lt = d.mode === 'longTerm', cyc = M.isCycle(d), persist = d.mode === 'untilDone' && !cyc;
   const unit = M.FREQUENCIES.find(f => f[0] === r.frequency)[2];
   const overlaps = editorOverlaps(m);
   const preview = { ...r, end: m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} } };
@@ -1114,20 +1125,26 @@ function editorDialog(m) {
       <div class="small muted">Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.</div>
       ${d.externalURL ? `<a class="small" href="${esc(d.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : ''}</div>` : `
     <div class="fieldset"><div class="legend">Repeat &amp; conditions</div>
-      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${!lt && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
-        ${M.isEvent(d) ? '' : `<optgroup label="Keep reminding me"><option value="longTerm" ${lt ? 'selected' : ''}>Long-term: every day until a date</option></optgroup>`}</select></label>
+      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${!lt && !cyc && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
+        ${M.isEvent(d) ? '' : `<optgroup label="Keep reminding me"><option value="longTerm" ${lt ? 'selected' : ''}>Long-term: every day until a date</option>
+          <option value="cycle" ${cyc ? 'selected' : ''}>After it’s done, with a break</option></optgroup>`}</select></label>
       ${lt ? `<label class="field"><span>Every day until</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
       ${!lt && r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
+      ${cyc ? `<div class="grid2"><label class="field"><span>Break before it comes back</span><div class="row">
+          <input class="input" type="number" min="1" max="365" style="width:80px" data-edit="cycleGap" data-rerender value="${m.cycleGap}">
+          <select class="input" style="width:auto" data-edit="cycleUnit" data-rerender><option value="days" ${m.cycleUnit === 'days' ? 'selected' : ''}>days</option><option value="weeks" ${m.cycleUnit === 'weeks' ? 'selected' : ''}>weeks</option></select></div></label>
+        <label class="field"><span>Times in total</span><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="cycleTimes" data-rerender value="${m.cycleTimes}"></label></div>
+        <div class="small muted">${ic('flame')} No dates: it stays on your list every day until you check it off (or mark it “didn’t do it”), then takes a ${m.cycleGap}-${m.cycleUnit === 'weeks' ? 'week' : 'day'} break and comes back — ${m.cycleTimes} time${m.cycleTimes == 1 ? '' : 's'} in total, then it’s finished for good.</div>` : ''}
       ${lt ? `<div class="small muted">${ic('repeat')} On your checklist and reminds you every day until ${M.fmtDay(M.parseKey(m.endDate), { weekday: 'short', month: 'short', day: 'numeric' })} (${Math.max(0, M.daysBetween(M.parseKey(m.date), M.parseKey(m.endDate))) + 1} days). Check off each day on its own.</div>` : ''}
-      ${!lt && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
+      ${!lt && !cyc && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
         <button type="button" class="btn sm" data-act="edit-weekdays">Weekdays</button></div>` : ''}
-      ${!lt && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
+      ${!lt && !cyc && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
           <option value="never" ${m.endMode === 'never' ? 'selected' : ''}>Never</option><option value="onDate" ${m.endMode === 'onDate' ? 'selected' : ''}>On a date</option>
           <option value="afterCount" ${m.endMode === 'afterCount' ? 'selected' : ''}>After a number of times</option></select></label>
         ${m.endMode === 'onDate' ? `<label class="field"><span>End date</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
         ${m.endMode === 'afterCount' ? `<label class="field"><span>Times</span><input class="input" type="number" min="1" max="999" data-edit="endCount" data-rerender value="${m.endCount}"></label>` : ''}</div>
         <div class="small muted">${esc(M.recurrenceSummary(preview, M.parseKey(m.date)))}</div>` : ''}
-      ${M.isEvent(d) || lt ? '' : `<label class="check" style="margin-top:4px"><input type="checkbox" data-edit="persist" data-rerender ${persist ? 'checked' : ''}>${ic('flame')} Keep it on my list every day until it’s done</label>
+      ${M.isEvent(d) || lt || cyc ? '' : `<label class="check" style="margin-top:4px"><input type="checkbox" data-edit="persist" data-rerender ${persist ? 'checked' : ''}>${ic('flame')} Keep it on my list every day until it’s done</label>
         ${persist ? `<div class="small muted" style="margin-top:-4px">${r.frequency === 'none'
           ? 'It shows up and reminds you every day until you check it off or mark it “didn’t do it”. Then it’s gone.'
           : 'Each one shows up and reminds you every day until you check it off or mark it “didn’t do it”, or until the next one arrives and takes its place.'}</div>
@@ -1169,8 +1186,18 @@ function readEditorInputs() {
   if (val('duration')) m.draft.durationMinutes = Number(val('duration').value);
   if (val('hasDue')) m.hasDue = val('hasDue').checked;
   if (val('dueDate')?.value) m.dueDate = val('dueDate').value;
-  const fv = val('frequency')?.value, wasLongTerm = m.draft.mode === 'longTerm';
-  if (fv === 'longTerm') {
+  if (val('cycleGap')) m.cycleGap = Math.min(365, Math.max(1, Number(val('cycleGap').value) || 1));
+  if (val('cycleUnit')) m.cycleUnit = val('cycleUnit').value;
+  if (val('cycleTimes')) m.cycleTimes = Math.min(99, Math.max(1, Number(val('cycleTimes').value) || 1));
+  const fv = val('frequency')?.value, wasLongTerm = m.draft.mode === 'longTerm', wasCycle = M.isCycle(m.draft);
+  if (fv === 'cycle') {
+    // After it's done, with a break: no dates, so no repeat schedule.
+    m.draft.mode = 'untilDone';
+    m.draft.recurrence = { ...m.draft.recurrence, frequency: 'none', interval: 1, weekdays: [] };
+    m.draft.cycleGapDays = m.cycleGap * (m.cycleUnit === 'weeks' ? 7 : 1);
+    m.draft.cycleTimes = m.cycleTimes;
+  } else if (wasCycle && val('frequency')) { delete m.draft.cycleGapDays; delete m.draft.cycleTimes; delete m.draft.mode; }
+  if (fv === 'cycle') { /* handled above */ } else if (fv === 'longTerm') {
     if (!wasLongTerm) {
       m.draft.mode = 'longTerm';
       m.draft.recurrence = { ...m.draft.recurrence, frequency: 'daily', interval: 1, weekdays: [] };
@@ -1184,7 +1211,7 @@ function readEditorInputs() {
   }
   // "Keep it on my list until it's done" works with any repeat except long-term.
   const pv = val('persist');
-  if (pv && !wasLongTerm && fv !== 'longTerm') { if (pv.checked) m.draft.mode = 'untilDone'; else if (m.draft.mode === 'untilDone') delete m.draft.mode; }
+  if (pv && !wasLongTerm && fv !== 'longTerm' && fv !== 'cycle') { if (pv.checked) m.draft.mode = 'untilDone'; else if (m.draft.mode === 'untilDone') delete m.draft.mode; }
   if (val('interval')) m.draft.recurrence.interval = Math.min(99, Math.max(1, Number(val('interval').value) || 1));
   if (val('endMode')) m.endMode = val('endMode').value;
   if (val('endDate')?.value) m.endDate = val('endDate').value;
@@ -1213,7 +1240,11 @@ async function saveEditor() {
     if (m.endDate < m.date) { m.error = 'The end date has to be on or after the start date.'; renderModal(); return; }
     t.recurrence = { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } };
   } else if (t.mode !== 'untilDone') delete t.mode;
-  if (t.mode === 'untilDone' && t.recurrence.frequency === 'none' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
+  if (M.isCycle(t) && t.mode === 'untilDone') {
+    t.cycleGapDays = m.cycleGap * (m.cycleUnit === 'weeks' ? 7 : 1); t.cycleTimes = m.cycleTimes;
+    t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+  } else { delete t.cycleGapDays; delete t.cycleTimes; }
+  if (t.mode === 'untilDone' && !M.isCycle(t) && t.recurrence.frequency === 'none' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
   t.reminderOffsets = t.reminderOffsets.filter(o => o >= 0 || (t.timeMinutes != null && -o < t.durationMinutes));
   if (!t.reminderOffsets.length) t.reminderOffsets = [0];
   const day0 = M.parseKey(m.date);

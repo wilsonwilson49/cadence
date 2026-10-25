@@ -201,7 +201,16 @@ private struct TaskDefinitionRow: View {
                 HStack(spacing: 10) {
                     Label(task.planSummary ?? "Once", systemImage: "repeat")
                     Label(task.timeMinutes.map { timeString(minutes: $0) } ?? "Any time", systemImage: "clock")
-                    if task.isUntilDone {
+                    if task.isCycle {
+                        let st = task.cycleStatus()
+                        if st.finished {
+                            Label("All \(st.times) done", systemImage: "checkmark.circle").foregroundStyle(.green)
+                        } else if let next = st.nextStart {
+                            Label("Back \(next.formatted(.dateTime.month(.abbreviated).day())) · round \(st.round) of \(st.times)", systemImage: "clock")
+                        } else {
+                            Label("Round \(st.round) of \(st.times)", systemImage: "flame")
+                        }
+                    } else if task.isUntilDone {
                         if let f = task.finish(), let d = DateKey.date(f.key) {
                             Label("\(f.missed ? "Not done" : "Done") \(d.formatted(.dateTime.month(.abbreviated).day()))",
                                   systemImage: f.missed ? "xmark.circle" : "checkmark.circle")

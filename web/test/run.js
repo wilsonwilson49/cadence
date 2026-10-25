@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -48,5 +48,14 @@ check(occurs(uw, today) && !occurs(uw, addDays(today, 1)) && !occurs(uw, addDays
   'repeating until done: finished one disappears, the next repeat comes back');
 const lt = newTask({ mode: 'longTerm', startDate: iso(today), recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: iso(addDays(today, 10)) } } } });
 check(occurs(lt, addDays(today, 10)) && !occurs(lt, addDays(today, 11)) && planSummary(lt).includes('10 days left'), 'long-term: every day through the end date');
+// After it's done, with a break: 3 rounds, 7-day break.
+const cy = newTask({ mode: 'untilDone', startDate: iso(addDays(today, -10)), cycleGapDays: 7, cycleTimes: 3 });
+check(occurs(cy, today) && cycleStatus(cy).round === 1, 'cycle: round 1 stays until done');
+cy.completions = { [k(-8)]: iso(new Date()) };   // round 1 done 8 days ago → round 2 started yesterday
+check(occurs(cy, today) && cycleStatus(cy).round === 2 && !occurs(cy, addDays(today, -3)), 'cycle: comes back after the break');
+cy.completions[k(0)] = iso(new Date());          // round 2 done today → break → round 3 in 7 days
+check(!occurs(cy, addDays(today, 3)) && occurs(cy, addDays(today, 7)) && cycleStatus(cy).nextStart && cycleStatus(cy).round === 3, 'cycle: hidden during the break');
+cy.missed = { [k(7)]: iso(new Date()) };         // round 3 settled → finished for good
+check(!occurs(cy, addDays(today, 20)) && !occurs(cy, addDays(today, 60)) && cycleStatus(cy, addDays(today, 8)).finished, 'cycle: finished after the set number of times');
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

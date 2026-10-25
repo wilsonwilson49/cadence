@@ -138,8 +138,40 @@ function patternIndex(task, d, s) {
 export const isLongTerm = task => task.mode === 'longTerm';
 export const isUntilDone = task => task.mode === 'untilDone';
 
+/** "After it's done, with a break": an until-done task with no dates. When a round is settled it takes a break of
+ *  cycleGapDays, then comes back, for cycleTimes rounds in total. */
+export const isCycle = task => isUntilDone(task) && task.cycleGapDays != null;
+
+/** A cycle task's rounds so far: [{ start, settled }] (settled = the day key it was checked off / marked not done). */
+export function cycleRounds(task) {
+  const keys = [...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].sort();
+  const times = Math.max(1, task.cycleTimes || 1), rounds = [];
+  let start = startOfDay(task.startDate);
+  for (let i = 0; i < times; i++) {
+    const from = dateKey(start), settled = keys.find(k => k >= from) ?? null;
+    rounds.push({ start, settled });
+    if (!settled) break;
+    start = addDays(parseKey(settled), Math.max(0, task.cycleGapDays));
+  }
+  return rounds;
+}
+
+/** Where a cycle task stands today: the round, or the break before the next one, or finished. */
+export function cycleStatus(task, day = new Date()) {
+  const rounds = cycleRounds(task), times = Math.max(1, task.cycleTimes || 1), d = startOfDay(day);
+  const last = rounds[rounds.length - 1];
+  if (last.settled && rounds.length >= times) return { finished: true, round: times, times };
+  if (last.settled) return { round: rounds.length + 1, times, nextStart: addDays(parseKey(last.settled), task.cycleGapDays) };
+  if (last.start > d) return { round: rounds.length, times, nextStart: last.start };
+  return { round: rounds.length, times, active: true };
+}
+
 /** Where an until-done task's current one started: the latest repeat day on or before `day` (its start if it doesn't repeat). */
 export function repStartOn(task, day) {
+  if (isCycle(task)) {
+    const d = startOfDay(day);
+    return cycleRounds(task).filter(r => r.start <= d).pop()?.start ?? null;
+  }
   const s = startOfDay(task.startDate);
   for (let c = startOfDay(day), i = 0; c >= s && i < 400; c = addDays(c, -1), i++) if (occursByPattern(task, c)) return c;
   return null;
@@ -216,6 +248,13 @@ export function nextOccurrence(task, from = new Date()) {
 
 /** How a task repeats, in words: covers the long-term and until-done types too. */
 export function planSummary(task) {
+  if (isCycle(task)) {
+    const gap = task.cycleGapDays % 7 === 0 && task.cycleGapDays ? `${task.cycleGapDays / 7} week${task.cycleGapDays === 7 ? '' : 's'}` : `${task.cycleGapDays} day${task.cycleGapDays === 1 ? '' : 's'}`;
+    const st = cycleStatus(task);
+    if (st.finished) return `Until done, back ${gap} later · all ${st.times} times done`;
+    if (st.nextStart) return `Until done, back ${gap} later · round ${st.round} of ${st.times} on ${fmtDay(st.nextStart, { month: 'short', day: 'numeric' })}`;
+    return `Until done, back ${gap} later · round ${st.round} of ${st.times}`;
+  }
   if (isUntilDone(task)) {
     const repeats = task.recurrence.frequency !== 'none';
     const base = repeats ? `Until done · a new one ${recurrenceSummary(task.recurrence, task.startDate).replace(/^Every /, 'every ').replace(/^(Daily|Weekly|Monthly|Yearly)/, m => m.toLowerCase())}` : 'Every day until done';
@@ -235,7 +274,7 @@ export function planSummary(task) {
 }
 
 /** An until-done task past its due date that still isn't finished. */
-export const pastDue = task => isUntilDone(task) && task.recurrence.frequency === 'none' && task.dueDate && !finishOf(task) && startOfDay(task.dueDate) < startOfDay(new Date());
+export const pastDue = task => isUntilDone(task) && !isCycle(task) && task.recurrence.frequency === 'none' && task.dueDate && !finishOf(task) && startOfDay(task.dueDate) < startOfDay(new Date());
 
 export function recurrenceSummary(rec, start) {
   const n = Math.max(1, rec.interval || 1);
