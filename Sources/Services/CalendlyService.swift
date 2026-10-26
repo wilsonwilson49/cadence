@@ -219,6 +219,9 @@ final class CalendarImporter: ObservableObject {
                 parts.append("Google failed: \(error.localizedDescription)")
             }
         }
+        if model.google.isConnected && model.google.tasksGranted && store.settings.syncGoogleTasks {
+            do { parts.append(try await importGoogleTasks()) } catch { parts.append("Google Tasks failed: \(error.localizedDescription)") }
+        }
         if model.calendly.isConnected && includeCalendly {
             lastCalendly = Date()
             do {
@@ -240,6 +243,38 @@ final class CalendarImporter: ObservableObject {
         }
         lastImport = Date()
         if !parts.isEmpty { lastSummary = parts.joined(separator: " · ") + " — " + timeString(Date()) }
+    }
+
+    /// Google Tasks → Cadence (same rules as importGoogleTasks() on the web): new ones arrive as until-done
+    /// tasks; edits update them; ones completed or deleted in Google are hidden here.
+    private func importGoogleTasks() async throws -> String {
+        let store = model.store
+        var added = 0, updated = 0, removed = 0
+        for gt in try await model.google.fetchGoogleTasks() {
+            let id = stableUUID("gtasks:\(gt.id)")
+            let i = store.tasks.firstIndex { $0.id == id }
+            let doneHere = i.map { !store.tasks[$0].completions.isEmpty } ?? false
+            if gt.completed || gt.deleted {
+                if let i, store.tasks[i].archived != true, !doneHere { store.tasks[i].archived = true; removed += 1 }
+                continue
+            }
+            guard let i else {
+                var t = PlanTask(id: id, title: gt.title, notes: gt.notes, startDate: Date().startOfDay, channels: [], color: .blue)
+                t.kind = "task"; t.mode = "untilDone"; t.source = "gtasks"; t.googleTaskID = gt.id; t.sourceCalendar = gt.listID
+                t.dueDate = gt.due.flatMap(DateKey.date); t.externalURL = gt.link
+                store.tasks.append(t); added += 1
+                continue
+            }
+            guard store.tasks[i].archived != true else { continue }
+            if doneHere {
+                try? await model.google.updateGoogleTask(listID: gt.listID, taskID: gt.id, fields: ["status": "completed"])
+                continue
+            }
+            var t = store.tasks[i]
+            t.title = gt.title; t.notes = gt.notes; t.sourceCalendar = gt.listID; t.dueDate = gt.due.flatMap(DateKey.date)
+            if t != store.tasks[i] { store.tasks[i] = t; updated += 1 }
+        }
+        return "Google Tasks: \(added) new, \(updated) updated, \(removed) removed"
     }
 
     /// A Google event as a silent checklist task. Must match the web app field-for-field.

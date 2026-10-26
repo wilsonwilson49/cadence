@@ -16,10 +16,10 @@ struct CadenceApp: App {
                 .environmentObject(AppModel.shared.sync)
                 .environmentObject(AppModel.shared.calendly)
                 .environmentObject(AppModel.shared.importer)
+                .environmentObject(AppModel.shared.focus)
+                .environmentObject(AppModel.shared.screenTime)
         } label: {
-            let remaining = store.remainingToday
-            Image(systemName: remaining > 0 ? "checklist.unchecked" : "checklist.checked")
-            if remaining > 0 { Text("\(remaining)") }
+            MenuBarLabel(store: store, focus: AppModel.shared.focus)
         }
         .menuBarExtraStyle(.window)
     }
@@ -53,6 +53,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
+        AppModel.shared.screenTime.flush()
         AppModel.shared.store.saveNow()
+    }
+}
+
+/// Menu bar: the focus countdown while a session runs, otherwise what's left today.
+private struct MenuBarLabel: View {
+    @ObservedObject var store: Store
+    @ObservedObject var focus: FocusEngine
+    var body: some View {
+        if focus.running {
+            Image(systemName: "scope")
+            Text(focus.clock).monospacedDigit()
+        } else {
+            let remaining = store.remainingToday
+            Image(systemName: remaining > 0 ? "checklist.unchecked" : "checklist.checked")
+            if remaining > 0 { Text("\(remaining)") }
+        }
     }
 }

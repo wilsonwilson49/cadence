@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home, today, week, month, todo, reflections, booking, settings
+    case home, today, week, month, todo, habits, reflections, focus, screentime, booking, settings
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -12,6 +12,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .month: return "Month"
         case .todo: return "To-Do List"
         case .reflections: return "Reflections"
+        case .habits: return "Habits"
+        case .focus: return "Focus"
+        case .screentime: return "Screen Time"
         case .booking: return "Booking"
         case .settings: return "Settings"
         }
@@ -24,6 +27,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .month: return "calendar"
         case .todo: return "checklist"
         case .reflections: return "text.quote"
+        case .habits: return "arrow.triangle.2.circlepath.circle"
+        case .focus: return "scope"
+        case .screentime: return "desktopcomputer"
         case .booking: return "person.crop.circle.badge.clock"
         case .settings: return "gearshape"
         }
@@ -43,6 +49,8 @@ final class AppModel: ObservableObject {
     let notifier = Notifier.shared
     let windows = WindowManager()
     private(set) lazy var engine = ReminderEngine(model: self)
+    private(set) lazy var screenTime = ScreenTimeTracker(model: self)
+    private(set) lazy var focus = FocusEngine(model: self)
 
     @Published var screen: Screen = .home
     @Published var reflectionTarget: Occurrence?
@@ -60,6 +68,10 @@ final class AppModel: ObservableObject {
         }
         sync.onSignedIn = { [unowned google] in Task { await google.checkServer() } }
         sync.onSignedOut = { [unowned google] in google.resetServerMode() }
+        // Checking off (or unchecking) a Google Tasks item updates it in Google.
+        store.onGoogleTaskChange = { [unowned google] t, status in
+            Task { try? await google.updateGoogleTask(listID: t.sourceCalendar ?? "@default", taskID: t.googleTaskID ?? "", fields: ["status": status]) }
+        }
     }
 
     func start() {
@@ -67,6 +79,7 @@ final class AppModel: ObservableObject {
         notifier.setup(model: self)
         google.restore()
         engine.start()
+        screenTime.start()
         sync.start()
         calendly.restore()
         importer.start()
@@ -107,6 +120,17 @@ final class AppModel: ObservableObject {
                          reminderOffsets: [10], channels: store.settings.defaultChannels, color: .teal)
         t.kind = "event"
         t.busy = true   // events you make here start closed
+        editingTask = t
+        windows.showMain()
+    }
+
+    /// A new habit: daily, building something new (or replacing a bad habit from the scorecard).
+    func newHabit(style: String = "build", replaces: String? = nil) {
+        var t = PlanTask(title: "", startDate: Date().startOfDay, recurrence: Recurrence(frequency: .daily),
+                         channels: store.settings.defaultChannels, color: .green)
+        t.kind = "habit"; t.busy = false
+        var h = HabitInfo(); h.style = style; h.replaces = replaces
+        t.habit = h
         editingTask = t
         windows.showMain()
     }
@@ -168,6 +192,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
         return view.environmentObject(m).environmentObject(m.store).environmentObject(m.google)
             .environmentObject(m.engine).environmentObject(m.sync)
             .environmentObject(m.calendly).environmentObject(m.importer)
+            .environmentObject(m.focus).environmentObject(m.screenTime)
     }
 
     // MARK: Running in the background

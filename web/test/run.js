@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -57,5 +57,20 @@ cy.completions[k(0)] = iso(new Date());          // round 2 done today → break
 check(!occurs(cy, addDays(today, 3)) && occurs(cy, addDays(today, 7)) && cycleStatus(cy).nextStart && cycleStatus(cy).round === 3, 'cycle: hidden during the break');
 cy.missed = { [k(7)]: iso(new Date()) };         // round 3 settled → finished for good
 check(!occurs(cy, addDays(today, 20)) && !occurs(cy, addDays(today, 60)) && cycleStatus(cy, addDays(today, 8)).finished, 'cycle: finished after the set number of times');
+// Habits: repeating things are habits; streaks, rate, never miss twice.
+const hab = newTask({ startDate: iso(addDays(today, -10)), recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { never: {} } } });
+check(isHabit(hab) && !isHabit(newTask({})) && isHabit(newTask({ kind: 'habit' })) && calendarKeyOf(hab) === 'habits', 'habits: repeating items are habits');
+hab.completions = { [k(-1)]: 'x', [k(-2)]: 'x', [k(-4)]: 'x' };
+let hs = habitStats(hab);
+check(hs.streak === 2 && hs.best === 2 && hs.rate === 30 && hs.votes === 3 && !hs.missTwice && hs.today === 'open', 'habits: streak, best, rate, votes');
+hab.completions = { [k(-2)]: 'x' };
+check(habitStats(hab).missTwice && habitStats(hab).streak === 0, 'habits: never miss twice after a miss');
+// Focus scoring and levels.
+check(focusPoints({ finished: 3, picked: 3, focusPercent: 95 }) === 65 && focusPoints({ finished: 2, picked: 5, focusPercent: 60 }) === 20, 'focus: points');
+check(focusLevel(0).level === 1 && focusLevel(100).level === 2 && focusLevel(299).level === 2 && focusLevel(300).level === 3, 'focus: levels');
+// Google Tasks become until-done tasks with a stable ID (same on the Mac).
+const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });
+check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && isUntilDone(gtask) && gtask.source === 'gtasks' && gtask.sourceCalendar === 'L1'
+  && dateKey(gtask.dueDate) === '2026-11-02' && !gtask.channels.length && calendarKeyOf(gtask) === 'gtasks', 'google tasks: mapping');
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

@@ -13,7 +13,7 @@
   <nav><a href="/privacy" aria-current="page">Privacy</a><a href="/terms">Terms</a><a href="/">Open Cadence</a></nav></div></header>
 <main>
   <h1>Privacy Policy</h1>
-  <div class="meta">Last updated October 2, 2026</div>
+  <div class="meta">Last updated October 25, 2026</div>
 
   <div class="summary">
     <h2>The short version</h2>
@@ -33,7 +33,9 @@
   <h3>Information you give us</h3>
   <ul>
     <li><b>Account details:</b> your username and password. We never store your password itself, only a one-way scrypt hash of it, which can't be turned back into the password.</li>
-    <li><b>Your content:</b> tasks and to-dos (titles, notes, dates, times, repeat schedules, reminder choices, colors, and which ones you checked off), the reflections you write, and your Cadence settings (reminder preferences, open hours, and whether each item is “open” or “closed” time).</li>
+    <li><b>Your content:</b> tasks, habits and to-dos (titles, notes, dates, times, repeat schedules, reminder choices, colors, and which ones you checked off or marked “didn’t do it”), what you write about your habits (such as the identity, cue, 2-minute version and reward), your habit scorecard, the reflections you write, and your Cadence settings (reminder preferences, open hours, presets, distracting apps and screen-time limits, and whether each item is “open” or “closed” time).</li>
+    <li><b>Focus sessions:</b> when you run a focus session, when it started and ended, how many items you picked and finished (and their titles), how long you were away from Cadence or in apps you marked distracting, and the points you earned.</li>
+    <li><b>Screen time (Mac app, only if you turn it on):</b> while you’re using your Mac, the Mac app notes which app is in front and keeps a total per app per day. Only those daily totals (app names and durations, and your Mac’s name) are saved to your account. Cadence doesn’t record window titles, websites, documents, keystrokes, or anything you type or see in other apps. You can turn it off at any time in the Mac app’s Screen Time page.</li>
     <li><b>Things you type into booking forms:</b> if you book a time and add an invitee, their name and email address are sent to Google Calendar so Google can send them the invitation. Cadence doesn't keep the email address; the name stays only if you put it in the event's title.</li>
   </ul>
   <h3>Information created when you use the Service</h3>
@@ -66,9 +68,10 @@
     <tr><th>Permission</th><th>What Cadence accesses with it</th></tr>
     <tr><td><code>calendar.readonly</code> (“See and download any calendar you can access”)</td><td>The list of your calendars (name, color, and whether it's your primary calendar); events on the calendars you choose: title, start and end time, all-day flag, description, location, link to the event, whether it repeats, whether it's marked “busy” or “free”, and whether it was cancelled; and free/busy times for those calendars.</td></tr>
     <tr><td><code>calendar.events</code> (“View and edit events on all your calendars”)</td><td>Creating an event when you ask Cadence to (a new event set to sync with Google, “Also add to Google Calendar” on a task, or a booking), editing an event you edit in Cadence (title, notes, date, time, busy/free), deleting an event when you choose “Delete from Google too”, and subscribing to change notifications so edits you make in Google appear in Cadence quickly.</td></tr>
+    <tr><td><code>tasks</code> (“Create, edit, organize, and delete all your tasks”)</td><td>Reading your Google Tasks lists and tasks (title, notes, due date, whether it’s completed or deleted, and its link) to show them as tasks in Cadence; marking a task completed (or not completed) in Google when you check it off (or uncheck it) in Cadence; updating its title, notes or due date when you edit it in Cadence; and creating a task when you choose “Also add to Google Tasks”. Cadence never deletes your Google Tasks.</td></tr>
     <tr><td><code>email</code> (website only)</td><td>Your Google Account email address, shown in Settings so you can see which Google Account is connected.</td></tr>
   </table></div>
-  <p>We don't access your Gmail, contacts, Drive, or any other Google data. Cadence never creates, changes, or deletes anything in your Google Calendar unless you take an action in Cadence that asks it to.</p>
+  <p>We don't access your Gmail, contacts, Drive, or any other Google data. Cadence never creates, changes, or deletes anything in your Google Calendar or Google Tasks unless you take an action in Cadence that asks it to.</p>
 
   <h3>3.2 How we use it</h3>
   <p>We use Google user data only to provide and improve user-facing features you can see in Cadence:</p>
@@ -77,12 +80,14 @@
     <li>Importing events into your Cadence account as calendar items, so they show on every device you use Cadence on and stay up to date when they change in Google.</li>
     <li>Working out your open time on the Booking page from your busy times.</li>
     <li>Creating, updating, and deleting the specific events you ask Cadence to.</li>
+    <li>Showing your Google Tasks as tasks in Cadence and keeping them in step: checking one off completes it in Google, and editing it updates it there.</li>
   </ul>
   <p>We don't use Google user data for advertising, retargeting, or interest-based ads; we don't sell it; we don't use it to build user profiles or for credit or lending decisions; and we don't use it to develop, improve, or train generalized AI or machine-learning models.</p>
 
   <h3>3.3 How we store and protect it</h3>
   <ul>
     <li><b>Connection tokens:</b> Google's access and refresh tokens, your Google email, the calendars you selected, and your time zone are stored in our database (Turso), on our servers only. The website never sends your refresh token to your browser. If you connect Google directly in the Mac app instead, its tokens are stored on your Mac in a private file only your macOS user account can read.</li>
+    <li><b>Imported Google Tasks:</b> the title, notes, due date, and Google task and list IDs are stored with your other Cadence content, like imported events.</li>
     <li><b>Imported events:</b> the title, notes (taken from the event description, or its location), date, time, length, busy/free setting, event link, and Google event and calendar IDs are stored with your other Cadence content, in our database and on the devices you use Cadence on.</li>
     <li><b>Not stored:</b> free/busy times and the events Cadence only displays (without importing) are fetched when needed and not saved in our database.</li>
     <li><b>Change notifications:</b> to receive Google's “something changed” notifications, we store a random channel ID and token, the calendar ID, and when the subscription expires. The notifications themselves contain no event details.</li>

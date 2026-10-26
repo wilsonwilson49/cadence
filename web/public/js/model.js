@@ -34,7 +34,18 @@ export const googleCalendarKey = (calId, primaryId) =>
 export function calendarKeyOf(task, primaryId) {
   if (task.source === 'google') return googleCalendarKey(task.sourceCalendar, primaryId);
   if (task.source === 'calendly') return 'calendly';
-  return isEvent(task) ? 'events' : 'tasks';
+  if (task.source === 'gtasks') return 'gtasks';
+  return isEvent(task) ? 'events' : isHabit(task) ? 'habits' : 'tasks';
+}
+
+/** A Google Tasks item as a Cadence task: kept on your list until done (Google Tasks have no schedule), due on
+ *  its due date, silent like other imports. Same fields as the Mac's importer. `firstSeen` is the day it arrived. */
+export async function taskFromGoogleTask(gt, firstSeen = new Date()) {
+  return newTask({
+    id: await stableUUID(`gtasks:${gt.id}`), kind: 'task', mode: 'untilDone', title: gt.title, notes: gt.notes || '',
+    startDate: iso(startOfDay(firstSeen)), ...(gt.due ? { dueDate: iso(parseKey(gt.due)) } : {}),
+    channels: [], color: 'blue', source: 'gtasks', googleTaskID: gt.id, sourceCalendar: gt.listId, ...(gt.link ? { externalURL: gt.link } : {}),
+  });
 }
 
 /** Checked off or marked "didn't do" at least once (imports never hide items with history). */
@@ -43,6 +54,13 @@ export const isSilent = task => !(task.channels && task.channels.length);
 /** Events live on the calendars only: never on the checklist, no check-off, no reflection.
  *  Imported items (Google, Calendly) are events unless you explicitly make them a task. */
 export const isEvent = task => task.kind === 'event' || (task.kind !== 'task' && Boolean(task.source));
+/** Habits are anything you repeat on a schedule (Atomic Habits style), kept apart from one-off tasks.
+ *  Explicit kind 'habit', or any repeating non-event item (so older repeating tasks became habits). */
+export const isHabit = task => !isEvent(task) && (task.kind === 'habit' || (task.recurrence?.frequency || 'none') !== 'none');
+export const HABIT_STYLES = [
+  ['build', 'Build a new habit'], ['stack', 'Stack it on a habit'], ['replace', 'Replace a bad habit'], ['break', 'Break a habit'],
+];
+
 /** Closed items block their time; open ones are just for info. Unset: events are closed, tasks open. */
 export const isBusy = task => task.busy ?? isEvent(task);
 
@@ -186,6 +204,54 @@ export function finishOf(task, day = new Date()) {
   return keys.length ? { key: keys[0], missed: !(task.completions && task.completions[keys[0]]) } : null;
 }
 export const finishedKey = (task, day) => finishOf(task, day)?.key ?? null;
+
+// ---------- habit tracker ----------
+/** The next day the habit's schedule lands on after `day` (null if none within a year). */
+function nextScheduled(task, day) {
+  for (let c = addDays(day, 1), i = 0; i < 400; c = addDays(c, 1), i++) if (occursByPattern(task, c)) return c;
+  return null;
+}
+
+/** Streaks, rate and a 30-day grid for a habit. Each scheduled day is done (checked off), missed
+ *  ("didn't do it"), open (today, still to do) or lapsed (passed without either). For a habit that's kept
+ *  until done, a scheduled day counts as done if it was checked off before the next one came. */
+export function habitStats(task, today = new Date()) {
+  const t0 = startOfDay(today), start = startOfDay(task.startDate);
+  const done = new Set(Object.keys(task.completions || {})), missed = new Set(Object.keys(task.missed || {}));
+  const carry = isUntilDone(task);
+  const stateOf = d => {
+    const key = dateKey(d);
+    if (!carry) return done.has(key) ? 'done' : missed.has(key) ? 'missed' : sameDay(d, t0) ? 'open' : 'lapsed';
+    const next = nextScheduled(task, d), until = next ? dateKey(next) : '9999';
+    const inRep = k => k >= key && k < until;
+    if ([...done].some(inRep)) return 'done';
+    if ([...missed].some(inRep)) return 'missed';
+    return next && next <= t0 ? 'lapsed' : 'open';
+  };
+  const days = [];   // scheduled days, oldest first, up to today (a year at most)
+  for (let c = addDays(t0, -365), i = 0; i <= 365; c = addDays(c, 1), i++) if (c >= start && occursByPattern(task, c)) days.push(c);
+  const states = days.map(d => ({ day: d, state: stateOf(d) }));
+  // Current streak: done days in a row, not counting today if it's still open.
+  let streak = 0;
+  for (let i = states.length - 1; i >= 0; i--) {
+    if (states[i].state === 'open' && i === states.length - 1) continue;
+    if (states[i].state !== 'done') break;
+    streak++;
+  }
+  let best = 0, run = 0;
+  for (const s of states) { run = s.state === 'done' ? run + 1 : 0; best = Math.max(best, run); }
+  const recent = states.filter(s => s.day > addDays(t0, -30) && s.state !== 'open');
+  const rate = recent.length ? Math.round(100 * recent.filter(s => s.state === 'done').length / recent.length) : null;
+  // "Never miss twice": the last scheduled day before today wasn't done.
+  const past = states.filter(s => s.state !== 'open');
+  const last = past[past.length - 1];
+  const missTwice = Boolean(last && last.state !== 'done' && states.some(s => s.state === 'open'));
+  const grid = [...Array(30)].map((_, i) => {
+    const d = addDays(t0, i - 29), s = states.find(x => sameDay(x.day, d));
+    return { day: d, state: s ? s.state : 'off' };
+  });
+  return { streak, best, rate, votes: done.size, missTwice, grid, today: states.find(s => sameDay(s.day, t0))?.state ?? null };
+}
 
 /** For an until-done occurrence: "On your list since Mon · day 3", so carried-over items read as one task. */
 export function carryLabel(task, day) {
@@ -382,6 +448,14 @@ export const DEFAULT_SETTINGS = {
   autoImportCalendars: true, importDaysAhead: 14,
   availability: { weekdays: [2, 3, 4, 5, 6], startMinutes: 540, endMinutes: 1020, bufferMinutes: 10 },
   hiddenCalendars: [],
+  // Habits tracker: the Atomic Habits scorecard (what you already do, rated good / bad / neutral).
+  habitScorecard: [],
+  // Focus & screen time: apps you count as distracting (names as the Mac shows them) and daily limits (0 = off).
+  distractingApps: [],
+  screenLimitMinutes: 0,
+  distractingLimitMinutes: 0,
+  focusMinutes: 25,
+  syncGoogleTasks: true,
   // Task presets: saved combinations of conditions to start new tasks from. Dates are stored relative to the
   // start day (spanDays: repeat end / long-term end, dueDays: due date). Same shape as TaskPreset on the Mac.
   taskPresets: [
@@ -411,3 +485,28 @@ export const COLORS = {
   blue: '#0a84ff', teal: '#30b0c7', green: '#30d158', yellow: '#ffd60a', orange: '#ff9f0a',
   red: '#ff453a', pink: '#ff375f', purple: '#bf5af2', gray: '#8e8e93',
 };
+
+// ---------- focus sessions (time pressure) ----------
+/** Points for a focus session: 10 per task finished in time, multiplied by how focused you stayed
+ *  (time not spent away or in distracting apps), plus 20 for clearing everything you picked. */
+export function focusMultiplier(percent) { return percent >= 90 ? 1.5 : percent >= 75 ? 1.25 : 1; }
+export function focusPoints({ finished, picked, focusPercent }) {
+  return Math.round(finished * 10 * focusMultiplier(focusPercent ?? 100) + (picked && finished >= picked ? 20 : 0));
+}
+/** Levels: 2 at 100 points, 3 at 300, 4 at 600… (each level needs 100 more than the last). */
+export const levelStart = level => 50 * (level - 1) * level;
+export function focusLevel(points) {
+  let level = 1;
+  while (levelStart(level + 1) <= points) level++;
+  return { level, into: points - levelStart(level), span: levelStart(level + 1) - levelStart(level) };
+}
+/** Days in a row (ending today or yesterday) with at least one focus session. */
+export function focusStreak(sessions) {
+  const days = new Set(sessions.map(s => dateKey(s.startedAt)));
+  let d = startOfDay(new Date());
+  if (!days.has(dateKey(d))) d = addDays(d, -1);
+  let n = 0;
+  while (days.has(dateKey(d))) { n++; d = addDays(d, -1); }
+  return n;
+}
+export const fmtDuration = sec => { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };

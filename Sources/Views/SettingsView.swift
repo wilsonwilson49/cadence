@@ -206,6 +206,18 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle("Show Google events in Cadence calendars", isOn: $store.settings.showGoogleEvents)
+                if google.viaServer {
+                    if google.tasksGranted {
+                        Toggle("Sync Google Tasks (they show up as tasks kept until done; checking one off completes it in Google)", isOn: $store.settings.syncGoogleTasks)
+                    } else {
+                        HStack {
+                            Text("Google Tasks: your Google connection is from before Cadence supported it. Connect again on the website to add it.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Link("Open website settings", destination: URL(string: "\(SyncService.defaultServer)/app/settings")!)
+                        }
+                    }
+                }
                 Picker("Remind me before Google events", selection: $store.settings.googleEventReminderMinutes) {
                     Text("Off").tag(0)
                     ForEach([5, 10, 15, 30], id: \.self) { Text("\($0) minutes").tag($0) }

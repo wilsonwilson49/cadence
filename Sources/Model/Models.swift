@@ -203,6 +203,10 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var cycleGapDays: Int?
     /// …and how many rounds in total before it's finished for good.
     var cycleTimes: Int?
+    /// Habits: how it's meant to stick (Atomic Habits). nil for tasks and events.
+    var habit: HabitInfo?
+    /// Google Tasks items (source "gtasks"): the Google task ID; its list ID is in sourceCalendar.
+    var googleTaskID: String?
 
     /// Closed (true) items block their time; open (false) ones are just for info.
     /// nil means the default: events closed, tasks open.
@@ -276,6 +280,7 @@ struct Occurrence: Identifiable, Hashable {
     var isMissed: Bool { !task.isEvent && !isDone && task.missed?[key] != nil }
     var isResolved: Bool { isDone || isMissed }
     var isUntilDone: Bool { task.isUntilDone }
+    var isHabit: Bool { task.isHabit }
     /// Where an until-done task appears on a month grid: the day one starts, the day it's settled, and today.
     var isUntilDoneMarker: Bool { task.repStart(on: day).map { $0.isSameDay(day) } == true || isResolved || day.isToday }
     var isOverdue: Bool { !task.isEvent && !isResolved && day < Date().startOfDay }
@@ -377,7 +382,8 @@ func googleCalendarKey(_ id: String?, primary: String?) -> String {
 func calendarKey(of task: PlanTask, primary: String?) -> String {
     if task.source == "google" { return googleCalendarKey(task.sourceCalendar, primary: primary) }
     if task.source == "calendly" { return "calendly" }
-    return task.isEvent ? "events" : "tasks"
+    if task.source == "gtasks" { return "gtasks" }
+    return task.isEvent ? "events" : task.isHabit ? "habits" : "tasks"
 }
 
 // MARK: - Open hours (Booking)
@@ -445,6 +451,14 @@ struct AppSettings: Codable {
 
     var taskPresets: [TaskPreset] = TaskPreset.defaults
 
+    // Habits tracker, focus and screen time (synced with the web)
+    var habitScorecard: [ScoreItem] = []
+    var distractingApps: [String] = []
+    var screenLimitMinutes = 0
+    var distractingLimitMinutes = 0
+    var focusMinutes = 25
+    var syncGoogleTasks = true
+
     init() {}
 
     // Tolerant decoding so adding a setting never wipes an existing data file.
@@ -474,6 +488,12 @@ struct AppSettings: Codable {
         importDaysAhead = c.value(.importDaysAhead, d.importDaysAhead)
         hiddenCalendars = c.value(.hiddenCalendars, d.hiddenCalendars)
         taskPresets = c.value(.taskPresets, d.taskPresets)
+        habitScorecard = c.value(.habitScorecard, d.habitScorecard)
+        distractingApps = c.value(.distractingApps, d.distractingApps)
+        screenLimitMinutes = c.value(.screenLimitMinutes, d.screenLimitMinutes)
+        distractingLimitMinutes = c.value(.distractingLimitMinutes, d.distractingLimitMinutes)
+        focusMinutes = c.value(.focusMinutes, d.focusMinutes)
+        syncGoogleTasks = c.value(.syncGoogleTasks, d.syncGoogleTasks)
     }
 }
 
@@ -500,6 +520,12 @@ struct SyncedSettings: Codable, Equatable {
     var importDaysAhead: Int
     var hiddenCalendars: [String]
     var taskPresets: [TaskPreset]
+    var habitScorecard: [ScoreItem]
+    var distractingApps: [String]
+    var screenLimitMinutes: Int
+    var distractingLimitMinutes: Int
+    var focusMinutes: Int
+    var syncGoogleTasks: Bool
 
     init(_ s: AppSettings) {
         nudgeEnabled = s.nudgeEnabled; nudgeIntervalMinutes = s.nudgeIntervalMinutes
@@ -513,6 +539,9 @@ struct SyncedSettings: Codable, Equatable {
         autoImportCalendars = s.autoImportCalendars; importDaysAhead = s.importDaysAhead
         hiddenCalendars = s.hiddenCalendars
         taskPresets = s.taskPresets
+        habitScorecard = s.habitScorecard; distractingApps = s.distractingApps
+        screenLimitMinutes = s.screenLimitMinutes; distractingLimitMinutes = s.distractingLimitMinutes
+        focusMinutes = s.focusMinutes; syncGoogleTasks = s.syncGoogleTasks
     }
 
     init(from decoder: Decoder) throws {
@@ -538,6 +567,12 @@ struct SyncedSettings: Codable, Equatable {
         importDaysAhead = c.value(.importDaysAhead, importDaysAhead)
         hiddenCalendars = c.value(.hiddenCalendars, hiddenCalendars)
         taskPresets = c.value(.taskPresets, taskPresets)
+        habitScorecard = c.value(.habitScorecard, habitScorecard)
+        distractingApps = c.value(.distractingApps, distractingApps)
+        screenLimitMinutes = c.value(.screenLimitMinutes, screenLimitMinutes)
+        distractingLimitMinutes = c.value(.distractingLimitMinutes, distractingLimitMinutes)
+        focusMinutes = c.value(.focusMinutes, focusMinutes)
+        syncGoogleTasks = c.value(.syncGoogleTasks, syncGoogleTasks)
     }
 
     func apply(to s: inout AppSettings) {
@@ -552,6 +587,9 @@ struct SyncedSettings: Codable, Equatable {
         s.autoImportCalendars = autoImportCalendars; s.importDaysAhead = importDaysAhead
         s.hiddenCalendars = hiddenCalendars
         s.taskPresets = taskPresets
+        s.habitScorecard = habitScorecard; s.distractingApps = distractingApps
+        s.screenLimitMinutes = screenLimitMinutes; s.distractingLimitMinutes = distractingLimitMinutes
+        s.focusMinutes = focusMinutes; s.syncGoogleTasks = syncGoogleTasks
     }
 }
 

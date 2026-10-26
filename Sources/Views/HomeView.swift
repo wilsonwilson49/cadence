@@ -32,7 +32,10 @@ struct HomeView: View {
                     tile(.week, "\(weekCount(now))", "tasks this week", .blue)
                     tile(.month, now.formatted(.dateTime.month(.abbreviated)), "see the whole month", .teal)
                     tile(.todo, "\(store.tasks.filter { $0.archived != true }.count)", overdue > 0 ? "\(overdue) overdue" : "all your tasks", .orange)
+                    tile(.habits, "\(store.tasks.filter { $0.isHabit && $0.archived != true }.count)", bestStreak > 0 ? "best streak \(bestStreak) days" : "build one today", .green)
                     tile(.reflections, "\(store.reflections.count)", store.reflectionStreak > 0 ? "\(store.reflectionStreak)-day streak" : "your record", .indigo)
+                    tile(.focus, "Level \(Focus.level(points: focusPoints).level)", "\(focusPoints) points", .pink)
+                    tile(.screentime, screenToday > 0 ? durationString(seconds: screenToday) : "—", screenToday > 0 ? "today on your Mac" : "turn it on", .cyan)
                     tile(.booking, durationText(BookingView.plans(store: store, google: google, busy: []).reduce(0) { $0 + $1.total }), "open in the next 7 days", .green)
                     tile(.settings, sync.isSignedIn ? "Synced" : "Local", google.isConnected ? "Google connected" : "reminders & sync", .gray)
                 }
@@ -154,6 +157,10 @@ struct HomeView: View {
             }
         }
     }
+
+    private var bestStreak: Int { store.tasks.filter { $0.isHabit && $0.archived != true }.map { $0.habitStats().streak }.max() ?? 0 }
+    private var focusPoints: Int { store.focusSessions.reduce(0) { $0 + $1.points } }
+    private var screenToday: Int { max(store.screenDays(on: Date()).reduce(0) { $0 + $1.totalSeconds }, AppModel.shared.screenTime.totalToday) }
 
     private func tile(_ screen: Screen, _ value: String, _ sub: String, _ hue: Color) -> some View {
         Button { model.screen = screen } label: {

@@ -60,8 +60,25 @@ enum DebugDriver {
         runSyncTest(model)
         runClickScan(model)
         reportSync(model)
+        runFocusTest(model)
         let delay = Double(LaunchOptions.value("-listAfter") ?? "") ?? 3.5
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { writeWindowList(model) }
+    }
+
+    /// -focusTest: a short focus session (two items finished), then report the saved session to <dataDir>/focus-result.txt.
+    static func runFocusTest(_ model: AppModel) {
+        guard LaunchOptions.has("-focusTest") else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+            let open = model.store.todayChecklist().filter { !$0.isResolved }.map(\.id)
+            model.focus.start(minutes: 1, picked: Array(open.prefix(3)))
+            for id in open.prefix(2) { model.focus.toggleFinished(id) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                model.focus.end()
+                let r = model.focus.result
+                let line = "focus picked=\(r?.picked ?? -1) finished=\(r?.finished ?? -1) percent=\(r?.focusPercent ?? -1) points=\(r?.points ?? -1) saved=\(model.store.focusSessions.contains { $0.id == r?.id }) totalSessions=\(model.store.focusSessions.count) screenToday=\(model.screenTime.totalToday)s front=\(model.screenTime.frontmostApp ?? "-")"
+                try? line.write(to: LaunchOptions.dataDirectory.appendingPathComponent("focus-result.txt"), atomically: true, encoding: .utf8)
+            }
+        }
     }
 
     /// -syncTest <server> <account.json>: sign in, sync, add a Mac task, sync again, report, sign out.

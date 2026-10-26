@@ -35,7 +35,12 @@ struct RootView: View {
                         row(.todo)
                     }
                     Section("Grow") {
+                        row(.habits, badge: store.todayChecklist().filter { $0.isHabit && !$0.isResolved }.count)
                         row(.reflections, badge: store.reflections.count)
+                    }
+                    Section("Focus") {
+                        row(.focus)
+                        row(.screentime)
                     }
                     Section("Connect") {
                         row(.booking)
@@ -99,6 +104,9 @@ struct RootView: View {
         case .month: MonthView()
         case .todo: TodoView()
         case .reflections: ReflectionsView()
+        case .habits: HabitsView()
+        case .focus: FocusView()
+        case .screentime: ScreenTimeView()
         case .booking: BookingView()
         case .settings: SettingsView()
         }

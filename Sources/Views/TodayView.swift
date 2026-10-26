@@ -52,8 +52,9 @@ struct TodayView: View {
                 }
 
                 // Tasks that stay on until you do them get their own section, apart from what's on for today.
-                let daily = items.filter { !$0.isUntilDone }
-                let ongoing = items.filter(\.isUntilDone)
+                let habits = items.filter(\.isHabit)
+                let daily = items.filter { !$0.isHabit && !$0.isUntilDone }
+                let ongoing = items.filter { !$0.isHabit && $0.isUntilDone }
                 VStack(alignment: .leading, spacing: 6) {
                     SectionTitle(text: "Today's checklist", symbol: "checklist", count: daily.count)
                     Card {
@@ -70,6 +71,16 @@ struct TodayView: View {
                         } else {
                             VStack(spacing: 0) { rows(daily) }
                         }
+                    }
+                }
+                if !habits.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            SectionTitle(text: "Habits", symbol: "arrow.triangle.2.circlepath", count: habits.filter { !$0.isResolved }.count)
+                            Spacer()
+                            Button("Habit tracker") { model.screen = .habits }.controlSize(.small)
+                        }
+                        Card { VStack(spacing: 0) { rows(habits) } }
                     }
                 }
                 if !ongoing.isEmpty {

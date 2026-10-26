@@ -7,6 +7,9 @@ final class Store: ObservableObject {
     @Published var tasks: [PlanTask] = [] { didSet { stampTasks(oldValue); scheduleSave() } }
     @Published var reflections: [Reflection] = [] { didSet { stampReflections(oldValue); scheduleSave() } }
     @Published var settings = AppSettings() { didSet { stampSettings(oldValue); scheduleSave() } }
+    /// Focus sessions and daily screen-time summaries: written whole, so whoever writes sets updatedAt.
+    @Published var focusSessions: [FocusSession] = [] { didSet { scheduleSave() } }
+    @Published var screenDays: [ScreenDay] = [] { didSet { scheduleSave() } }
 
     /// Deleted records ("task|<id>" / "reflection|<id>") → when, so deletions sync too.
     private(set) var tombstones: [String: Date] = [:]
@@ -24,6 +27,8 @@ final class Store: ObservableObject {
         var settings: AppSettings
         var tombstones: [String: Date]?
         var settingsUpdatedAt: Date?
+        var focusSessions: [FocusSession]?
+        var screenDays: [ScreenDay]?
     }
 
     init(directory: URL) {
@@ -45,6 +50,8 @@ final class Store: ObservableObject {
             reflections = snap.reflections
             settings = snap.settings
             tombstones = snap.tombstones ?? [:]
+            focusSessions = snap.focusSessions ?? []
+            screenDays = snap.screenDays ?? []
             settingsUpdatedAt = snap.settingsUpdatedAt
             isLoading = false
         } catch {
@@ -73,7 +80,8 @@ final class Store: ObservableObject {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
             let data = try encoder.encode(Snapshot(tasks: tasks, reflections: reflections, settings: settings,
-                                                   tombstones: tombstones, settingsUpdatedAt: settingsUpdatedAt))
+                                                   tombstones: tombstones, settingsUpdatedAt: settingsUpdatedAt,
+                                                   focusSessions: focusSessions, screenDays: screenDays))
             try data.write(to: fileURL, options: .atomic)
         } catch {
             NSLog("Cadence: save failed: %@", "\(error)")
@@ -170,6 +178,12 @@ final class Store: ObservableObject {
                 out.append(SyncChange(kind: "reflection", id: r.id.uuidString, updatedAt: stamp, deleted: false, data: Self.jsonObject(r)))
             }
         }
+        for f in focusSessions where since == nil || (f.updatedAt.map(newer) ?? false) {
+            out.append(SyncChange(kind: "focus", id: f.id.uuidString, updatedAt: f.updatedAt ?? f.endedAt, deleted: false, data: Self.jsonObject(f)))
+        }
+        for d in screenDays where since == nil || (d.updatedAt.map(newer) ?? false) {
+            out.append(SyncChange(kind: "screen", id: d.id, updatedAt: d.updatedAt ?? Date(), deleted: false, data: Self.jsonObject(d)))
+        }
         for (key, when) in tombstones where newer(when) {
             let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
             if parts.count == 2 { out.append(SyncChange(kind: parts[0], id: parts[1], updatedAt: when, deleted: true, data: nil)) }
@@ -219,6 +233,21 @@ final class Store: ObservableObject {
                       var r = try? Self.syncDecoder.decode(Reflection.self, from: data) else { continue }
                 r.updatedAt = c.updatedAt
                 if let i { newReflections[i] = r } else { newReflections.append(r) }
+            case "focus":
+                guard !c.deleted, let obj = c.data, let data = try? JSONSerialization.data(withJSONObject: obj),
+                      var f = try? Self.syncDecoder.decode(FocusSession.self, from: data) else { continue }
+                f.updatedAt = c.updatedAt
+                if let i = focusSessions.firstIndex(where: { $0.id == f.id }) {
+                    if (focusSessions[i].updatedAt ?? .distantPast) <= c.updatedAt { focusSessions[i] = f }
+                } else { focusSessions.append(f) }
+            case "screen":
+                guard !c.deleted, let obj = c.data, let data = try? JSONSerialization.data(withJSONObject: obj),
+                      var d = try? Self.syncDecoder.decode(ScreenDay.self, from: data) else { continue }
+                d.updatedAt = c.updatedAt
+                d.id = d.id.uppercased()
+                if let i = screenDays.firstIndex(where: { $0.id == d.id }) {
+                    if (screenDays[i].updatedAt ?? .distantPast) <= c.updatedAt { screenDays[i] = d }
+                } else { screenDays.append(d) }
             case "settings":
                 if let mine = settingsUpdatedAt, mine > c.updatedAt { continue }
                 guard !c.deleted, let obj = c.data, let data = try? JSONSerialization.data(withJSONObject: obj),
@@ -237,6 +266,14 @@ final class Store: ObservableObject {
     // MARK: Queries
 
     func task(_ id: UUID) -> PlanTask? { tasks.first { $0.id == id } }
+
+    func saveFocusSession(_ s: FocusSession) {
+        var s = s
+        s.updatedAt = Date()
+        if let i = focusSessions.firstIndex(where: { $0.id == s.id }) { focusSessions[i] = s } else { focusSessions.append(s) }
+    }
+    var sortedFocusSessions: [FocusSession] { focusSessions.sorted { $0.startedAt > $1.startedAt } }
+    func screenDays(on day: Date) -> [ScreenDay] { let k = DateKey.string(day); return screenDays.filter { $0.date == k } }
 
     func occurrences(on day: Date) -> [Occurrence] {
         let d = day.startOfDay
@@ -342,7 +379,11 @@ final class Store: ObservableObject {
         tasks[i].missed?[occ.key] = nil
         reflections.insert(Reflection(taskID: occ.task.id, taskTitle: occ.task.title,
                                       occurrenceKey: occ.key, text: text), at: 0)
+        if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "completed") }
     }
+
+    /// Set by the app: pushes a Google Tasks item's status ("completed" / "needsAction") to Google.
+    var onGoogleTaskChange: ((PlanTask, String) -> Void)?
 
     /// "Didn't do it / couldn't": settles the item without checking it off, with a reflection on why.
     func miss(_ occ: Occurrence, reflection text: String) {
@@ -366,6 +407,7 @@ final class Store: ObservableObject {
     func uncomplete(_ occ: Occurrence) {
         guard let i = tasks.firstIndex(where: { $0.id == occ.task.id }) else { return }
         tasks[i].completions[occ.key] = nil
+        if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "needsAction") }
     }
 
     func skip(_ occ: Occurrence) {

@@ -47,7 +47,7 @@ async function migrate() {
     // Every task, reflection and the settings blob is one row. "version" orders changes for sync.
     `CREATE TABLE IF NOT EXISTS records (
        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-       kind TEXT NOT NULL,                      -- 'task' | 'reflection' | 'settings'
+       kind TEXT NOT NULL,                      -- 'task' | 'reflection' | 'settings' | 'focus' | 'screen'
        id TEXT NOT NULL,
        data TEXT,                               -- JSON, same shape the Mac app encodes
        updated_at INTEGER NOT NULL,             -- client edit time (ms), last-writer-wins
@@ -75,6 +75,7 @@ async function migrate() {
   for (const sql of [
     'ALTER TABLE google_tokens ADD COLUMN time_zone TEXT',
     'ALTER TABLE google_tokens ADD COLUMN calendar_ids TEXT',
+    'ALTER TABLE google_tokens ADD COLUMN scopes TEXT',
     `CREATE TABLE IF NOT EXISTS google_channels (
        channel_id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
        calendar_id TEXT NOT NULL, resource_id TEXT, token TEXT NOT NULL, expiration INTEGER NOT NULL
@@ -82,7 +83,8 @@ async function migrate() {
   ]) { await db.execute(sql).catch(() => {}); }
 }
 
-const KINDS = new Set(['task', 'reflection', 'settings']);
+// focus: one record per focus session; screen: one screen-time summary per day per device.
+const KINDS = new Set(['task', 'reflection', 'settings', 'focus', 'screen']);
 
 /**
  * Applies a batch of client changes (last-writer-wins on updatedAt) and returns

@@ -18,6 +18,7 @@ struct TaskEditor: View {
     /// Once you pick open/closed yourself, switching Task/Event no longer changes it.
     @State private var busyChosen = false
     @State private var hasDue: Bool
+    @State private var addToGoogleTasks = false
     @State private var cycleGap: Int
     @State private var cycleWeeks: Bool
     @State private var cycleTimes: Int
@@ -59,11 +60,23 @@ struct TaskEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(isNew ? (task.isEvent ? "New Event" : "New Task") : (task.isEvent ? "Edit Event" : "Edit Task")).font(.title3.bold())
+                Text("\(isNew ? "New" : "Edit") \(kindName)").font(.title3.bold())
                 Spacer()
-                Picker("", selection: Binding(get: { task.isEvent ? "event" : "task" }, set: { k in
+                Picker("", selection: Binding(get: { task.isEvent ? "event" : task.isHabit ? "habit" : "task" }, set: { k in
                     task.kind = k
                     if k == "event" { task.mode = nil }   // events have no check-off, so no "until done"/long-term
+                    if k == "habit" {
+                        // Habits repeat; they start out daily and as building something new.
+                        if !task.recurrence.isRepeating { task.recurrence.frequency = .daily }
+                        if task.isCycle { task.mode = nil; task.cycleGapDays = nil; task.cycleTimes = nil }
+                        if task.habit == nil { task.habit = HabitInfo() }
+                        if isNew && task.color == .blue { task.color = .green }
+                    }
+                    if k == "task" {
+                        // Repeating things are habits; a task happens once (or comes back after a break).
+                        if task.recurrence.isRepeating { task.recurrence = Recurrence(); endMode = 0 }
+                        if task.isLongTerm { task.mode = nil }
+                    }
                     if !busyChosen { task.busy = k == "event" }   // events start closed, tasks open
                     if k == "event" && isNew {
                         if !hasTime { hasTime = true; time = dayAt(task.startDate, minutes: 9 * 60) }
@@ -72,14 +85,17 @@ struct TaskEditor: View {
                     }
                 })) {
                     Label("Task", systemImage: "checklist").tag("task")
+                    Label("Habit", systemImage: "arrow.triangle.2.circlepath").tag("habit")
                     Label("Event", systemImage: "calendar").tag("event")
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 180)
+                .frame(width: 250)
             }
             .padding([.horizontal, .top], 20)
-            Text(task.isEvent ? "Events show on your calendars only: no checkbox, no reflection." : "Tasks go on your checklist; checking one off asks for a short reflection.")
+            Text(task.isEvent ? "Events show on your calendars only: no checkbox, no reflection."
+                 : task.isHabit ? "Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you're becoming."
+                 : "Tasks go on your checklist; checking one off asks for a short reflection.")
                 .font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -142,12 +158,15 @@ struct TaskEditor: View {
                         if let u = task.externalURL.flatMap(URL.init(string:)) { Link("Open in Google Calendar", destination: u) }
                     }
                 } else {
-                Section("Repeat & conditions") {
-                    Picker("Repeats", selection: repeatChoice) {
-                        ForEach(Frequency.allCases) { Text($0.label).tag($0.rawValue) }
-                        if !task.isEvent {
-                            Divider()
+                Section(task.isHabit || task.isEvent ? "Repeat" : "Conditions") {
+                    Picker(task.isHabit || task.isEvent ? "Repeats" : "Comes back", selection: repeatChoice) {
+                        if task.isHabit {
+                            ForEach(Frequency.allCases.filter { $0 != .none }) { Text($0.label).tag($0.rawValue) }
                             Text("Long-term: every day until a date").tag("longTerm")
+                        } else if task.isEvent {
+                            ForEach(Frequency.allCases) { Text($0.label).tag($0.rawValue) }
+                        } else {
+                            Text("No, just once").tag(Frequency.none.rawValue)
                             Text("After it's done, with a break").tag("cycle")
                         }
                     }
@@ -258,7 +277,18 @@ struct TaskEditor: View {
                     }
                 }
 
-                if google.isConnected && task.googleEventID == nil && task.source == nil {
+                if task.isHabit { habitSection }
+
+                if google.isConnected && google.tasksGranted && isNew && !task.isEvent && !task.isHabit && task.source == nil {
+                    Section("Google Tasks") {
+                        Toggle(isOn: $addToGoogleTasks) { Label("Also add to Google Tasks", systemImage: "checklist") }
+                    }
+                }
+                if task.source == "gtasks" {
+                    Section { Label("Synced with Google Tasks: title, notes, due date and checking it off update Google too.", systemImage: "arrow.triangle.2.circlepath").font(.caption) }
+                }
+
+                if google.isConnected && task.googleEventID == nil && task.source == nil && !task.isHabit {
                     Section("Google Calendar") {
                         if task.isEvent {
                             Toggle(isOn: $syncGoogle) { Label("Sync with Google Calendar", systemImage: "arrow.triangle.2.circlepath") }
@@ -351,6 +381,47 @@ struct TaskEditor: View {
     }
 
     private var isGoogleSynced: Bool { task.source == "google" && task.googleEventID != nil && google.isConnected }
+
+    private var kindName: String { task.isEvent ? "Event" : task.isHabit ? "Habit" : "Task" }
+
+    // MARK: Habits (Atomic Habits)
+
+    private func habitBinding(_ key: WritableKeyPath<HabitInfo, String?>) -> Binding<String> {
+        Binding(get: { task.habit?[keyPath: key] ?? "" }, set: { v in
+            var h = task.habit ?? HabitInfo(); h[keyPath: key] = v.isEmpty ? nil : v; task.habit = h
+        })
+    }
+
+    @ViewBuilder private var habitSection: some View {
+        let style = task.habit?.style ?? "build"
+        Section {
+            Picker("Style", selection: Binding(get: { style }, set: { v in var h = task.habit ?? HabitInfo(); h.style = v; task.habit = h })) {
+                ForEach(HabitInfo.styles, id: \.id) { Text($0.label).tag($0.id) }
+            }
+            .pickerStyle(.segmented)
+            if style == "stack" {
+                TextField("After I…", text: habitBinding(\.stackAfter), prompt: Text("pour my morning coffee")).multilineTextAlignment(.leading)
+            }
+            if style == "replace" {
+                TextField("Instead of…", text: habitBinding(\.replaces), prompt: Text("scrolling my phone in bed")).multilineTextAlignment(.leading)
+            }
+            if style == "break" {
+                TextField("Screen-time app to keep down", text: habitBinding(\.app), prompt: Text("YouTube (optional)")).multilineTextAlignment(.leading)
+                Stepper(value: Binding(get: { task.habit?.limitMinutes ?? 30 }, set: { v in var h = task.habit ?? HabitInfo(); h.limitMinutes = v; task.habit = h }),
+                        in: 5...600, step: 5) { Text("Daily limit: \(task.habit?.limitMinutes ?? 30) min") }
+            }
+            TextField("I am someone who…", text: habitBinding(\.identity), prompt: Text("reads every day")).multilineTextAlignment(.leading)
+            TextField("When and where", text: habitBinding(\.cue), prompt: Text("at 9 PM on the couch")).multilineTextAlignment(.leading)
+            TextField("2-minute version", text: habitBinding(\.twoMinute), prompt: Text("read one page")).multilineTextAlignment(.leading)
+            TextField("Right after, I get…", text: habitBinding(\.reward), prompt: Text("a cup of tea")).multilineTextAlignment(.leading)
+            if let s = task.habitSentence { Label(s, systemImage: "quote.opening").font(.callout).italic().foregroundStyle(.green) }
+        } header: {
+            Text("Make it stick")
+        } footer: {
+            Text("Who you're becoming (identity), make it obvious (cue), easy (2 minutes) and satisfying (reward). For a habit to break, the Mac's screen time can track an app against a daily limit.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
 
     // MARK: Presets
 
@@ -485,6 +556,46 @@ struct TaskEditor: View {
             t.recurrence = Recurrence()
         } else { t.cycleGapDays = nil; t.cycleTimes = nil }
         t.dueDate = t.isUntilDone && !t.isCycle && !t.recurrence.isRepeating && hasDue ? dueDate.startOfDay : nil
+        if t.isHabit {
+            t.kind = "habit"
+            var h = t.habit ?? HabitInfo()
+            for k in [\HabitInfo.identity, \.cue, \.stackAfter, \.replaces, \.twoMinute, \.reward, \.app] {
+                let v = h[keyPath: k]?.trimmingCharacters(in: .whitespacesAndNewlines)
+                h[keyPath: k] = v?.isEmpty == false ? v : nil
+            }
+            if h.style != "break" { h.app = nil; h.limitMinutes = nil }
+            t.habit = h
+        } else { t.habit = nil }
+
+        // A Google Tasks item: save here, then push the title/notes/due date to Google.
+        if !isNew, t.source == "gtasks", let gid = t.googleTaskID {
+            store.upsert(t)
+            model.editingTask = nil
+            var fields: [String: Any] = ["title": t.title, "notes": t.notes]
+            fields["due"] = t.dueDate.map(DateKey.string) ?? NSNull()
+            Task { try? await google.updateGoogleTask(listID: t.sourceCalendar ?? "@default", taskID: gid, fields: fields) }
+            return
+        }
+        // A new task that also goes to Google Tasks: create it there, then keep it as the synced copy.
+        if isNew && addToGoogleTasks && !t.isEvent && !t.isHabit && google.tasksGranted {
+            saving = true
+            Task {
+                do {
+                    let gt = try await google.createGoogleTask(title: t.title, notes: t.notes, due: DateKey.string(t.dueDate ?? t.startDate))
+                    var synced = t
+                    synced.id = stableUUID("gtasks:\(gt.id)")
+                    synced.source = "gtasks"; synced.googleTaskID = gt.id; synced.sourceCalendar = gt.listID; synced.externalURL = gt.link
+                    synced.kind = "task"
+                    store.upsert(synced)
+                    model.editingTask = nil
+                } catch {
+                    store.upsert(t)
+                    self.error = "Saved in Cadence only — Google Tasks failed: \(error.localizedDescription)"
+                }
+                saving = false
+            }
+            return
+        }
         // "During" reminders only make sense inside a timed task's span.
         t.reminderOffsets = t.reminderOffsets.filter { $0 >= 0 || (t.timeMinutes != nil && -$0 < t.durationMinutes) }
         if t.reminderOffsets.isEmpty { t.reminderOffsets = [0] }

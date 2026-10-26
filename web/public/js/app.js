@@ -15,7 +15,8 @@ const HOUR = 48;
 const SCREENS = [
   ['home', 'Home', 'house', ''],
   ['today', 'Today', 'sun', 'Plan'], ['week', 'Week', 'week', 'Plan'], ['month', 'Month', 'month', 'Plan'],
-  ['todo', 'To-Do List', 'list', 'Plan'], ['reflections', 'Reflections', 'quote', 'Grow'],
+  ['todo', 'To-Do List', 'list', 'Plan'], ['habits', 'Habits', 'habit', 'Grow'], ['reflections', 'Reflections', 'quote', 'Grow'],
+  ['focus', 'Focus', 'target', 'Focus'], ['screentime', 'Screen Time', 'monitor', 'Focus'],
   ['booking', 'Booking', 'people', 'Connect'], ['settings', 'Settings', 'gear', ''],
 ];
 
@@ -120,7 +121,9 @@ function sidebar() {
   const items = SCREENS.map(([id, label, icon, section]) => {
     let head = '';
     if (section !== lastSection) { head = section ? `<div class="nav-section">${section}</div>` : id === 'home' ? '' : '<div class="nav-section"></div>'; lastSection = section; }
-    const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size : '';
+    const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
+      : id === 'habits' ? (store.tasksOn(new Date()).filter(o => M.isHabit(o.task) && !o.resolved).length || '')
+      : id === 'focus' && focus.running ? fmtClock(focusLeft()) : '';
     return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
   }).join('');
   return `<nav class="sidebar">
@@ -143,6 +146,9 @@ function view() {
     case 'month': return monthView();
     case 'todo': return todoView();
     case 'reflections': return reflectionsView();
+    case 'habits': return habitsView();
+    case 'focus': return focusView();
+    case 'screentime': return screenTimeView();
     case 'booking': return bookingView();
     case 'settings': return settingsView();
     case 'today': return todayView();
@@ -259,7 +265,13 @@ function homeView() {
       ${tile('week', 'week', 'Week', weekCount, 'tasks this week', '#0a84ff')}
       ${tile('month', 'month', 'Month', M.fmtDay(now, { month: 'short' }), 'see the whole month', '#30b0c7')}
       ${tile('todo', 'list', 'To-Do List', store.tasks.size ? [...store.tasks.values()].filter(t => !t.archived).length : 0, overdue ? `${overdue} overdue` : 'all your tasks', '#ff9f0a')}
+      ${(() => { const hs = [...store.tasks.values()].filter(t => !t.archived && M.isHabit(t)); const best = Math.max(0, ...hs.map(t => M.habitStats(t).streak));
+        return tile('habits', 'habit', 'Habits', hs.length, best ? `best streak ${best} days` : 'build one today', '#30d158'); })()}
       ${tile('reflections', 'quote', 'Reflections', store.reflections.size, store.reflectionStreak ? `${store.reflectionStreak}-day streak` : 'your record', '#5e5ce6')}
+      ${(() => { const pts = store.focusSessions.reduce((n, s) => n + (s.points || 0), 0); const lv = M.focusLevel(pts);
+        return tile('focus', 'target', 'Focus', `Level ${lv.level}`, `${pts} points`, '#ff375f'); })()}
+      ${(() => { const today = store.screenDays(new Date()); const sec = today.reduce((n, d) => n + (d.totalSeconds || 0), 0);
+        return tile('screentime', 'monitor', 'Screen time', today.length ? M.fmtDuration(sec) : '—', today.length ? 'today on your Mac' : 'tracked by the Mac app', '#5ac8fa'); })()}
       ${tile('booking', 'people', 'Open time', durLabel(openTimeDays().reduce((n, d) => n + d.total, 0)), 'free in the next 7 days', '#30d158')}
       ${tile('settings', 'gear', 'Settings', ss.status === 'synced' ? 'Synced' : ss.status === 'offline' ? 'Offline' : '—', store.google.connected ? 'Google connected' : 'reminders & sync', '#8e8e93')}
     </div>
@@ -291,8 +303,9 @@ function eventRow(ev) {
 function todayView() {
   const today = new Date();
   const items = store.tasksOn(today), overdue = store.overdue(), all = [...overdue, ...items];
-  // Tasks that stay on until you do them get their own section, apart from what's on for today.
-  const daily = items.filter(o => !M.isUntilDone(o.task)), ongoing = items.filter(o => M.isUntilDone(o.task));
+  // Tasks, habits, and tasks that stay on until you do them each get their own section.
+  const habits = items.filter(o => M.isHabit(o.task));
+  const daily = items.filter(o => !M.isHabit(o.task) && !M.isUntilDone(o.task)), ongoing = items.filter(o => !M.isHabit(o.task) && M.isUntilDone(o.task));
   const done = all.filter(o => o.done).length, settled = all.filter(o => o.resolved).length;
   const hour = today.getHours();
   const greet = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -315,6 +328,9 @@ function todayView() {
       <div class="card">${daily.length ? daily.map(o => crow(o)).join('')
         : `<div class="crow"><span style="font-size:22px;color:var(--orange)">${ic('sun')}</span><div><div>${ongoing.length ? 'Nothing else scheduled for today.' : 'Nothing scheduled for today.'}</div><div class="small muted">Add a task above, or use New Task for one with a time and repeat schedule.</div></div></div>`}</div>
       ${ongoing.length ? '' : `<div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div>`}</div>
+    ${habits.length ? `<div><div class="section-title">${ic('habit')}Habits <span class="count">${habits.filter(o => !o.resolved).length} left</span><span class="grow"></span>
+        <a class="btn sm" href="/app/habits">Habit tracker</a></div>
+      <div class="card">${habits.map(o => crow(o)).join('')}</div></div>` : ''}
     ${ongoing.length ? `<div><div class="section-title">${ic('flame')}Until done <span class="count">${ongoing.length}</span>
         <span class="small muted" style="font-weight:400">stays on your list until you check it off or mark it “didn’t do it”</span></div>
       <div class="card">${ongoing.map(o => crow(o)).join('')}</div>
@@ -322,6 +338,11 @@ function todayView() {
     <div><div class="section-title">${ic('cal')}Schedule <span class="count">${events.length}</span><span class="grow"></span>
       <button class="btn sm" data-act="new-event">${ic('plus')} New event</button></div>
       <div class="card">${events.length ? events.map(eventRow).join('') : '<div class="crow muted">No events today. Events show on your calendars but never on the checklist.</div>'}</div></div>
+    ${(() => { const st = screenSummary(today); if (!st.has) return '';
+      const over = s.screenLimitMinutes && st.total > s.screenLimitMinutes * 60;
+      return `<a class="callout" href="/app/screentime" style="text-decoration:none;color:inherit"><span class="big" style="color:#5ac8fa">${ic('monitor')}</span><div class="grow">
+        <b class="${over ? 'red' : ''}">Screen time today: ${M.fmtDuration(st.total)}${s.screenLimitMinutes ? ` of ${M.fmtDuration(s.screenLimitMinutes * 60)}` : ''}</b>
+        <div class="small muted">${M.fmtDuration(st.distracting)} in distracting apps${st.apps[0] ? ` · most: ${esc(st.apps[0].name)} (${M.fmtDuration(st.apps[0].seconds)})` : ''}. A focus session helps.</div></div></a>`; })()}
     <div class="callout"><span class="big">${ic('bell')}</span><div class="grow">
       <b>${s.nudgeEnabled ? `Checklist reminder every ${s.nudgeIntervalMinutes} min while this page is open` : 'Recurring checklist reminders are off'}</b>
       <div class="small muted">${!reminders.enabled ? 'Browser reminders are off on this device (Settings).' : s.nudgeEnabled ? `Next one around ${M.fmtTime(reminders.nextNudge)}. You’ll also get a check-in when you come back to your computer.` : 'Turn them on in Settings.'}</div></div>
@@ -333,7 +354,8 @@ function todayView() {
 /** Every calendar the views can show: [key, name, color]. */
 function calendarList() {
   const g = store.google, pid = store.primaryCalendarId;
-  const list = [['tasks', 'Tasks', '#0a84ff'], ['events', 'Events', '#30b0c7']];
+  const list = [['tasks', 'Tasks', '#0a84ff'], ['habits', 'Habits', '#30d158'], ['events', 'Events', '#30b0c7']];
+  if ([...store.tasks.values()].some(t => t.source === 'gtasks' && !t.archived)) list.push(['gtasks', 'Google Tasks', '#4285f4']);
   if (store.calendly.connected || [...store.tasks.values()].some(t => t.source === 'calendly' && !t.archived)) list.push(['calendly', 'Calendly', '#bf5af2']);
   const add = (id, fallback) => {
     const key = M.googleCalendarKey(id, pid);
@@ -353,6 +375,244 @@ function calendarsMenu() {
       ${list.map(([k, l, c]) => `<label class="check"><input type="checkbox" data-act-change="cal-toggle" value="${esc(k)}" ${store.calendarShown(k) ? 'checked' : ''}>
         <span class="sw" style="background:${c}"></span><span class="ellipsis">${esc(l)}</span></label>`).join('')}
       <div class="tiny muted" style="margin-top:6px">Hidden calendars don’t count against your open time. Your checklist and reminders aren’t affected.</div></div>` : ''}</div>`;
+}
+
+// ---------- Habits (Atomic Habits tracker) ----------
+const STYLE_LABEL = { build: 'Building', stack: 'Stacked', replace: 'Replacing', break: 'Breaking' };
+
+/** Today's screen time in one app (from the Mac app's synced summaries), in seconds, or null. */
+function appSecondsToday(app) {
+  const days = store.screenDays(new Date());
+  if (!days.length || !app) return null;
+  const want = app.trim().toLowerCase();
+  return days.reduce((n, d) => n + (d.apps || []).filter(a => a.name.toLowerCase().includes(want)).reduce((m, a) => m + a.seconds, 0), 0);
+}
+
+function habitCard(t, st) {
+  const h = t.habit || {}, today = new Date(), occ = M.occurs(t, today) ? M.makeOccurrence(t, today) : null;
+  const sentence = habitSentence(t), next = !occ ? M.nextOccurrence(t, M.addDays(today, 1)) : null;
+  const used = h.style === 'break' && h.app ? appSecondsToday(h.app) : null;
+  const limit = (h.limitMinutes || 0) * 60;
+  return `<div class="habit-card" style="--hue:${color(t.color)}">
+    <div class="row" style="align-items:flex-start"><span class="hc-bar"></span>
+      <div class="grow" style="min-width:0"><div class="hc-title ellipsis">${esc(t.title)}</div>
+        <div class="small muted">${esc(M.planSummary(t) || 'Every day')} · ${STYLE_LABEL[h.style || 'build']}</div></div>
+      <div class="hc-streak" title="Current streak (best ${st.best})">${ic('flame')}<b>${st.streak}</b><small>best ${st.best}</small></div></div>
+    ${sentence ? `<div class="hc-sentence">${esc(sentence)}</div>` : ''}
+    ${used != null ? `<div class="hc-screen ${limit && used > limit ? 'over' : ''}">${ic('monitor')} ${esc(h.app)} today: <b>${M.fmtDuration(used)}</b>${limit ? ` of ${M.fmtDuration(limit)}` : ''}</div>` : ''}
+    <div class="hc-grid" title="Last 30 days">${st.grid.map(g => `<i class="${g.state}" title="${M.fmtDay(g.day, { month: 'short', day: 'numeric' })}: ${{ done: 'done', missed: 'didn’t do it', lapsed: 'missed', open: 'today', off: 'not scheduled' }[g.state]}"></i>`).join('')}</div>
+    <div class="hc-meta"><span>${st.rate == null ? 'New' : `${st.rate}% kept`}</span><span>${st.votes} vote${st.votes === 1 ? '' : 's'}${h.identity ? ' for who you’re becoming' : ''}</span>
+      ${h.twoMinute ? `<span title="The 2-minute version">${ic('timer')}${esc(h.twoMinute)}</span>` : ''}${h.reward ? `<span title="Reward">${ic('check')}then ${esc(h.reward)}</span>` : ''}</div>
+    ${st.missTwice ? `<div class="hc-warn">${ic('alert')} Missed last time. Never miss twice: even the 2-minute version counts today.</div>` : ''}
+    <div class="row" style="flex-wrap:wrap">
+      ${occ && !occ.resolved ? `<button class="btn primary sm" data-act="toggle" data-occ="${esc(occ.id)}">${ic('check')} Done today…</button>
+        <button class="btn sm" data-act="miss" data-occ="${esc(occ.id)}">${ic('x')} Didn’t do it…</button>`
+        : occ?.done ? `<span class="green small">${ic('check')} Done today</span>` : occ?.missed ? `<span class="red small">${ic('x')} Not done today</span>`
+        : `<span class="small muted">${next ? `Next: ${M.fmtDay(next, { weekday: 'short', month: 'short', day: 'numeric' })}` : 'Not scheduled'}</span>`}
+      <span class="grow"></span><button class="btn ghost sm" data-act="edit" data-task="${t.id}">Edit</button></div>
+  </div>`;
+}
+
+function habitsView() {
+  const habits = [...store.tasks.values()].filter(t => M.isHabit(t) && !t.archived && store.taskShown(t)).sort((a, b) => a.title.localeCompare(b.title));
+  const stats = new Map(habits.map(t => [t.id, M.habitStats(t)]));
+  const dueToday = habits.filter(t => stats.get(t.id).today);
+  const doneToday = dueToday.filter(t => stats.get(t.id).today === 'done').length;
+  const votes = [...stats.values()].reduce((n, s) => n + s.votes, 0);
+  const identities = new Map();
+  for (const t of habits) if (t.habit?.identity) identities.set(t.habit.identity, (identities.get(t.habit.identity) || 0) + stats.get(t.id).votes);
+  const card = store.settings.habitScorecard || [];
+  const stat = (v, l, icon, c) => `<div class="stat" style="background:${tint(c, .1)}"><span style="color:${c}">${ic(icon)}</span><div><b>${v}</b><span class="small muted">${l}</span></div></div>`;
+  return `<div class="header"><div class="grow"><h1>Habits</h1><div class="sub">Small habits, repeated. Every check-off is a vote for the person you’re becoming.</div></div>
+      <button class="btn primary" data-act="new-habit">${ic('plus')} New habit</button></div>
+    <div class="page stack">
+      <div class="stats">${stat(`${doneToday}/${dueToday.length}`, 'done today', 'check', '#30d158')}${stat(Math.max(0, ...[...stats.values()].map(s => s.streak)), 'best current streak', 'flame', '#ff9f0a')}
+        ${stat(votes, 'votes cast', 'habit', '#5e5ce6')}${stat(habits.length, habits.length === 1 ? 'habit' : 'habits', 'repeat', '#30b0c7')}</div>
+      ${identities.size ? `<div class="identities">${[...identities].map(([id, n]) => `<span class="identity">${ic('quote')} I am someone who ${esc(id)} <b>${n} vote${n === 1 ? '' : 's'}</b></span>`).join('')}</div>` : ''}
+      ${habits.length ? `<div class="habit-grid">${habits.map(t => habitCard(t, stats.get(t.id))).join('')}</div>`
+        : empty('habit', 'No habits yet', 'Start tiny: pick one thing you want to do every day, and the 2-minute version of it.')}
+      <div><div class="section-title">${ic('list')}Habit scorecard <span class="small muted" style="font-weight:400">what you already do, rated</span></div>
+        <div class="card">
+          ${card.map(c => `<div class="crow"><span class="grow">${esc(c.text)}</span>
+            <div class="seg score">${[['+', 'Good'], ['=', 'Neutral'], ['-', 'Bad']].map(([r, l]) => `<button class="${c.rating === r ? 'on r' + (r === '+' ? 'g' : r === '-' ? 'b' : 'n') : ''}" data-act="score-rate" data-id="${c.id}" data-r="${r}" title="${l}">${r === '-' ? '–' : r}</button>`).join('')}</div>
+            ${c.rating === '-' ? `<button class="btn sm" data-act="score-replace" data-id="${c.id}">${ic('repeat')} Replace it</button>` : ''}
+            <button class="btn ghost sm icon" data-act="score-del" data-id="${c.id}" title="Remove">${ic('x')}</button></div>`).join('')}
+          <form class="crow" data-form="scorecard"><input class="input grow" name="text" placeholder="Something you do every day, e.g. check my phone right after waking up" autocomplete="off">
+            <button class="btn">${ic('plus')} Add</button></form>
+        </div>
+        <div class="small muted" style="margin-top:6px">Rate each one good (+), neutral (=) or bad (–) for who you want to be. “Replace it” starts a habit that takes a bad one’s place.</div></div>
+      <div class="laws">${[['1', 'Make it obvious', 'Give it a cue: a time and place, or stack it after a habit you already have.'],
+        ['2', 'Make it attractive', 'Pair it with something you enjoy, and spend time with people who already do it.'],
+        ['3', 'Make it easy', 'Shrink it to a 2-minute version. Showing up matters more than doing it well.'],
+        ['4', 'Make it satisfying', 'Reward yourself right after, and don’t break the chain: never miss twice.']]
+        .map(([n, t, d]) => `<div class="law"><b>${n}</b><div><div style="font-weight:650">${t}</div><div class="small muted">${d}</div></div></div>`).join('')}</div>
+    </div>`;
+}
+
+// ---------- Focus (time pressure) ----------
+// A session runs on this device: it survives a reload (saved in this browser), counts the time you spend away
+// from Cadence (another tab or app) against your focus, and is saved to your account when it ends.
+const FOCUS_KEY = 'cadence:focus';
+const focus = (() => { try { return JSON.parse(localStorage.getItem(FOCUS_KEY) || 'null') || { running: false }; } catch { return { running: false }; } })();
+const saveFocus = () => { try { localStorage.setItem(FOCUS_KEY, JSON.stringify(focus)); } catch { /* storage blocked */ } };
+const fmtClock = ms => { const s = Math.ceil(ms / 1000), m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
+const focusLeft = () => Math.max(0, (focus.endsAt || 0) - Date.now());
+const awayNow = () => (focus.awayMs || 0) + (focus.awaySince ? Date.now() - focus.awaySince : 0);
+
+function startFocus(minutes, picked) {
+  Object.assign(focus, { running: true, id: M.uuid(), startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000, minutes, picked, finished: [],
+    awayMs: 0, awaySince: document.hasFocus() ? null : Date.now() });
+  ui.focusResult = null;
+  saveFocus(); render(); focusTick();
+}
+
+function endFocus() {
+  if (!focus.running) return;
+  const end = Math.min(Date.now(), focus.endsAt), elapsed = Math.max(1, end - focus.startedAt);
+  const away = Math.min(elapsed, awayNow());
+  const focusPercent = Math.round(100 * (elapsed - away) / elapsed);
+  const finished = focus.finished.length, picked = focus.picked.length;
+  const session = store.saveFocusSession({
+    id: focus.id, startedAt: M.iso(new Date(focus.startedAt)), endedAt: M.iso(new Date(end)), plannedMinutes: focus.minutes,
+    actualMinutes: Math.round(elapsed / 60_000), picked, finished, finishedTitles: focus.finished.map(id => findOcc(id)?.task.title).filter(Boolean),
+    finishedIds: focus.finished, awaySeconds: Math.round(away / 1000), focusPercent, device: 'web',
+    points: M.focusPoints({ finished, picked, focusPercent }),
+  });
+  Object.assign(focus, { running: false });
+  saveFocus();
+  ui.focusResult = session;
+  reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#ff375f' },
+    store.settings.defaultChannels);
+  navigate('focus');
+}
+
+let focusTimer = null;
+function focusTick() {
+  clearInterval(focusTimer);
+  if (!focus.running) return;
+  focusTimer = setInterval(() => {
+    if (!focus.running) { clearInterval(focusTimer); return; }
+    if (focusLeft() <= 0) { clearInterval(focusTimer); endFocus(); return; }
+    // Update just the clock pieces, not the whole page.
+    const left = focusLeft(), frac = left / (focus.minutes * 60_000);
+    for (const el of document.querySelectorAll('[data-focus-clock]')) el.textContent = fmtClock(left);
+    for (const el of document.querySelectorAll('[data-focus-ring]')) el.style.strokeDashoffset = String(2 * Math.PI * 90 * (1 - frac));
+    for (const el of document.querySelectorAll('[data-focus-away]')) el.textContent = M.fmtDuration(awayNow() / 1000);
+    document.body.classList.toggle('focus-final', left < 5 * 60_000);
+    const badge = document.querySelector('.nav-item[href="/app/focus"] .badge');
+    if (badge) badge.textContent = fmtClock(left);
+  }, 1000);
+}
+// Time in another tab or app counts as time away.
+window.addEventListener('blur', () => { if (focus.running && !focus.awaySince) { focus.awaySince = Date.now(); saveFocus(); } });
+window.addEventListener('focus', () => {
+  if (focus.running && focus.awaySince) { focus.awayMs = (focus.awayMs || 0) + Date.now() - focus.awaySince; focus.awaySince = null; saveFocus(); }
+});
+if (focus.running) setTimeout(() => (focusLeft() <= 0 ? endFocus() : focusTick()));
+
+function focusView() {
+  const sessions = store.focusSessions, points = sessions.reduce((n, x) => n + (x.points || 0), 0), lv = M.focusLevel(points);
+  const week = sessions.filter(x => new Date(x.startedAt) >= M.startOfWeek(new Date()));
+  const best = Math.max(0, ...sessions.map(x => x.finished || 0));
+  const levelCard = `<div class="focus-level"><div class="lv-badge">${lv.level}</div><div class="grow">
+      <div class="row"><b>Level ${lv.level}</b><span class="grow"></span><span class="small muted">${points} points · ${lv.span - lv.into} to level ${lv.level + 1}</span></div>
+      <div class="progress"><div style="width:${Math.round(100 * lv.into / lv.span)}%"></div></div>
+      <div class="small muted" style="margin-top:4px">${M.focusStreak(sessions)}-day focus streak · ${week.reduce((n, x) => n + (x.points || 0), 0)} points this week · best session: ${best} done</div></div></div>`;
+  let body;
+  if (focus.running) {
+    const occs = focus.picked.map(findOcc).filter(Boolean), left = focusLeft();
+    body = `<div class="focus-run">
+      <div class="focus-clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" class="track"/>
+        <circle cx="100" cy="100" r="90" class="bar" data-focus-ring style="stroke-dasharray:${2 * Math.PI * 90};stroke-dashoffset:${2 * Math.PI * 90 * (1 - left / (focus.minutes * 60_000))}"/></svg>
+        <div class="fc-inner"><div class="fc-time" data-focus-clock>${fmtClock(left)}</div><div class="small muted">${focus.finished.length} of ${occs.length} done</div>
+          <div class="tiny muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div></div>
+      <div class="grow stack" style="gap:10px;min-width:0">
+        <div class="small muted">Tap Done as you finish each one. You’ll write the reflections when time’s up, so the clock is only for doing.</div>
+        <div class="card">${occs.map(o => { const on = focus.finished.includes(o.id); return `<div class="crow ${on ? 'done' : ''}">
+          <button class="checkbtn" data-act="focus-done" data-occ="${esc(o.id)}" style="${on ? `color:${color(o.task.color)}` : ''}">${ic(on ? 'checked' : 'circle')}</button>
+          <div class="grow"><div class="title ellipsis">${esc(o.task.title)}</div><div class="meta"><span>${M.isHabit(o.task) ? 'Habit' : 'Task'}</span></div></div></div>`; }).join('')}</div>
+        <div class="row"><button class="btn" data-act="focus-more">${ic('plus')} 5 minutes</button><span class="grow"></span>
+          <button class="btn danger" data-act="focus-end">End now</button></div>
+      </div></div>`;
+  } else {
+    const open = store.todayChecklist().filter(o => !o.resolved);
+    const pick = ui.focusPick ?? new Set(open.map(o => o.id));
+    const mins = ui.focusMinutes ?? store.settings.focusMinutes ?? 25;
+    const r = ui.focusResult;
+    const unreflected = r ? (r.finishedIds || []).map(findOcc).filter(o => o && !o.resolved) : [];
+    body = `${r ? `<div class="focus-result"><div class="fr-big">${r.finished}</div><div class="grow"><b>Time! ${r.finished} of ${r.picked} done in ${r.actualMinutes} min</b>
+        <div class="small muted">${r.focusPercent}% focused (${M.fmtDuration(r.awaySeconds)} away) · ×${M.focusMultiplier(r.focusPercent)} · <b class="green">+${r.points} points</b></div>
+        ${unreflected.length ? `<div class="stack" style="gap:6px;margin-top:10px"><div class="small">Write a reflection for each to check it off:</div>
+          ${unreflected.map(o => `<div class="row"><span class="grow ellipsis">${esc(o.task.title)}</span><button class="btn sm primary" data-act="toggle" data-occ="${esc(o.id)}">Reflect &amp; check off</button></div>`).join('')}</div>`
+          : r.finished ? '<div class="small green" style="margin-top:6px">All reflected and checked off.</div>' : ''}</div>
+        <button class="btn ghost sm icon" data-act="focus-dismiss" title="Close">${ic('x')}</button></div>` : ''}
+      <div class="card pad stack" style="gap:14px">
+        <div><div class="section-title" style="margin:0 0 8px">${ic('timer')}How long?</div>
+          <div class="row" style="flex-wrap:wrap">${[10, 15, 25, 45, 60].map(n => `<button class="btn ${mins === n ? 'primary' : ''}" data-act="focus-mins" data-m="${n}">${n} min</button>`).join('')}
+            <input class="input" type="number" min="1" max="240" style="width:90px" value="${mins}" data-bind="focusMinutes" title="Minutes"></div></div>
+        <div><div class="section-title" style="margin:0 0 8px">${ic('list')}What will you get through? <span class="count">${pick.size}</span></div>
+          ${open.length ? `<div class="focus-pick">${open.map(o => `<label class="check"><input type="checkbox" data-act-change="focus-pick" value="${esc(o.id)}" ${pick.has(o.id) ? 'checked' : ''}>
+            <span class="ellipsis">${esc(o.task.title)}</span><span class="tiny muted">${M.isHabit(o.task) ? 'habit' : M.isUntilDone(o.task) ? 'until done' : 'today'}</span></label>`).join('')}</div>`
+            : '<div class="muted">Nothing open on today’s list. Add a task first.</div>'}</div>
+        <div class="row"><div class="small muted grow">Score: 10 points per task finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.</div>
+          <button class="btn primary" data-act="focus-start" ${pick.size ? '' : 'disabled'}>${ic('target')} Start ${mins}-minute focus</button></div>
+      </div>`;
+  }
+  return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Race the clock: set a time, then see how much of your list you can finish before it runs out.</div></div></div>
+    <div class="page stack" style="max-width:980px">
+      ${levelCard}${body}
+      ${sessions.length ? `<div><div class="section-title">${ic('clock')}Recent sessions</div><div class="card">${sessions.slice(0, 8).map(x => `<div class="crow">
+        <span class="evt-time">${M.fmtDay(x.startedAt, { month: 'short', day: 'numeric' })}<small>${M.fmtTime(x.startedAt)}</small></span>
+        <div class="grow"><div class="title">${x.finished} of ${x.picked} done in ${x.actualMinutes} min</div>
+          <div class="meta"><span>${x.focusPercent}% focused</span>${x.distractingSeconds ? `<span>${M.fmtDuration(x.distractingSeconds)} in distracting apps</span>` : ''}<span>${x.device === 'mac' ? 'Mac' : 'Web'}</span></div></div>
+        <b class="green">+${x.points}</b></div>`).join('')}</div></div>` : ''}
+    </div>`;
+}
+
+// ---------- Screen time ----------
+// Measured by the Cadence Mac app (which apps were in front while you used your Mac); each Mac syncs one
+// summary per day. The web shows them and keeps the settings (distracting apps, limits) that every device uses.
+function screenSummary(day) {
+  const recs = store.screenDays(day), apps = new Map();
+  for (const r of recs) for (const a of r.apps || []) apps.set(a.name, (apps.get(a.name) || 0) + a.seconds);
+  const distracting = new Set((store.settings.distractingApps || []).map(x => x.toLowerCase()));
+  const list = [...apps].map(([name, seconds]) => ({ name, seconds, distracting: distracting.has(name.toLowerCase()) })).sort((a, b) => b.seconds - a.seconds);
+  return { has: recs.length > 0, total: recs.reduce((n, r) => n + (r.totalSeconds || 0), 0), distracting: list.filter(a => a.distracting).reduce((n, a) => n + a.seconds, 0), apps: list };
+}
+
+function screenTimeView() {
+  const s = store.settings, today = screenSummary(new Date());
+  const days = [...Array(7)].map((_, i) => M.addDays(M.startOfDay(new Date()), i - 6)).map(d => ({ d, ...screenSummary(d) }));
+  const max = Math.max(1, ...days.map(x => x.total));
+  const sel = (key, value) => `<select class="input" style="width:auto" data-setting="${key}">${[[0, 'Off'], [30, '30 min'], [60, '1 hour'], [90, '1.5 hours'], [120, '2 hours'], [180, '3 hours'], [240, '4 hours'], [360, '6 hours'], [480, '8 hours']]
+    .map(([v, l]) => `<option value="${v}" ${Number(value) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const over = (sec, lim) => lim && sec > lim * 60;
+  return `<div class="header"><div class="grow"><h1>Screen Time</h1><div class="sub">Where your computer time goes, so focus time and habits can use it.</div></div></div>
+    <div class="page stack" style="max-width:980px">
+      ${!today.has && !days.some(x => x.has) ? `<div class="callout"><span class="big">${ic('monitor')}</span><div class="grow"><b>Screen time comes from the Cadence Mac app</b>
+        <div class="small muted">A website can’t see what other apps you use. In the Mac app, open Screen Time and turn on tracking: it records how long each app is in front while you’re using your Mac, and the daily totals show up here and on every device.</div></div></div>` : ''}
+      <div class="stats">
+        <div class="stat" style="background:${tint('#5ac8fa', .12)}"><span style="color:#5ac8fa">${ic('monitor')}</span><div><b class="${over(today.total, s.screenLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.total) : '—'}</b><span class="small muted">today${s.screenLimitMinutes ? ` · limit ${M.fmtDuration(s.screenLimitMinutes * 60)}` : ''}</span></div></div>
+        <div class="stat" style="background:${tint('#ff375f', .1)}"><span style="color:#ff375f">${ic('alert')}</span><div><b class="${over(today.distracting, s.distractingLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.distracting) : '—'}</b><span class="small muted">distracting${s.distractingLimitMinutes ? ` · limit ${M.fmtDuration(s.distractingLimitMinutes * 60)}` : ''}</span></div></div>
+        <div class="stat" style="background:${tint('#30d158', .1)}"><span style="color:#30d158">${ic('target')}</span><div><b>${M.fmtDuration(store.focusSessions.filter(x => M.isToday(x.startedAt)).reduce((n, x) => n + (x.actualMinutes || 0) * 60, 0))}</b><span class="small muted">in focus sessions today</span></div></div>
+        <div class="stat" style="background:${tint('#5e5ce6', .1)}"><span style="color:#5e5ce6">${ic('week')}</span><div><b>${days.some(x => x.has) ? M.fmtDuration(days.reduce((n, x) => n + x.total, 0) / Math.max(1, days.filter(x => x.has).length)) : '—'}</b><span class="small muted">daily average (7 days)</span></div></div></div>
+      ${days.some(x => x.has) ? `<div class="card pad"><div class="section-title" style="margin:0 0 10px">${ic('week')}Last 7 days</div>
+        <div class="st-week">${days.map(x => `<div class="st-day" title="${M.fmtDay(x.d, { weekday: 'long' })}: ${M.fmtDuration(x.total)} (${M.fmtDuration(x.distracting)} distracting)">
+          <div class="st-col"><div class="st-bar" style="height:${100 * x.total / max}%"><div class="st-dis" style="height:${x.total ? 100 * x.distracting / x.total : 0}%"></div></div></div>
+          <div class="tiny muted">${M.WEEKDAY_SHORT[x.d.getDay()]}</div><div class="tiny">${x.has ? M.fmtDuration(x.total) : ''}</div></div>`).join('')}</div>
+        <div class="tiny muted" style="margin-top:6px"><span class="st-key"></span> all apps <span class="st-key dis"></span> distracting</div></div>` : ''}
+      ${today.apps.length ? `<div class="card pad"><div class="section-title" style="margin:0 0 10px">${ic('list')}Today by app <span class="small muted" style="font-weight:400">click one to mark it distracting</span></div>
+        ${today.apps.slice(0, 12).map(a => `<div class="st-app ${a.distracting ? 'dis' : ''}" data-act="toggle-distracting" data-app="${esc(a.name)}" title="${a.distracting ? 'Distracting — click to unmark' : 'Click to mark as distracting'}">
+          <span class="ellipsis" style="width:160px">${esc(a.name)}</span><div class="grow st-track"><div style="width:${100 * a.seconds / today.apps[0].seconds}%"></div></div>
+          <span class="small" style="width:64px;text-align:right">${M.fmtDuration(a.seconds)}</span>${a.distracting ? `<span class="tiny red">distracting</span>` : '<span class="tiny muted" style="visibility:hidden">distracting</span>'}</div>`).join('')}</div>` : ''}
+      <div><h3 style="margin:6px 0">Focus settings</h3><div class="card">
+        <div class="srow"><div>Daily screen-time limit<div class="small muted">The Mac app nudges you once you go past it.</div></div>${sel('screenLimitMinutes', s.screenLimitMinutes)}</div>
+        <div class="srow"><div>Daily limit for distracting apps</div>${sel('distractingLimitMinutes', s.distractingLimitMinutes)}</div>
+        <div class="srow" style="flex-wrap:wrap"><div class="grow">Distracting apps<div class="small muted">During a focus session, the Mac app nudges you back when one of these comes to the front, and time in them lowers your focus score.</div>
+          <div class="chips" style="margin-top:8px">${(s.distractingApps || []).map(a => `<span class="chip-x">${esc(a)}<button data-act="toggle-distracting" data-app="${esc(a)}" title="Remove">${ic('x')}</button></span>`).join('') || '<span class="small muted">None yet.</span>'}</div></div>
+          <form class="row" data-form="distracting"><input class="input" name="app" placeholder="App name, e.g. YouTube" style="width:200px"><button class="btn">${ic('plus')} Add</button></form></div>
+      </div></div>
+    </div>`;
 }
 
 // ---------- Week ----------
@@ -387,8 +647,9 @@ function allDayItems(day) {
 
 /** Split a checklist into what's on for the day and the tasks that stay until done (with a subheading). */
 function splitUntilDone(items) {
-  const daily = items.filter(o => !M.isUntilDone(o.task)), ongoing = items.filter(o => M.isUntilDone(o.task));
-  return [[null, daily], ...(ongoing.length ? [['Until done', ongoing]] : [])];
+  const habits = items.filter(o => M.isHabit(o.task));
+  const daily = items.filter(o => !M.isHabit(o.task) && !M.isUntilDone(o.task)), ongoing = items.filter(o => !M.isHabit(o.task) && M.isUntilDone(o.task));
+  return [[null, daily], ...(habits.length ? [['Habits', habits]] : []), ...(ongoing.length ? [['Until done', ongoing]] : [])];
 }
 
 /** Until-done tasks in a week as one bar per stretch of days (a new bar when the next repeat takes over). */
@@ -508,9 +769,9 @@ function todoView() {
     const overdue = store.overdue().filter(o => match(o.task.title));
     // Until-done tasks are listed once (in their own group), not again on every day they carry over to;
     // a repeating one still shows on the day its next one starts.
-    const ongoing = store.tasksOn(new Date()).filter(o => M.isUntilDone(o.task) && match(o.task.title) && (t.showCompleted || !o.resolved));
+    const ongoing = store.tasksOn(new Date()).filter(o => !M.isHabit(o.task) && M.isUntilDone(o.task) && match(o.task.title) && (t.showCompleted || !o.resolved));
     const groups = [...Array(t.range)].map((_, i) => M.addDays(M.startOfDay(new Date()), i))
-      .map(d => [d, store.tasksOn(d).filter(o => match(o.task.title) && (t.showCompleted || !o.resolved)
+      .map(d => [d, store.tasksOn(d).filter(o => !M.isHabit(o.task) && match(o.task.title) && (t.showCompleted || !o.resolved)
         && (!M.isUntilDone(o.task) || (!M.isToday(d) && M.sameDay(M.repStartOn(o.task, d), d))))])
       .filter(([, list]) => list.length);
     const group = (title, icon, list, showDate) => `<div><div class="section-title">${ic(icon)}${title}
@@ -533,7 +794,7 @@ function todoView() {
     }
     if (!body) body = empty('cal', t.search ? 'No matches' : 'No upcoming events', t.search ? '' : 'Create one with New event, or connect Google Calendar or Calendly in Settings.');
   } else {
-    const tasks = [...store.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && match(x.title));
+    const tasks = [...store.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && !M.isHabit(x) && match(x.title));
     const untilDone = tasks.filter(x => M.isUntilDone(x)).sort((a, b) => b.startDate.localeCompare(a.startDate));
     const repeating = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency !== 'none').sort((a, b) => a.title.localeCompare(b.title));
     const once = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency === 'none').sort((a, b) => b.startDate.localeCompare(a.startDate));
@@ -563,7 +824,7 @@ function todoView() {
     if (once.length) body += `<div><div class="section-title">${ic('check')}One-time <span class="count">${once.length}</span></div><div class="card">${once.map(row).join('')}</div></div>`;
     if (!body) body = empty('list', t.search ? 'No matches' : 'No tasks yet', '');
   }
-  return `<div class="header"><div class="grow"><h1>To-Do List</h1><div class="sub">Every task in one place, including each repeat.</div></div>
+  return `<div class="header"><div class="grow"><h1>To-Do List</h1><div class="sub">Every task in one place. Repeating things are habits now: they live on the <a href="/app/habits">Habits</a> page.</div></div>
     <div class="seg"><button class="${t.mode === 'checklist' ? 'on' : ''}" data-act="todo-mode" data-mode="checklist">Upcoming checklist</button>
     <button class="${t.mode === 'tasks' ? 'on' : ''}" data-act="todo-mode" data-mode="tasks">All tasks</button>
     <button class="${t.mode === 'events' ? 'on' : ''}" data-act="todo-mode" data-mode="events">Events</button></div></div>
@@ -788,6 +1049,9 @@ function settingsView() {
           <div class="srow"><div class="green">${ic('check')} Connected${g.email ? ` as ${esc(g.email)}` : ''}</div>
             <div class="row"><button class="btn" data-act="google-refresh">${ic('refresh')} Refresh</button><button class="btn danger" data-act="google-disconnect">Disconnect</button></div></div>
           <div class="srow">${tog('showGoogleEvents', 'Show Google events in Cadence calendars', s.showGoogleEvents)}</div>
+          <div class="srow">${g.tasks ? tog('syncGoogleTasks', 'Sync Google Tasks (they show up as tasks kept until done; checking one off completes it in Google)', s.syncGoogleTasks !== false)
+            : `<div class="grow">Google Tasks<div class="small muted">Your Google connection is from before Cadence supported Google Tasks. Connect again to add it.</div></div>
+              <a class="btn" href="/api/google/connect">${ic('sync')} Connect again</a>`}</div>
           <div class="srow"><span>Remind me before Google events</span>${sel('googleEventReminderMinutes', [[0, 'Off'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'], [30, '30 minutes']], s.googleEventReminderMinutes)}</div>
           ${g.calendars.length ? `<div class="srow"><div class="grow">Calendars to show and check for busy times (this device)
             <div class="chans" style="margin-top:6px">${g.calendars.map(c => `<label class="check"><input type="checkbox" data-act-change="gcal" value="${esc(c.id)}"
@@ -934,7 +1198,7 @@ function checkInDialog(m) {
       <div class="grow"><h2>${esc(m.title)}</h2><div class="muted">${M.fmtDay(new Date())} · ${!items.length ? 'nothing scheduled' : done === items.length ? 'all done' : left ? `${left} left` : 'all settled'}</div></div>
       ${ring(done, items.length, 54, 6, 'checkin')}</div>
     ${done && done === items.length ? `<div class="green">${ic('check')} Everything is checked off. Nice work.</div>` : ''}
-    <div class="card" style="max-height:340px;overflow:auto">${items.length ? splitUntilDone(items).map(([label, list]) => (label ? `<div class="crow-sub">${ic('flame')}${label}</div>` : '') + list.map(o => crow(o, { ctx: 'checkin' })).join('')).join('') : '<div class="crow muted">Nothing on today’s checklist. Add something so future-you knows the plan.</div>'}</div>
+    <div class="card" style="max-height:340px;overflow:auto">${items.length ? splitUntilDone(items).map(([label, list]) => (label ? `<div class="crow-sub">${ic(label === 'Habits' ? 'habit' : 'flame')}${label}</div>` : '') + list.map(o => crow(o, { ctx: 'checkin' })).join('')).join('') : '<div class="crow muted">Nothing on today’s checklist. Add something so future-you knows the plan.</div>'}</div>
     ${upcoming.length ? `<div><b>Still ahead on your calendar</b>${upcoming.slice(0, 4).map(e => `<div class="row small" style="margin-top:4px">
       <span style="width:3px;height:16px;background:${e.colorHex || '#0a84ff'};border-radius:2px"></span><span class="muted" style="width:72px">${M.fmtTime(e.startDate)}</span>${esc(e.title)}</div>`).join('')}</div>` : ''}
     </div><div class="foot"><button class="btn" data-act="new-task">${ic('plus')} Add task</button><span class="grow"></span>
@@ -1017,6 +1281,35 @@ function openEditor(task, isNew) {
   });
 }
 
+// --- habits: the Atomic Habits fields (how to make it stick) ---
+const HABIT_FIELDS = ['identity', 'cue', 'stackAfter', 'replaces', 'twoMinute', 'reward', 'app', 'limitMinutes'];
+function habitSentence(t) {
+  const h = t.habit || {}, title = t.title.trim() || 'this habit', lower = title[0].toLowerCase() + title.slice(1);
+  if (h.style === 'stack' && h.stackAfter) return `After I ${h.stackAfter}, I will ${lower}.`;
+  if (h.style === 'replace' && h.replaces) return `Instead of ${h.replaces}, I will ${lower}.`;
+  if (h.style === 'break') return `I’m breaking the habit: ${lower}.`;
+  return h.cue ? `I will ${lower} ${h.cue}.` : '';
+}
+
+function habitFields(m) {
+  const d = m.draft, h = d.habit || (d.habit = { style: 'build' }), style = h.style || 'build';
+  const others = [...store.tasks.values()].filter(t => M.isHabit(t) && !t.archived && t.id !== d.id).map(t => t.title);
+  const field = (k, label, ph) => `<label class="field"><span>${label}</span><input class="input" data-edit="h-${k}" value="${esc(h[k] ?? '')}" placeholder="${esc(ph)}"></label>`;
+  const sentence = habitSentence(d);
+  return `<div class="fieldset"><div class="legend">${ic('habit')} Make it stick</div>
+    <div class="seg wide">${M.HABIT_STYLES.map(([v, l]) => `<button type="button" class="${style === v ? 'on' : ''}" data-act="habit-style" data-style="${v}">${l.replace(/ a (new )?habit$/, '').replace('Stack it on', 'Stack on')}</button>`).join('')}</div>
+    ${style === 'stack' ? `<label class="field"><span>After I… (a habit you already have)</span><input class="input" data-edit="h-stackAfter" list="habitTitles" value="${esc(h.stackAfter ?? '')}" placeholder="pour my morning coffee"></label>
+      <datalist id="habitTitles">${others.map(o => `<option value="${esc(o[0].toLowerCase() + o.slice(1))}">`).join('')}</datalist>` : ''}
+    ${style === 'replace' ? field('replaces', 'Instead of… (the habit you’re replacing)', 'scrolling my phone in bed') : ''}
+    ${style === 'break' ? `<div class="grid2">${field('app', 'Screen-time app to keep down (optional)', 'YouTube')}${field('limitMinutes', 'Daily limit (minutes)', '30')}</div>
+      <div class="small muted" style="margin-top:-6px">The Cadence Mac app measures screen time, so the habit shows how you’re doing against the limit.</div>` : ''}
+    ${field('identity', 'Who you’re becoming: I am someone who…', 'reads every day')}
+    <div class="grid2">${field('cue', 'Make it obvious: when and where', 'at 9 PM on the couch')}${field('twoMinute', 'Make it easy: the 2-minute version', 'read one page')}</div>
+    ${field('reward', 'Make it satisfying: right after, I get…', 'a cup of tea')}
+    ${sentence ? `<div class="habit-sentence">${ic('quote')} ${esc(sentence)}</div>` : ''}
+  </div>`;
+}
+
 // --- task presets: a saved set of conditions to start new tasks from ---
 function presetRow(m) {
   const presets = store.settings.taskPresets || [];
@@ -1097,15 +1390,19 @@ function editorOverlaps(m) {
 
 function editorDialog(m) {
   const d = m.draft, r = d.recurrence, lt = d.mode === 'longTerm', cyc = M.isCycle(d), persist = d.mode === 'untilDone' && !cyc;
+  const isHab = M.isHabit(d), kindName = M.isEvent(d) ? 'Event' : isHab ? 'Habit' : 'Task';
   const unit = M.FREQUENCIES.find(f => f[0] === r.frequency)[2];
   const overlaps = editorOverlaps(m);
   const preview = { ...r, end: m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} } };
   const offCheck = o => `<label class="check"><input type="checkbox" data-edit="offset" value="${o}" ${d.reminderOffsets.includes(o) ? 'checked' : ''}>${M.offsetLabel(o)}</label>`;
   return `<form class="dialog" data-form="editor"><div class="body">
-    <div class="row"><h2 class="grow">${m.isNew ? (M.isEvent(d) ? 'New Event' : 'New Task') : (M.isEvent(d) ? 'Edit Event' : 'Edit Task')}</h2>
-      <div class="seg"><button type="button" class="${M.isEvent(d) ? '' : 'on'}" data-act="edit-kind" data-kind="task">${ic('list')} Task</button>
-      <button type="button" class="${M.isEvent(d) ? 'on' : ''}" data-act="edit-kind" data-kind="event">${ic('cal')} Event</button></div></div>
-    <div class="small muted" style="margin-top:-6px">${M.isEvent(d) ? 'Events show on your calendars only: no checkbox, no reflection.' : 'Tasks go on your checklist; checking one off asks for a short reflection.'}</div>
+    <div class="row"><h2 class="grow">${m.isNew ? 'New' : 'Edit'} ${kindName}</h2>
+      <div class="seg"><button type="button" class="${kindName === 'Task' ? 'on' : ''}" data-act="edit-kind" data-kind="task">${ic('list')} Task</button>
+      <button type="button" class="${kindName === 'Habit' ? 'on' : ''}" data-act="edit-kind" data-kind="habit">${ic('habit')} Habit</button>
+      <button type="button" class="${kindName === 'Event' ? 'on' : ''}" data-act="edit-kind" data-kind="event">${ic('cal')} Event</button></div></div>
+    <div class="small muted" style="margin-top:-6px">${M.isEvent(d) ? 'Events show on your calendars only: no checkbox, no reflection.'
+      : isHab ? 'Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you’re becoming.'
+      : 'Tasks go on your checklist; checking one off asks for a short reflection.'}</div>
     ${presetRow(m)}
     <label class="field"><span>Title</span><input class="input" data-edit="title" value="${esc(d.title)}" placeholder="What do you need to do?" autofocus required></label>
     <label class="field"><span>Notes</span><textarea class="input" data-edit="notes" rows="2" placeholder="Optional details">${esc(d.notes)}</textarea></label>
@@ -1124,10 +1421,12 @@ function editorDialog(m) {
     ${d.source === 'google' && !m.isNew ? `<div class="fieldset"><div class="legend">${ic('sync')} Synced with Google Calendar</div>
       <div class="small muted">Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.</div>
       ${d.externalURL ? `<a class="small" href="${esc(d.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : ''}</div>` : `
-    <div class="fieldset"><div class="legend">Repeat &amp; conditions</div>
-      <div class="grid2"><label class="field"><span>Repeats</span><select class="input" data-edit="frequency" data-rerender>${M.FREQUENCIES.map(([v, l]) => `<option value="${v}" ${!lt && !cyc && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
-        ${M.isEvent(d) ? '' : `<optgroup label="Keep reminding me"><option value="longTerm" ${lt ? 'selected' : ''}>Long-term: every day until a date</option>
-          <option value="cycle" ${cyc ? 'selected' : ''}>After it’s done, with a break</option></optgroup>`}</select></label>
+    <div class="fieldset"><div class="legend">${isHab || M.isEvent(d) ? 'Repeat' : 'Conditions'}</div>
+      <div class="grid2"><label class="field"><span>${isHab || M.isEvent(d) ? 'Repeats' : 'Comes back'}</span><select class="input" data-edit="frequency" data-rerender>
+        ${(isHab ? M.FREQUENCIES.filter(([v]) => v !== 'none') : M.isEvent(d) ? M.FREQUENCIES : [['none', 'No, just once']])
+          .map(([v, l]) => `<option value="${v}" ${!lt && !cyc && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
+        ${isHab ? `<option value="longTerm" ${lt ? 'selected' : ''}>Long-term: every day until a date</option>` : ''}
+        ${!isHab && !M.isEvent(d) ? `<option value="cycle" ${cyc ? 'selected' : ''}>After it’s done, with a break</option>` : ''}</select></label>
       ${lt ? `<label class="field"><span>Every day until</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
       ${!lt && r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
       ${cyc ? `<div class="grid2"><label class="field"><span>Break before it comes back</span><div class="row">
@@ -1152,6 +1451,7 @@ function editorDialog(m) {
             ${m.hasDue ? `<input class="input" style="width:auto" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"><span class="small muted">It keeps going past the due date, marked “Past due”.</span>` : ''}</div>` : ''}` : ''}`}
     </div>
     `}
+    ${isHab ? habitFields(m) : ''}
     <div class="fieldset"><div class="legend">Reminders</div>
       <label class="check"><input type="checkbox" data-edit="notify" data-rerender ${d.channels.length ? 'checked' : ''}>
         ${d.channels.length ? `${ic('bell')} Notify me about this task` : `${ic('bell-off')} No notifications — stays on the checklist quietly`}</label>
@@ -1163,6 +1463,9 @@ function editorDialog(m) {
       ${d.source ? `<div class="small muted">Imported from ${d.source === 'calendly' ? 'Calendly' : 'Google Calendar'}. Its title and time update on each import.</div>` : ''}
     </div>
     <div class="fieldset"><div class="legend">Color</div><div class="swatches">${Object.entries(M.COLORS).map(([k, v]) => `<button type="button" class="swatch ${d.color === k ? 'on' : ''}" style="background:${v}" data-act="edit-color" data-color="${k}" title="${k}"></button>`).join('')}</div></div>
+    ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !d.source
+      ? `<label class="check"><input type="checkbox" data-edit="addToGTasks" ${m.addToGTasks ? 'checked' : ''}>${ic('list')} Also add to Google Tasks</label>` : ''}
+    ${d.source === 'gtasks' ? `<div class="small muted">${ic('sync')} Synced with Google Tasks: title, notes, due date and checking it off update Google too.</div>` : ''}
     ${!store.google.connected || d.googleEventID || d.source ? '' : M.isEvent(d)
       ? `<label class="check"><input type="checkbox" data-edit="syncGoogle" data-rerender ${m.syncGoogle ? 'checked' : ''}>${ic('sync')} Sync with Google Calendar</label>
          <div class="small muted" style="margin-top:-8px">${m.syncGoogle ? `Creates it in your Google Calendar${r.frequency !== 'none' ? ' (with the repeat schedule)' : ''}; edits stay in sync both ways.` : 'Keep this event in Cadence only.'}</div>`
@@ -1178,6 +1481,7 @@ function readEditorInputs() {
   const root = $('#modal');
   const val = k => root.querySelector(`[data-edit="${k}"]`);
   if (val('title')) m.draft.title = val('title').value;
+  for (const k of HABIT_FIELDS) if (val(`h-${k}`)) (m.draft.habit ??= { style: 'build' })[k] = val(`h-${k}`).value;
   if (val('presetName')) m.presetName = val('presetName').value;
   if (val('notes')) m.draft.notes = val('notes').value;
   if (val('date')?.value) m.date = val('date').value;
@@ -1223,6 +1527,7 @@ function readEditorInputs() {
   else if (notify?.checked) m.draft.channels = [...store.settings.defaultChannels];
   if (val('addToGoogle')) m.addToGoogle = val('addToGoogle').checked;
   if (val('syncGoogle')) m.syncGoogle = val('syncGoogle').checked;
+  if (val('addToGTasks')) m.addToGTasks = val('addToGTasks').checked;
 }
 
 async function saveEditor() {
@@ -1236,6 +1541,13 @@ async function saveEditor() {
   if (t.recurrence.frequency === 'weekly' && !t.recurrence.weekdays.length) t.recurrence.weekdays = [M.weekday(M.parseKey(m.date))];
   if (t.recurrence.frequency !== 'weekly') t.recurrence.weekdays = [];
   if (M.isEvent(t)) delete t.mode;
+  // Habits keep their Atomic Habits notes (trimmed); tasks and events don't have any.
+  if (M.isHabit(t)) {
+    t.kind = 'habit';
+    const h = { style: t.habit?.style || 'build' };
+    for (const k of HABIT_FIELDS) { const v = String(t.habit?.[k] ?? '').trim(); if (v) h[k] = k === 'limitMinutes' ? Math.max(1, Number(v) || 0) : v; }
+    t.habit = h;
+  } else delete t.habit;
   if (t.mode === 'longTerm') {
     if (m.endDate < m.date) { m.error = 'The end date has to be on or after the start date.'; renderModal(); return; }
     t.recurrence = { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } };
@@ -1254,6 +1566,31 @@ async function saveEditor() {
     start: M.iso(start0), end: M.iso(M.addMinutes(start0, t.durationMinutes)),
     startDate: M.dateKey(day0), endDate: M.dateKey(M.addDays(day0, 1)),
   };
+
+  // A Google Tasks item: save here, then push the title/notes/due date to Google.
+  if (!m.isNew && t.source === 'gtasks' && t.googleTaskID) {
+    store.upsertTask(t);
+    closeModal();
+    store.updateGoogleTask({ listId: t.sourceCalendar || '@default', taskId: t.googleTaskID, title: t.title, notes: t.notes,
+      due: t.dueDate ? M.dateKey(t.dueDate) : null }).then(() => toast('Updated in Google Tasks too', { icon: 'sync', tone: 'good' }))
+      .catch(e => toast(`Saved in Cadence, but Google Tasks didn't update: ${e.message}`, { icon: 'alert', tone: 'bad' }));
+    return;
+  }
+
+  // A new task that also goes to Google Tasks: create it there, then keep it as the synced copy.
+  if (m.isNew && m.addToGTasks && !M.isEvent(t) && !M.isHabit(t) && store.google.tasks) {
+    m.saving = true; renderModal();
+    try {
+      const gt = await store.createGoogleTask({ title: t.title, notes: t.notes, due: M.dateKey(t.dueDate || t.startDate) });
+      store.upsertTask({ ...t, id: await M.stableUUID(`gtasks:${gt.id}`), source: 'gtasks', googleTaskID: gt.id, sourceCalendar: gt.listId,
+        ...(gt.link ? { externalURL: gt.link } : {}) });
+      closeModal(); toast('Added to Cadence and Google Tasks', { icon: 'sync', tone: 'good' });
+    } catch (e) {
+      store.upsertTask(t);
+      m.saving = false; m.error = `Saved in Cadence only — Google Tasks failed: ${e.message}`; renderModal();
+    }
+    return;
+  }
 
   // Editing an event that's synced with Google: save here, then push the change to Google.
   if (!m.isNew && t.source === 'google' && t.googleEventID) {
@@ -1355,6 +1692,13 @@ function beginReflection(o, mode = 'done') {
   openModal({ type: 'reflection', occ: fresh, mode });
 }
 
+/** A new habit: daily, building something new, with the Atomic Habits fields to fill in. */
+function newHabitAt(day, fields = {}) {
+  openEditor(M.newTask({ kind: 'habit', busy: false, color: 'green', startDate: M.iso(M.startOfDay(day)),
+    recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { never: {} } }, habit: { style: 'build' },
+    channels: [...store.settings.defaultChannels], ...fields }), true);
+}
+
 function newTaskAt(day, minutes) {
   openEditor(M.newTask({ busy: false, startDate: M.iso(M.startOfDay(day)), ...(minutes != null ? { timeMinutes: minutes } : {}), channels: [...store.settings.defaultChannels] }), true);
 }
@@ -1409,9 +1753,21 @@ const actions = {
   },
   'edit-kind': el => {
     readEditorInputs();
-    const m = ui.modal, k = el.dataset.kind;
-    m.draft.kind = k;
-    if (k === 'event') delete m.draft.mode;   // events have no check-off, so no "until done"/long-term
+    const m = ui.modal, k = el.dataset.kind, d = m.draft;
+    d.kind = k;
+    if (k === 'event') delete d.mode;   // events have no check-off, so no "until done"/long-term
+    if (k === 'habit') {
+      // Habits repeat; they start out daily and as building something new.
+      if (d.recurrence.frequency === 'none') d.recurrence = { ...d.recurrence, frequency: 'daily', interval: 1 };
+      if (M.isCycle(d)) { delete d.cycleGapDays; delete d.cycleTimes; delete d.mode; }
+      d.habit ??= { style: 'build' };
+      if (m.isNew && d.color === 'blue') d.color = 'green';
+    }
+    if (k === 'task') {
+      // Repeating things are habits; a task happens once (or comes back after a break).
+      if (d.recurrence.frequency !== 'none') { d.recurrence = { ...d.recurrence, frequency: 'none', weekdays: [] }; m.endMode = 'never'; }
+      if (d.mode === 'longTerm') delete d.mode;
+    }
     if (!m.busyChosen) m.draft.busy = k === 'event';   // events start closed, tasks open
     if (k === 'event' && m.isNew) {
       if (!m.hasTime) { m.hasTime = true; m.time = '09:00'; }
@@ -1434,6 +1790,36 @@ const actions = {
     store.updateSettings({ taskPresets: store.settings.taskPresets.filter(x => x.id !== p.id) });
     toast(`Deleted preset “${p.name}”`, { icon: 'trash', undo: () => store.updateSettings({ taskPresets: [...store.settings.taskPresets, p] }) });
   },
+  'toggle-distracting': el => {
+    const app = el.dataset.app, list = store.settings.distractingApps || [];
+    const has = list.some(x => x.toLowerCase() === app.toLowerCase());
+    store.updateSettings({ distractingApps: has ? list.filter(x => x.toLowerCase() !== app.toLowerCase()) : [...list, app] });
+  },
+  'focus-mins': el => { ui.focusMinutes = Number(el.dataset.m); render(); },
+  'focus-start': () => {
+    const pick = ui.focusPick ?? new Set(store.todayChecklist().filter(o => !o.resolved).map(o => o.id));
+    const mins = Math.min(240, Math.max(1, ui.focusMinutes ?? store.settings.focusMinutes ?? 25));
+    if (mins !== store.settings.focusMinutes) store.updateSettings({ focusMinutes: mins });
+    ui.focusPick = null;
+    startFocus(mins, [...pick]);
+  },
+  'focus-done': el => {
+    const id = el.dataset.occ, i = focus.finished.indexOf(id);
+    if (i >= 0) focus.finished.splice(i, 1); else focus.finished.push(id);
+    saveFocus(); render();
+    if (focus.finished.length === focus.picked.length) endFocus();   // cleared the list: stop the clock
+  },
+  'focus-more': () => { focus.endsAt += 5 * 60_000; focus.minutes += 5; saveFocus(); render(); },
+  'focus-end': () => confirmThen('End this focus session?', 'Your score counts what you’ve finished so far.', 'End now', () => endFocus()),
+  'focus-dismiss': () => { ui.focusResult = null; render(); },
+  'score-rate': el => store.updateSettings({ habitScorecard: store.settings.habitScorecard.map(c => c.id === el.dataset.id ? { ...c, rating: el.dataset.r } : c) }),
+  'score-del': el => store.updateSettings({ habitScorecard: store.settings.habitScorecard.filter(c => c.id !== el.dataset.id) }),
+  'score-replace': el => {
+    const c = store.settings.habitScorecard.find(x => x.id === el.dataset.id);
+    if (c) newHabitAt(new Date(), { habit: { style: 'replace', replaces: c.text[0].toLowerCase() + c.text.slice(1) } });
+  },
+  'habit-style': el => { readEditorInputs(); (ui.modal.draft.habit ??= {}).style = el.dataset.style; renderModal(); },
+  'new-habit': () => newHabitAt(new Date()),
   'edit-busy': el => { readEditorInputs(); ui.modal.draft.busy = el.dataset.busy === '1'; ui.modal.busyChosen = true; renderModal(); },
   'new-at': el => { const d = new Date(Number(el.dataset.at)); newTaskAt(d, Math.min(1435, Math.floor(M.minutesOf(d) / 5) * 5)); },
   edit: el => { const t = store.tasks.get(el.dataset.task); if (t) openEditor(t, false); },
@@ -1652,6 +2038,13 @@ document.addEventListener('change', e => {
     return;
   }
   if (el.dataset.actChange === 'browser-reminders') { store.setDevice('browserReminders', el.checked); render(); return; }
+  if (el.dataset.actChange === 'focus-pick') {
+    const pick = ui.focusPick ?? new Set(store.todayChecklist().filter(o => !o.resolved).map(o => o.id));
+    if (el.checked) pick.add(el.value); else pick.delete(el.value);
+    ui.focusPick = pick; render();
+    return;
+  }
+  if (el.dataset.bind === 'focusMinutes') { ui.focusMinutes = Math.min(240, Math.max(1, Number(el.value) || 25)); render(); return; }
   if (el.dataset.actChange === 'cal-toggle') {
     store.setCalendarShown(el.value, el.checked);
     ui.booking.loadedFor = null;   // busy times depend on which calendars count
@@ -1687,6 +2080,14 @@ document.addEventListener('submit', async e => {
     } catch (err) {
       ui.auth.busy = false; ui.auth.error = err.message; render();
     }
+  } else if (kind === 'distracting') {
+    const app = form.querySelector('[name=app]').value.trim();
+    if (app && !(store.settings.distractingApps || []).some(x => x.toLowerCase() === app.toLowerCase())) store.updateSettings({ distractingApps: [...(store.settings.distractingApps || []), app] });
+  } else if (kind === 'scorecard') {
+    const input = form.querySelector('[name=text]'), text = input.value.trim();
+    if (!text) return;
+    store.updateSettings({ habitScorecard: [...(store.settings.habitScorecard || []), { id: M.uuid(), text, rating: '=' }] });
+    setTimeout(() => $('[data-form="scorecard"] [name=text]')?.focus());
   } else if (kind === 'reflection') {
     const text = $('#reflText').value.trim();
     const o = findOcc(form.dataset.occ), missed = form.dataset.mode === 'missed';
@@ -1753,7 +2154,7 @@ document.addEventListener('submit', async e => {
   }
 });
 
-const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', reflections: 'R', booking: 'B', settings: ',' };
+const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', habits: 'A', reflections: 'R', focus: 'F', screentime: 'U', booking: 'B', settings: ',' };
 document.addEventListener('keydown', e => {
   const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
   if (!typing && !ui.modal && store.user && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -1820,11 +2221,38 @@ async function runImport({ manual = false } = {}) {
       parts.push(summary('Calendly', store.applyImport('calendly', items, from, to)));
     } catch (e) { parts.push(`Calendly failed: ${e.message}`); }
   }
+  if (store.google.connected && store.google.tasks && s.syncGoogleTasks !== false) {
+    try { parts.push(summary('Google Tasks', await importGoogleTasks())); } catch (e) { parts.push(`Google Tasks failed: ${e.message}`); }
+  }
   ui.importing = false;
   ui.importSummary = `${parts.join(' · ')} — ${M.fmtTime(new Date())}`;
   if (manual) toast(parts.join(' · '), { icon: parts.some(p => p.includes('failed')) ? 'alert' : 'check' });
   render();
 }
+/** Google Tasks → Cadence: new ones arrive as until-done tasks; edits update them; ones completed or deleted
+ *  in Google are hidden here. Checking one off in Cadence (or unchecking it) updates Google right away. */
+async function importGoogleTasks() {
+  const { tasks } = await store.googleTasks();
+  let added = 0, updated = 0, removed = 0;
+  for (const gt of tasks) {
+    const item = await M.taskFromGoogleTask(gt), cur = store.tasks.get(item.id);
+    const doneHere = cur && Object.keys(cur.completions || {}).length > 0;
+    if (gt.deleted || gt.status === 'completed') {
+      if (cur && !cur.archived && !doneHere) { store.upsertTask({ ...cur, archived: true }); removed++; }
+      continue;
+    }
+    if (!cur) { store.upsertTask(item); added++; continue; }
+    if (cur.archived) continue;
+    if (doneHere) { store.updateGoogleTask({ listId: gt.listId, taskId: gt.id, status: 'completed' }).catch(() => {}); continue; }
+    const next = { ...cur, title: item.title, notes: item.notes, sourceCalendar: item.sourceCalendar };
+    if (item.dueDate) next.dueDate = item.dueDate; else delete next.dueDate;
+    if (next.title !== cur.title || next.notes !== cur.notes || next.dueDate !== cur.dueDate) { store.upsertTask(next); updated++; }
+  }
+  return { added, updated, removed };
+}
+store.onGoogleTaskChange = (t, patch) => store.updateGoogleTask({ listId: t.sourceCalendar || '@default', taskId: t.googleTaskID, ...patch })
+  .catch(e => toast(`Google Tasks didn't update: ${e.message}`, { icon: 'alert', tone: 'bad' }));
+
 // Google is re-checked every 2 minutes and whenever you come back to the tab; Calendly every 30.
 ui.lastCalendlyImport = 0;
 setInterval(() => { if (!document.hidden) runImport(); }, 2 * 60_000);

@@ -21,7 +21,7 @@ struct TodoView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "To-Do List", subtitle: "Every task in one place, including each repeat.") {
+            ScreenHeader(title: "To-Do List", subtitle: "Every task in one place. Repeating things are habits now: they're on the Habits page.") {
                 Picker("", selection: $mode) {
                     ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -74,13 +74,13 @@ struct TodoView: View {
         let days = (0..<range.rawValue).map { today.adding(days: $0) }
         // Until-done tasks are listed once (in their own group), not again on every day they carry over to;
         // a repeating one still shows on the day its next one starts.
-        let ongoing = store.checklist(on: today).filter { $0.isUntilDone && matches($0.task.title) && (showCompleted || !$0.isResolved) }
+        let ongoing = store.checklist(on: today).filter { !$0.isHabit && $0.isUntilDone && matches($0.task.title) && (showCompleted || !$0.isResolved) }
         if !ongoing.isEmpty {
             group(title: "Until done", symbol: "flame", items: ongoing, showDate: false)
         }
         let groups = days.map { day in
             (day, store.checklist(on: day).filter { o in
-                matches(o.task.title) && (showCompleted || !o.isResolved)
+                !o.isHabit && matches(o.task.title) && (showCompleted || !o.isResolved)
                     && (!o.isUntilDone || (!day.isToday && o.task.repStart(on: day).map { $0.isSameDay(day) } == true))
             })
         }.filter { !$0.1.isEmpty }
@@ -118,7 +118,7 @@ struct TodoView: View {
     // MARK: Task definitions
 
     @ViewBuilder private var taskList: some View {
-        let tasks = store.tasks.filter { $0.archived != true && !$0.isEvent && matches($0.title) }
+        let tasks = store.tasks.filter { $0.archived != true && !$0.isEvent && !$0.isHabit && matches($0.title) }
         let untilDone = tasks.filter(\.isUntilDone).sorted { $0.startDate > $1.startDate }
         let repeating = tasks.filter { !$0.isUntilDone && $0.recurrence.isRepeating }.sorted { $0.title < $1.title }
         let oneOff = tasks.filter { !$0.isUntilDone && !$0.recurrence.isRepeating }.sorted { $0.startDate > $1.startDate }

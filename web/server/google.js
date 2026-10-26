@@ -6,10 +6,13 @@ import { db } from './db.js';
 
 // Overridable only for local tests (test/google-mock.js); production always talks to Google.
 const CALENDAR_API = (!process.env.VERCEL && process.env.GOOGLE_API_BASE) || 'https://www.googleapis.com/calendar/v3';
+const TASKS_API = (!process.env.VERCEL && process.env.GOOGLE_API_BASE?.replace('/calendar/v3', '/tasks/v1')) || 'https://tasks.googleapis.com/tasks/v1';
+const TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.events',
+  TASKS_SCOPE,
   'email',
 ].join(' ');
 
@@ -26,6 +29,7 @@ export async function authUrl(userId, origin) {
     response_type: 'code',
     scope: SCOPES,
     access_type: 'offline',
+    include_granted_scopes: 'true',
     prompt: 'consent',
     state,
   });
@@ -65,16 +69,18 @@ export async function handleCallback(params, origin) {
     email = (await info.json()).email ?? null;
   } catch { /* optional */ }
   await db.execute({
-    sql: `INSERT INTO google_tokens (user_id, refresh_token, access_token, expires_at, email) VALUES (?, ?, ?, ?, ?)
+    sql: `INSERT INTO google_tokens (user_id, refresh_token, access_token, expires_at, email, scopes) VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT (user_id) DO UPDATE SET refresh_token = excluded.refresh_token,
-            access_token = excluded.access_token, expires_at = excluded.expires_at, email = excluded.email`,
-    args: [pending.userId, tok.refresh_token, tok.access_token, Date.now() + (tok.expires_in ?? 3600) * 1000, email],
+            access_token = excluded.access_token, expires_at = excluded.expires_at, email = excluded.email, scopes = excluded.scopes`,
+    args: [pending.userId, tok.refresh_token, tok.access_token, Date.now() + (tok.expires_in ?? 3600) * 1000, email, tok.scope ?? null],
   });
 }
 
 export async function status(userId) {
-  const r = await db.execute({ sql: 'SELECT email FROM google_tokens WHERE user_id = ?', args: [userId] });
-  return { configured: googleConfigured(), connected: r.rows.length > 0, email: r.rows[0]?.email ?? null };
+  const r = await db.execute({ sql: 'SELECT email, scopes FROM google_tokens WHERE user_id = ?', args: [userId] });
+  const row = r.rows[0];
+  // Connections made before Google Tasks support don't include it; connecting again adds it.
+  return { configured: googleConfigured(), connected: Boolean(row), email: row?.email ?? null, tasks: Boolean(row?.scopes?.includes(TASKS_SCOPE)) };
 }
 
 export async function disconnect(userId) {
@@ -113,9 +119,9 @@ async function accessToken(userId) {
   }
 }
 
-async function api(userId, method, path, { query, body } = {}) {
+async function api(userId, method, path, { query, body, base = CALENDAR_API } = {}) {
   const token = await accessToken(userId);
-  const url = new URL(`${CALENDAR_API}${path}`);
+  const url = new URL(`${base}${path}`);
   for (const [k, v] of Object.entries(query ?? {})) url.searchParams.set(k, v);
   const r = await fetch(url, {
     method,
@@ -305,4 +311,44 @@ export async function deleteEvent(userId, { calendarID, eventId }) {
     if (!/404|410|Not Found|deleted/i.test(err.message)) throw err;
   }
   return { ok: true };
+}
+
+// ---------- Google Tasks ----------
+const tasksApi = (userId, method, path, opts = {}) => api(userId, method, path, { ...opts, base: TASKS_API });
+
+/** Every task list and its tasks (completed and deleted ones too, so Cadence can hide them). */
+export async function googleTasks(userId) {
+  const lists = (await tasksApi(userId, 'GET', '/users/@me/lists', { query: { maxResults: '20' } })).items ?? [];
+  const tasks = [];
+  for (const l of lists) {
+    let pageToken;
+    do {
+      const j = await tasksApi(userId, 'GET', `/lists/${enc(l.id)}/tasks`, {
+        query: { maxResults: '100', showCompleted: 'true', showHidden: 'true', showDeleted: 'true', ...(pageToken ? { pageToken } : {}) },
+      });
+      for (const t of j.items ?? []) {
+        if (!t.title && !t.notes) continue;   // Google's empty placeholder rows
+        tasks.push({ id: t.id, listId: l.id, listTitle: l.title, title: t.title || '(No title)', notes: t.notes ?? '',
+          due: t.due ? t.due.slice(0, 10) : null, status: t.status, deleted: Boolean(t.deleted), link: t.webViewLink ?? null });
+      }
+      pageToken = j.nextPageToken;
+    } while (pageToken && tasks.length < 1000);
+  }
+  return { lists: lists.map(l => ({ id: l.id, title: l.title })), tasks };
+}
+
+const taskBody = t => ({
+  ...(t.title != null ? { title: t.title } : {}), ...(t.notes != null ? { notes: t.notes } : {}),
+  ...(t.due !== undefined ? { due: t.due ? `${t.due}T00:00:00.000Z` : null } : {}),
+  ...(t.status ? { status: t.status, ...(t.status === 'needsAction' ? { completed: null } : {}) } : {}),
+});
+
+export async function createGoogleTask(userId, t) {
+  const j = await tasksApi(userId, 'POST', `/lists/${enc(t.listId || '@default')}/tasks`, { body: taskBody(t) });
+  return { id: j.id, listId: t.listId || '@default', link: j.webViewLink ?? null };
+}
+
+export async function updateGoogleTask(userId, t) {
+  const j = await tasksApi(userId, 'PATCH', `/lists/${enc(t.listId || '@default')}/tasks/${enc(t.taskId)}`, { body: taskBody(t) });
+  return { id: j.id, status: j.status };
 }

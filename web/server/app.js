@@ -212,6 +212,17 @@ async function route(req, res, url) {
     const user = await requireUser(req);
     return send(res, 200, await google.deleteEvent(user.id, await readJson(req)));
   }
+  if (p === '/api/google/tasks' && m === 'GET') {
+    return send(res, 200, await google.googleTasks((await requireUser(req)).id));
+  }
+  if (p === '/api/google/tasks/create' && m === 'POST') {
+    const user = await requireUser(req);
+    return send(res, 200, await google.createGoogleTask(user.id, await readJson(req)));
+  }
+  if (p === '/api/google/tasks/update' && m === 'POST') {
+    const user = await requireUser(req);
+    return send(res, 200, await google.updateGoogleTask(user.id, await readJson(req)));
+  }
   if (p === '/api/google/events' && m === 'POST') {
     const user = await requireUser(req);
     return send(res, 200, await google.createEvent(user.id, await readJson(req)));
@@ -233,6 +244,8 @@ async function route(req, res, url) {
       tasks: of('task'),
       reflections: of('reflection'),
       settings: of('settings')[0] ?? null,
+      focusSessions: of('focus'),
+      screenTime: of('screen'),
       connections: {
         google: g ? { email: g.email, timeZone: g.time_zone, calendars: JSON.parse(g.calendar_ids || '[]') } : null,
         calendly: c.connected ? { name: c.name, schedulingUrl: c.schedulingUrl } : null,

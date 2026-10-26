@@ -96,6 +96,7 @@ final class GoogleCalendar: ObservableObject {
                 viaServer = true
                 isConnected = true
                 serverEmail = st["email"] as? String
+                tasksGranted = st["tasks"] as? Bool ?? false
                 lastError = nil
                 if !wasConnected { await afterConnect() }
             } else if viaServer {
@@ -104,6 +105,39 @@ final class GoogleCalendar: ObservableObject {
         } catch {
             // Not signed in to sync, or offline: leave things as they are.
         }
+    }
+
+    // MARK: Google Tasks (through the website's connection)
+
+    /// The website's Google connection includes Google Tasks (connections from before 1.5 need reconnecting).
+    @Published private(set) var tasksGranted = false
+
+    struct GoogleTaskItem { let id, listID, title, notes: String; let due: String?; let completed, deleted: Bool; let link: String? }
+
+    func fetchGoogleTasks() async throws -> [GoogleTaskItem] {
+        guard viaServer else { return [] }
+        let r = try await server("GET", "/api/google/tasks", [], nil) as? [String: Any] ?? [:]
+        return (r["tasks"] as? [[String: Any]] ?? []).compactMap { t in
+            guard let id = t["id"] as? String, let list = t["listId"] as? String else { return nil }
+            return GoogleTaskItem(id: id, listID: list, title: t["title"] as? String ?? "(No title)", notes: t["notes"] as? String ?? "",
+                                  due: t["due"] as? String, completed: (t["status"] as? String) == "completed",
+                                  deleted: t["deleted"] as? Bool ?? false, link: t["link"] as? String)
+        }
+    }
+
+    func createGoogleTask(title: String, notes: String, due: String?) async throws -> (id: String, listID: String, link: String?) {
+        var body: [String: Any] = ["title": title, "notes": notes]
+        if let due { body["due"] = due }
+        let r = try await server("POST", "/api/google/tasks/create", [], body) as? [String: Any] ?? [:]
+        guard let id = r["id"] as? String else { throw GoogleError.oauth("Google Tasks didn't return the new task.") }
+        return (id, r["listId"] as? String ?? "@default", r["link"] as? String)
+    }
+
+    func updateGoogleTask(listID: String, taskID: String, fields: [String: Any]) async throws {
+        guard viaServer, !taskID.isEmpty else { return }
+        var body = fields
+        body["listId"] = listID; body["taskId"] = taskID
+        _ = try await server("POST", "/api/google/tasks/update", [], body)
     }
 
     /// Called when the Mac signs out of sync.
@@ -418,7 +452,8 @@ final class GoogleCalendar: ObservableObject {
     }
     /// Every calendar the toggles list: (key, name, color).
     func toggleableCalendars() -> [(key: String, name: String, color: Color)] {
-        var list: [(key: String, name: String, color: Color)] = [("tasks", "Tasks", .blue), ("events", "Events", .teal)]
+        var list: [(key: String, name: String, color: Color)] = [("tasks", "Tasks", .blue), ("habits", "Habits", .green), ("events", "Events", .teal)]
+        if store.tasks.contains(where: { $0.source == "gtasks" && $0.archived != true }) { list.append(("gtasks", "Google Tasks", .blue)) }
         if store.tasks.contains(where: { $0.source == "calendly" && $0.archived != true }) { list.append(("calendly", "Calendly", .purple)) }
         func add(_ id: String) {
             let key = googleCalendarKey(id, primary: primaryCalendarID)

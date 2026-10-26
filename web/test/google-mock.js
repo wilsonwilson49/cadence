@@ -14,11 +14,29 @@ const events = [
   { id: 'mockgone', status: 'cancelled' },
 ];
 let nextId = 1;
+// Google Tasks: one list.
+const gtasks = [
+  { id: 'gt1', title: 'Return library books', notes: 'Two are overdue', due: `${ymd(day(2))}T00:00:00.000Z`, status: 'needsAction' },
+  { id: 'gt2', title: 'Call the dentist', status: 'needsAction' },
+  { id: 'gt3', title: 'Something already done', status: 'completed' },
+];
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = j => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(j)); };
   let body = {};
   if (req.method === 'POST' || req.method === 'PATCH') { let raw = ''; for await (const c of req) raw += c; try { body = JSON.parse(raw || '{}'); } catch {} }
+  if (url.pathname.startsWith('/tasks/v1')) {
+    if (url.pathname.endsWith('/users/@me/lists')) return send({ items: [{ id: 'list1', title: 'My Tasks' }] });
+    const one = url.pathname.match(/\/lists\/[^/]+\/tasks\/([^/]+)$/);
+    if (one && req.method === 'PATCH') {
+      const t = gtasks.find(x => x.id === one[1]); if (!t) { res.writeHead(404); return res.end('{}'); }
+      Object.assign(t, body); console.log('TASK PATCH', t.id, t.status, t.title); return send(t);
+    }
+    if (/\/lists\/[^/]+\/tasks$/.test(url.pathname) && req.method === 'POST') {
+      const t = { id: `gtnew${nextId++}`, status: 'needsAction', ...body }; gtasks.push(t); console.log('TASK CREATE', t.id, t.title); return send(t);
+    }
+    if (/\/lists\/[^/]+\/tasks$/.test(url.pathname)) return send({ items: gtasks });
+  }
   // Writes (create / edit / delete), so Cadence → Google sync can be tested too.
   if (req.method === 'POST' && /\/calendars\/[^/]+\/events$/.test(url.pathname)) {
     const e = { id: `created${nextId++}`, status: 'confirmed', summary: body.summary, description: body.description, transparency: body.transparency, start: body.start, end: body.end, htmlLink: 'https://calendar.google.com/new' };

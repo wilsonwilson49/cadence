@@ -25,6 +25,8 @@ class Store {
   user = null;
   tasks = new Map();
   reflections = new Map();
+  focus = new Map();       // focus sessions
+  screen = new Map();      // daily screen-time summaries ("yyyy-MM-dd|DEVICE")
   settings = structuredClone(M.DEFAULT_SETTINGS);
   stamps = new Map();      // "kind|id" -> updatedAt (ms) of our copy
   pending = new Map();     // "kind|id" -> change waiting to be pushed
@@ -103,6 +105,7 @@ class Store {
 
   #resetData() {
     this.tasks = new Map(); this.reflections = new Map(); this.stamps = new Map(); this.pending = new Map();
+    this.focus = new Map(); this.screen = new Map();
     this.settings = structuredClone(M.DEFAULT_SETTINGS); this.cursor = 0;
     this.google = { configured: false, connected: false, email: null, calendars: [], events: new Map(), months: new Set(), loading: new Set() };
   }
@@ -116,6 +119,8 @@ class Store {
       if (!c) return;
       this.tasks = new Map(c.tasks.map(t => [t.id, t]));
       this.reflections = new Map(c.reflections.map(r => [r.id, r]));
+      this.focus = new Map((c.focus || []).map(f => [f.id, f]));
+      this.screen = new Map((c.screen || []).map(d => [d.id, d]));
       this.settings = { ...structuredClone(M.DEFAULT_SETTINGS), ...c.settings };
       this.stamps = new Map(c.stamps);
       this.pending = new Map(c.pending);
@@ -128,6 +133,7 @@ class Store {
     try {
       localStorage.setItem(this.#cacheKey(), JSON.stringify({
         tasks: [...this.tasks.values()], reflections: [...this.reflections.values()], settings: this.settings,
+        focus: [...this.focus.values()], screen: [...this.screen.values()],
         stamps: [...this.stamps], pending: [...this.pending], cursor: this.cursor,
       }));
     } catch { /* storage full or blocked */ }
@@ -193,6 +199,9 @@ class Store {
         if (c.deleted) this.tasks.delete(id); else this.tasks.set(id, { ...c.data, id });
       } else if (c.kind === 'reflection') {
         if (c.deleted) this.reflections.delete(id); else this.reflections.set(id, { ...c.data, id });
+      } else if (c.kind === 'focus' || c.kind === 'screen') {
+        const map = this[c.kind];
+        if (c.deleted) map.delete(id); else map.set(id, { ...c.data, id });
       } else if (c.kind === 'settings' && !c.deleted && c.data) {
         this.settings = { ...structuredClone(M.DEFAULT_SETTINGS), ...c.data };
       }
@@ -249,6 +258,7 @@ class Store {
     delete missed[occ.key];
     this.upsertTask({ ...t, completions: { ...t.completions, [occ.key]: M.iso(new Date()) }, missed });
     this.#addReflection(t, occ, text);
+    if (t.source === 'gtasks') this.onGoogleTaskChange?.(t, { status: 'completed' });
     return true;
   }
 
@@ -284,6 +294,7 @@ class Store {
     const completions = { ...t.completions };
     delete completions[occ.key];
     this.upsertTask({ ...t, completions });
+    if (t.source === 'gtasks') this.onGoogleTaskChange?.(t, { status: 'needsAction' });
   }
 
   skip(occ) {
@@ -297,6 +308,17 @@ class Store {
     this.reflections.set(r.id, r);
     this.#queue('reflection', r.id, r);
   }
+
+  /** Save a finished focus session (they sync, so your score is the same everywhere). */
+  saveFocusSession(s) {
+    const f = { ...s, id: s.id || M.uuid(), updatedAt: M.iso(new Date()) };
+    this.focus.set(f.id, f);
+    this.#queue('focus', f.id, f);
+    return f;
+  }
+  get focusSessions() { return [...this.focus.values()].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))); }
+  /** Screen-time summaries for a day, from every device that tracks it (the Mac app). */
+  screenDays(day) { const k = M.dateKey(day); return [...this.screen.values()].filter(d => d.date === k); }
 
   deleteReflection(id) {
     this.reflections.delete(id);
@@ -449,6 +471,10 @@ class Store {
   refreshGoogleView() { this.google.months.clear(); this.ensureGoogle(M.addDays(new Date(), -40), M.addDays(new Date(), 75)); }
 
   disconnectGoogle = () => api('/api/google/disconnect', { method: 'POST', body: {} }).then(() => this.refreshGoogle());
+  // Google Tasks (needs the connection to include Tasks: google.tasks)
+  googleTasks = () => api('/api/google/tasks');
+  createGoogleTask = t => api('/api/google/tasks/create', { method: 'POST', body: t });
+  updateGoogleTask = t => api('/api/google/tasks/update', { method: 'POST', body: t });
   freeBusy = (from, to) => this.busyCalendarIDs
     ? api('/api/google/freebusy', { method: 'POST', body: { from: M.iso(from), to: M.iso(to), calendars: this.busyCalendarIDs } })
     : Promise.resolve([]);
