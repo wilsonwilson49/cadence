@@ -109,6 +109,8 @@ function render() {
   const ws = $('#weekScroll');
   if (ws) ws.scrollTop = weekScroll ?? (ui.weekScrolled ? ws.scrollTop : 7 * HOUR);
   ui.weekScrolled = Boolean(ws);
+  // The habit tracker opens on the newest days (today is the right-most column).
+  for (const el of document.querySelectorAll('.ht-wrap')) el.scrollLeft = el.scrollWidth;
   if (focusId) {
     const el = document.getElementById(focusId);
     if (el) { el.focus(); if (sel) try { el.setSelectionRange(...sel); } catch { /* not a text input */ } }
@@ -413,6 +415,29 @@ function habitCard(t, st) {
   </div>`;
 }
 
+/** The tracker grid: a row per habit, a column per day, newest on the right. */
+const CELL_LABEL = { done: 'done', missed: 'didn’t do it', lapsed: 'missed', open: 'to do today', off: 'not scheduled' };
+function habitTable(habits, stats) {
+  const n = ui.habitRange || 14;
+  const days = stats.get(habits[0].id).grid.slice(-n).map(g => g.day);
+  const cols = days.map((d, i) => habits.map(t => stats.get(t.id).grid.slice(-n)[i].state));
+  return `<div class="card ht-card"><div class="row" style="padding:10px 12px 0">
+      <div class="section-title" style="margin:0">${ic('week')}Tracker</div><span class="grow"></span>
+      <div class="seg">${[[7, 'Week'], [14, '2 weeks'], [30, 'Month']].map(([v, l]) => `<button class="${n === v ? 'on' : ''}" data-act="habit-range" data-n="${v}">${l}</button>`).join('')}</div></div>
+    <div class="ht-wrap"><table class="ht">
+      <thead><tr><th class="ht-name"></th>${days.map(d => `<th class="${M.isToday(d) ? 'today' : ''}"><span>${M.WEEKDAY_LETTER[d.getDay()]}</span><b>${d.getDate()}</b></th>`).join('')}
+        <th class="ht-sum" title="Current streak">${ic('flame')}</th><th class="ht-sum" title="Kept in the last 30 days">%</th></tr></thead>
+      <tbody>${habits.map(t => { const st = stats.get(t.id), g = st.grid.slice(-n);
+        return `<tr><td class="ht-name"><span class="dot" style="background:${color(t.color)}"></span><span class="ellipsis">${esc(t.title)}</span></td>
+          ${g.map(c => { const key = M.dateKey(c.day), canCheck = c.state === 'open' || c.state === 'lapsed';
+            return `<td><button class="ht-cell ${c.state}" style="--hue:${color(t.color)}" ${canCheck ? `data-act="toggle" data-occ="${esc(`${t.id}|${key}`)}"` : 'tabindex="-1"'}
+              title="${esc(t.title)} · ${M.fmtDay(c.day, { weekday: 'short', month: 'short', day: 'numeric' })}: ${CELL_LABEL[c.state]}${canCheck ? ' (click to check off)' : ''}">${c.state === 'done' ? ic('check') : c.state === 'missed' ? ic('x') : ''}</button></td>`; }).join('')}
+          <td class="ht-sum"><b>${st.streak}</b></td><td class="ht-sum">${st.rate == null ? '–' : `${st.rate}%`}</td></tr>`; }).join('')}</tbody>
+      <tfoot><tr><td class="ht-name small muted">Done</td>${cols.map(states => { const sched = states.filter(x => x !== 'off').length, done = states.filter(x => x === 'done').length;
+        return `<td class="small ${sched && done === sched ? 'green' : 'muted'}">${sched ? `${done}/${sched}` : ''}</td>`; }).join('')}<td></td><td></td></tr></tfoot>
+    </table></div></div>`;
+}
+
 function habitsView() {
   const habits = [...store.tasks.values()].filter(t => M.isHabit(t) && !t.archived && store.taskShown(t)).sort((a, b) => a.title.localeCompare(b.title));
   const stats = new Map(habits.map(t => [t.id, M.habitStats(t)]));
@@ -426,6 +451,7 @@ function habitsView() {
   return `<div class="header"><div class="grow"><h1>Habits</h1><div class="sub">Small habits, repeated. Every check-off is a vote for the person you’re becoming.</div></div>
       <button class="btn primary" data-act="new-habit">${ic('plus')} New habit</button></div>
     <div class="page stack">
+      ${habits.length ? habitTable(habits, stats) : ''}
       <div class="stats">${stat(`${doneToday}/${dueToday.length}`, 'done today', 'check', '#30d158')}${stat(Math.max(0, ...[...stats.values()].map(s => s.streak)), 'best current streak', 'flame', '#ff9f0a')}
         ${stat(votes, 'votes cast', 'habit', '#5e5ce6')}${stat(habits.length, habits.length === 1 ? 'habit' : 'habits', 'repeat', '#30b0c7')}</div>
       ${identities.size ? `<div class="identities">${[...identities].map(([id, n]) => `<span class="identity">${ic('quote')} I am someone who ${esc(id)} <b>${n} vote${n === 1 ? '' : 's'}</b></span>`).join('')}</div>` : ''}
@@ -1818,6 +1844,7 @@ const actions = {
     const c = store.settings.habitScorecard.find(x => x.id === el.dataset.id);
     if (c) newHabitAt(new Date(), { habit: { style: 'replace', replaces: c.text[0].toLowerCase() + c.text.slice(1) } });
   },
+  'habit-range': el => { ui.habitRange = Number(el.dataset.n); render(); },
   'habit-style': el => { readEditorInputs(); (ui.modal.draft.habit ??= {}).style = el.dataset.style; renderModal(); },
   'new-habit': () => newHabitAt(new Date()),
   'edit-busy': el => { readEditorInputs(); ui.modal.draft.busy = el.dataset.busy === '1'; ui.modal.busyChosen = true; renderModal(); },

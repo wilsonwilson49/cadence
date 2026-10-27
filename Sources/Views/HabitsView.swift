@@ -28,6 +28,7 @@ struct HabitsView: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if !list.isEmpty { HabitTable(habits: list, stats: stats) }
                     HStack(spacing: 12) {
                         stat("\(doneToday)/\(due.count)", "done today", "checkmark", .green)
                         stat("\(stats.values.map(\.streak).max() ?? 0)", "best current streak", "flame", .orange)
@@ -145,6 +146,116 @@ struct HabitsView: View {
             }
         }
     }
+}
+
+/// The tracker grid: a row per habit, a column per day (newest on the right). Clicking today's cell, or a day
+/// that was missed, checks the habit off with the usual reflection.
+private struct HabitTable: View {
+    @EnvironmentObject private var model: AppModel
+    let habits: [PlanTask]
+    let stats: [UUID: PlanTask.HabitStats]
+    @AppStorage("habitTrackerDays") private var range = 14
+    private let rowH: CGFloat = 26, cellW: CGFloat = 24
+
+    var body: some View {
+        let first = stats[habits[0].id]?.grid.suffix(range) ?? []
+        let days = first.map(\.day)
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    SectionTitle(text: "Tracker", symbol: "calendar")
+                    Spacer()
+                    Picker("", selection: $range) { Text("Week").tag(7); Text("2 weeks").tag(14); Text("Month").tag(30) }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                }
+                HStack(alignment: .top, spacing: 8) {
+                    // Habit names stay put while the days scroll.
+                    VStack(alignment: .leading, spacing: 3) {
+                        Color.clear.frame(width: 170, height: 30)
+                        ForEach(habits) { t in
+                            HStack(spacing: 7) {
+                                Circle().fill(t.color.color).frame(width: 8, height: 8)
+                                Text(t.title).lineLimit(1)
+                            }
+                            .frame(width: 170, height: rowH, alignment: .leading)
+                        }
+                        Text("Done").font(.caption).foregroundStyle(.secondary).frame(height: 18)
+                    }
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 3) {
+                                ForEach(days, id: \.self) { d in
+                                    VStack(spacing: 1) {
+                                        Text(Calendar.current.veryShortWeekdaySymbols[Calendar.current.component(.weekday, from: d) - 1])
+                                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                                        Text(d.formatted(.dateTime.day())).font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(d.isToday ? Color.white : .primary)
+                                            .frame(width: 20, height: 16)
+                                            .background(Capsule().fill(d.isToday ? Color.accentColor : .clear))
+                                    }
+                                    .frame(width: cellW, height: 30)
+                                }
+                            }
+                            ForEach(habits) { t in
+                                HStack(spacing: 3) {
+                                    ForEach(Array((stats[t.id]?.grid.suffix(range) ?? []).enumerated()), id: \.offset) { _, c in cell(t, c.day, c.state) }
+                                }
+                                .frame(height: rowH)
+                            }
+                            HStack(spacing: 3) {
+                                ForEach(Array(days.enumerated()), id: \.offset) { i, _ in
+                                    let states = habits.compactMap { Array(stats[$0.id]?.grid.suffix(range) ?? [])[safe: i]?.state }
+                                    let sched = states.filter { $0 != .off }.count, done = states.filter { $0 == .done }.count
+                                    Text(sched > 0 ? "\(done)/\(sched)" : "").font(.system(size: 9.5).monospacedDigit())
+                                        .foregroundStyle(sched > 0 && done == sched ? Color.green : .secondary)
+                                        .frame(width: cellW, height: 18)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 6)
+                    }
+                    .defaultScrollAnchor(.trailing)
+                    // As wide as the days need (so they sit next to the names), scrolling only when the window is narrower.
+                    .frame(maxWidth: CGFloat(days.count) * (cellW + 3))
+                    VStack(spacing: 3) {
+                        HStack(spacing: 0) {
+                            Image(systemName: "flame").font(.caption).foregroundStyle(.secondary).frame(width: 34)
+                            Text("%").font(.caption).foregroundStyle(.secondary).frame(width: 40)
+                        }
+                        .frame(height: 30)
+                        ForEach(habits) { t in
+                            HStack(spacing: 0) {
+                                Text("\(stats[t.id]?.streak ?? 0)").font(.callout.bold()).foregroundStyle(.orange).frame(width: 34)
+                                Text(stats[t.id]?.rate.map { "\($0)%" } ?? "–").font(.caption).foregroundStyle(.secondary).frame(width: 40)
+                            }
+                            .frame(height: rowH)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func cell(_ t: PlanTask, _ day: Date, _ state: PlanTask.DayState) -> some View {
+        let c = t.color.color
+        let canCheck = state == .open || state == .lapsed
+        RoundedRectangle(cornerRadius: 6)
+            .fill(state == .done ? c : state == .missed ? Color.red.opacity(0.75) : state == .off ? Color.primary.opacity(0.04) : state == .open || state == .lapsed ? Color.clear : Color.primary.opacity(0.08))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(state == .open ? c : state == .lapsed ? Color.red.opacity(0.45) : .clear, lineWidth: state == .open ? 2 : 1.5))
+            .overlay {
+                if state == .done { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white) }
+                if state == .missed { Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.white) }
+            }
+            .frame(width: cellW, height: 24)
+            .contentShape(Rectangle())
+            .onTapGesture { if canCheck { model.beginReflection(Occurrence(task: t, day: day)) } }
+            .help("\(t.title) · \(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())): \(["done": "done", "missed": "didn't do it", "lapsed": "missed", "open": "to do today", "off": "not scheduled"][state.rawValue] ?? "")\(canCheck ? " (click to check off)" : "")")
+    }
+}
+
+extension Array {
+    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
 
 private struct HabitCard: View {
