@@ -1,7 +1,9 @@
 // Renders the Cadence app icon at every macOS size into an AppIcon.appiconset.
 // usage: swift scripts/generate_icon.swift Sources/Assets.xcassets
+//        swift scripts/generate_icon.swift iOS/Assets.xcassets --ios   (one 1024px square, edge to edge, no transparency)
 import AppKit
 
+let ios = CommandLine.arguments.contains("--ios")
 let out = URL(fileURLWithPath: CommandLine.arguments[1]).appendingPathComponent("AppIcon.appiconset")
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
@@ -14,16 +16,19 @@ func render(_ px: Int) -> Data {
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let ctx = NSGraphicsContext.current!.cgContext
 
-    // macOS icon grid: content inset ~10%, squircle-ish corner radius.
-    let inset = s * 0.1
+    // macOS icon grid: content inset ~10%, squircle-ish corner radius. iOS: a full square (iOS rounds it).
+    let inset = ios ? 0 : s * 0.1
     let rect = CGRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset)
-    let path = CGPath(roundedRect: rect, cornerWidth: rect.width * 0.225, cornerHeight: rect.width * 0.225, transform: nil)
+    let path = ios ? CGPath(rect: rect, transform: nil)
+        : CGPath(roundedRect: rect, cornerWidth: rect.width * 0.225, cornerHeight: rect.width * 0.225, transform: nil)
 
     // Drop shadow + gradient body (sunrise coral → violet).
+    if !ios {
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.03, color: NSColor.black.withAlphaComponent(0.35).cgColor)
     ctx.addPath(path); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
     ctx.restoreGState()
+    }
     ctx.saveGState()
     ctx.addPath(path); ctx.clip()
     let grad = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [
@@ -38,8 +43,8 @@ func render(_ px: Int) -> Data {
     ctx.restoreGState()
 
     let c = CGPoint(x: s / 2, y: s / 2)
-    let r = rect.width * 0.29
-    let lw = rect.width * 0.075
+    let r = rect.width * (ios ? 0.27 : 0.29)
+    let lw = rect.width * (ios ? 0.07 : 0.075)
 
     // Track ring, then a progress arc (~75%) with round caps.
     ctx.setLineCap(.round)
@@ -69,7 +74,11 @@ func render(_ px: Int) -> Data {
 }
 
 var images: [[String: String]] = []
-for pt in [16, 32, 128, 256, 512] {
+if ios {
+    try! render(1024).write(to: out.appendingPathComponent("icon_1024.png"))
+    images.append(["idiom": "universal", "platform": "ios", "size": "1024x1024", "filename": "icon_1024.png"])
+}
+for pt in ios ? [] : [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let name = "icon_\(pt)x\(pt)\(scale == 2 ? "@2x" : "").png"
         try! render(pt * scale).write(to: out.appendingPathComponent(name))

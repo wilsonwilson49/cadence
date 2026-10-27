@@ -141,7 +141,7 @@ final class SyncService: ObservableObject {
                 "username": username.trimmingCharacters(in: .whitespaces),
                 "password": password,
                 "remember": true,
-                "device": "mac",
+                "device": Self.deviceKind,
             ], token: nil)
             guard let token = json["token"] as? String,
                   let user = (json["user"] as? [String: Any])?["username"] as? String else { throw SyncError.badResponse }
@@ -163,6 +163,29 @@ final class SyncService: ObservableObject {
         } catch {
             status = .error(error.localizedDescription)
         }
+    }
+
+    #if os(iOS)
+    static let deviceKind = "ios"
+    #else
+    static let deviceKind = "mac"
+    #endif
+
+    /// Permanently deletes the account on the server (needs the password), then signs out here.
+    /// The data saved on this device stays until you delete the app.
+    func deleteAccount(password: String) async throws {
+        do {
+            _ = try await apiCall("POST", "/api/account/delete", body: ["password": password])
+        } catch SyncError.unauthorized {
+            throw SyncError.server("Wrong password.")
+        }
+        Keychain.setString(nil, account: Keys.token)
+        Self.defaults.removeObject(forKey: Keys.username)
+        cursor = 0
+        lastPushed = nil
+        username = nil
+        status = .signedOut
+        onSignedOut?()
     }
 
     func signOut() {
