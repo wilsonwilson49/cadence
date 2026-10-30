@@ -1033,6 +1033,9 @@ function settingsView() {
       <div class="srow"><div>Mac app<div class="small muted">In Cadence for Mac, open Settings › Sync with Cadence Web and sign in with this same username and password. That's all — it finds this site automatically.</div></div></div>
     </div></div>
 
+    ${window.cadenceDesktop?.setOpenAtLogin ? `<div><h3>This computer</h3><div class="card">
+      <div class="srow"><label class="check"><input type="checkbox" data-act-change="open-at-login" ${ui.openAtLogin ? 'checked' : ''}>Open Cadence when I log in</label>
+        <span class="small muted">It starts quietly in the tray, so reminders and check-ins work all day.</span></div></div></div>` : ''}
     <div><h3>Reminders on this device</h3><div class="card">
       <div class="srow"><label class="check"><input type="checkbox" data-act-change="browser-reminders" ${reminders.enabled ? 'checked' : ''}>Show reminders in this browser</label>
         <span class="small muted">Turn off if the Mac app already reminds you on this computer.</span></div>
@@ -2072,6 +2075,7 @@ document.addEventListener('change', e => {
     return;
   }
   if (el.dataset.bind === 'focusMinutes') { ui.focusMinutes = Math.min(240, Math.max(1, Number(el.value) || 25)); render(); return; }
+  if (el.dataset.actChange === 'open-at-login') { ui.openAtLogin = el.checked; window.cadenceDesktop?.setOpenAtLogin(el.checked); return; }
   if (el.dataset.actChange === 'cal-toggle') {
     store.setCalendarShown(el.value, el.checked);
     ui.booking.loadedFor = null;   // busy times depend on which calendars count
@@ -2378,6 +2382,7 @@ function toast(text, { icon = 'check', undo, tone } = {}) {
 // ---------- desktop app (Windows/Linux) ----------
 // The desktop wrapper exposes window.cadenceDesktop: wake/unlock events, tray commands, a tray badge.
 if (window.cadenceDesktop) {
+  window.cadenceDesktop.getOpenAtLogin?.().then(on => { ui.openAtLogin = on; if (ui.route === 'settings') render(); });
   window.cadenceDesktop.onWake(() => reminders.checkIn('Welcome back — check your list'));
   window.cadenceDesktop.onCommand(cmd => {
     if (cmd === 'check-in') reminders.checkIn('Daily check-in', { manual: true });

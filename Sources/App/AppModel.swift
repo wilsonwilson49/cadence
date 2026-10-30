@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 enum Screen: String, CaseIterable, Identifiable {
@@ -80,6 +81,7 @@ final class AppModel: ObservableObject {
         google.restore()
         engine.start()
         screenTime.start()
+        LoginItem.applyDefault()
         sync.start()
         calendly.restore()
         importer.start()
@@ -251,5 +253,29 @@ final class WindowManager: NSObject, NSWindowDelegate {
         checkInWindow?.orderOut(nil)
         model?.engine.resetNudgeTimer()
         updateDockIcon()
+    }
+}
+
+/// Opening at login is on by default. Once you change it in Settings, Cadence leaves your choice alone.
+enum LoginItem {
+    private static let choiceKey = "loginItemUserChoice"
+
+    static var isOn: Bool { SMAppService.mainApp.status == .enabled }
+    static var needsApproval: Bool { SMAppService.mainApp.status == .requiresApproval }
+
+    /// First launches (and copies that were never registered) turn it on, unless you've turned it off.
+    /// Test runs (-dataDir) never touch your login items.
+    static func applyDefault() {
+        guard !LaunchOptions.has("-dataDir"), !UserDefaults.standard.bool(forKey: choiceKey) else { return }
+        switch SMAppService.mainApp.status {
+        case .enabled, .requiresApproval: return
+        default: try? SMAppService.mainApp.register()
+        }
+    }
+
+    /// From the Settings switch: remembered, so the default never overrides it.
+    static func set(_ on: Bool) throws {
+        UserDefaults.standard.set(true, forKey: choiceKey)
+        if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
     }
 }

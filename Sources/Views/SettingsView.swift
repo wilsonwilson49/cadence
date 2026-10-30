@@ -173,7 +173,7 @@ struct SettingsView: View {
 
     private var startupSection: some View {
         Section {
-            Toggle("Open Cadence automatically when I log in", isOn: Binding(get: { loginItemOn }, set: setLoginItem))
+            Toggle("Open Cadence automatically when I log in (on by default)", isOn: Binding(get: { loginItemOn }, set: setLoginItem))
             if SMAppService.mainApp.status == .requiresApproval {
                 Text("macOS needs your approval in System Settings › General › Login Items.")
                     .font(.caption).foregroundStyle(.orange)
@@ -428,7 +428,7 @@ struct SettingsView: View {
 
     private func setLoginItem(_ on: Bool) {
         do {
-            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            try LoginItem.set(on)
             loginError = nil
         } catch {
             loginError = error.localizedDescription

@@ -20,9 +20,11 @@ if (process.platform === 'win32') app.setAppUserModelId('com.ryanpark.cadence.de
 
 // ---------- start at login ----------
 const autostartFile = path.join(os.homedir(), '.config', 'autostart', 'cadence.desktop');
+// Windows only reports the login item correctly when asked with the same args it was registered with.
+const LOGIN_ARGS = ['--hidden'];
 function loginItemEnabled() {
   if (process.platform === 'linux') return fs.existsSync(autostartFile);
-  return app.getLoginItemSettings().openAtLogin;
+  return app.getLoginItemSettings({ args: LOGIN_ARGS }).openAtLogin;
 }
 function setLoginItem(on) {
   if (process.platform === 'linux') {
@@ -32,7 +34,24 @@ function setLoginItem(on) {
     fs.writeFileSync(autostartFile, `[Desktop Entry]\nType=Application\nName=Cadence\nExec="${exec}" --hidden\nX-GNOME-Autostart-enabled=true\n`);
     return;
   }
-  app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] });
+  app.setLoginItemSettings({ openAtLogin: on, args: LOGIN_ARGS });
+}
+
+// Opening at login is on by default. Your choice (tray menu or Settings) is remembered in prefs.json.
+const prefsFile = path.join(app.getPath('userData'), 'prefs.json');
+const firstRunMarker = path.join(app.getPath('userData'), 'first-run-done');
+function readPrefs() { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')); } catch { return {}; } }
+function writePrefs(p) { try { fs.mkdirSync(path.dirname(prefsFile), { recursive: true }); fs.writeFileSync(prefsFile, JSON.stringify(p)); } catch { /* read-only */ } }
+function wantsOpenAtLogin() {
+  const p = readPrefs();
+  if (typeof p.openAtLogin === 'boolean') return p.openAtLogin;
+  // Installs from before this setting existed: keep whatever they have now (off means they turned it off).
+  return fs.existsSync(firstRunMarker) ? loginItemEnabled() : true;
+}
+function chooseOpenAtLogin(on) {
+  writePrefs({ ...readPrefs(), openAtLogin: on });
+  setLoginItem(on);
+  refreshTrayMenu();
 }
 
 // ---------- window ----------
@@ -85,7 +104,9 @@ function buildTray() {
   tray.on('click', show);
   refreshTrayMenu();
 }
-function refreshTrayMenu(remaining) {
+let lastRemaining = 0;
+function refreshTrayMenu(remaining = lastRemaining) {
+  lastRemaining = remaining;
   if (!tray) return;
   tray.setToolTip(remaining ? `Cadence — ${remaining} left today` : 'Cadence');
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -95,21 +116,29 @@ function refreshTrayMenu(remaining) {
     { label: 'Check in now', click: () => { show(); send('cadence:command', 'check-in'); } },
     { label: 'New task', click: () => { show(); send('cadence:command', 'new-task'); } },
     { type: 'separator' },
-    { label: 'Start Cadence at login', type: 'checkbox', checked: loginItemEnabled(), click: m => { setLoginItem(m.checked); } },
+    { label: 'Open Cadence when I log in', type: 'checkbox', checked: loginItemEnabled(), click: m => chooseOpenAtLogin(m.checked) },
     { type: 'separator' },
     { label: 'Quit Cadence', click: () => { quitting = true; app.quit(); } },
   ]));
 }
 ipcMain.on('cadence:badge', (_e, n) => refreshTrayMenu(Number(n) || 0));
+ipcMain.handle('cadence:getOpenAtLogin', () => loginItemEnabled());
+ipcMain.on('cadence:setOpenAtLogin', (_e, on) => chooseOpenAtLogin(Boolean(on)));
 
 // ---------- app ----------
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   createWindow();
   buildTray();
-  // First run of an installed copy: start at login by default, like the Mac app recommends.
-  const marker = path.join(app.getPath('userData'), 'first-run-done');
-  if (app.isPackaged && !fs.existsSync(marker)) { setLoginItem(true); fs.writeFileSync(marker, ''); refreshTrayMenu(); }
+  // Installed copies open at login unless you've turned it off. Re-registering on every launch keeps the entry
+  // pointing at this copy (an AppImage that was moved or updated, or a reinstall in another folder).
+  if (app.isPackaged) {
+    const on = wantsOpenAtLogin();
+    writePrefs({ ...readPrefs(), openAtLogin: on });
+    if (on) setLoginItem(true);
+    if (!fs.existsSync(firstRunMarker)) fs.writeFileSync(firstRunMarker, '');
+    refreshTrayMenu();
+  }
   // Self-test (CI / local): load the app hidden, report what the page sees, quit.
   if (process.env.CADENCE_SELFTEST) {
     win.webContents.once('did-finish-load', async () => {

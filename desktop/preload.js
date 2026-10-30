@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld('cadenceDesktop', {
   onWake: cb => ipcRenderer.on('cadence:wake', (_e, reason) => cb(reason)),
   onCommand: cb => ipcRenderer.on('cadence:command', (_e, cmd) => cb(cmd)),
   setBadge: n => ipcRenderer.send('cadence:badge', n),
+  getOpenAtLogin: () => ipcRenderer.invoke('cadence:getOpenAtLogin'),
+  setOpenAtLogin: on => ipcRenderer.send('cadence:setOpenAtLogin', on),
 });
