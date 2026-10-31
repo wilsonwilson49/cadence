@@ -20,17 +20,14 @@ Google Calendar, Calendly, Google Tasks, booking and screen time are set up on t
 
 ```bash
 cd ~/AI_project_2026june/cadence
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-xcodegen generate
-xcodebuild -project Cadence.xcodeproj -target CadenceMobile -sdk iphonesimulator26.5 -configuration Debug \
-  SYMROOT=$PWD/build/ios ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO EXCLUDED_SOURCE_FILE_NAMES=Assets.xcassets build
-xcrun simctl boot "iPhone 15 Pro"
-xcrun simctl install booted build/ios/Debug-iphonesimulator/Cadence.app
-xcrun simctl launch booted com.ryanpark.cadence.ios
+scripts/ios-sim.sh                      # iPhone 15 Pro Max
+scripts/ios-sim.sh "iPhone 15 Pro" -demo  # another simulator, plus launch options
 open -a Simulator
 ```
 
-`EXCLUDED_SOURCE_FILE_NAMES=Assets.xcassets` only works around this Mac having no simulator runtime that matches the iOS 26.5 SDK. Real builds keep the icon.
+The script builds the app, adds its icon, installs it and launches it. This Mac has no simulator that matches the iOS 26.5 SDK, and Xcode's normal icon step refuses to run without one. So the script leaves the icon out of the build and copies it in afterwards. Builds for a real iPhone or the App Store don't need this.
+
+In the Simulator, scroll by clicking and dragging, as you would with a finger.
 
 Debug-only launch options:
 

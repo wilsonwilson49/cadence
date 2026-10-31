@@ -135,6 +135,8 @@ struct ReflectionSheet: View {
         let pool = target.missed ? Self.missedPrompts : Self.prompts
         let seed = abs(target.occ.task.id.hashValue ^ target.occ.key.hashValue)
         NavigationStack {
+            // Scrolls so nothing is cut off on smaller iPhones with the keyboard up.
+            ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     Image(systemName: target.missed ? "xmark" : "text.quote").font(.headline).foregroundStyle(.white)
@@ -159,14 +161,15 @@ struct ReflectionSheet: View {
                     .scrollContentBackground(.hidden)
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
-                    .frame(minHeight: 160)
+                    .frame(height: 180)
                 HStack {
                     ProgressView(value: Double(Swift.min(count, min)), total: Double(min)).tint(count >= min ? .green : .pink)
                     Text("\(count) / \(min) words").font(.caption.monospacedDigit()).foregroundStyle(count >= min ? .green : .secondary)
                 }
-                Spacer()
             }
             .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(target.missed ? "Why didn't it happen?" : "Reflect to complete")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
