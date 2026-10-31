@@ -296,7 +296,7 @@ struct UntilDoneStrip: View {
         for t in store.tasks where t.isUntilDone && !t.isEvent && t.archived != true && google.isShown(t) {
             var current: Int?
             for (i, d) in days.enumerated() {
-                guard t.untilDoneActive(on: d), let rep = t.repStart(on: d) else { current = nil; continue }
+                guard t.untilDoneActive(on: d), let rep = t.currentRepStart(on: d) else { current = nil; continue }
                 if let c = current, out[c].rep == rep, out[c].end == i - 1 { out[c].end = i; continue }
                 out.append(Span(task: t, rep: rep, start: i, end: i, before: i == 0 && rep < d.startOfDay))
                 current = out.count - 1

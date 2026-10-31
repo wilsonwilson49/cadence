@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -46,6 +46,16 @@ check(occurs(uw, today) && occurs(uw, addDays(today, 3)) && occurs(uw, addDays(t
 uw.completions = { [k(0)]: iso(new Date()) };
 check(occurs(uw, today) && !occurs(uw, addDays(today, 1)) && !occurs(uw, addDays(today, 3)) && occurs(uw, addDays(today, 4)) && occurs(uw, addDays(today, 6)),
   'repeating until done: finished one disappears, the next repeat comes back');
+// Handoff at the new one's time: a weekly 4:30 PM one stays until 4:30 PM on the day the next one starts.
+const hw = newTask({ mode: 'untilDone', timeMinutes: 990, startDate: iso(addDays(today, -7)), recurrence: { frequency: 'weekly', interval: 1, weekdays: [], end: { never: {} } } });
+const at2 = dayAt(today, 840), at5 = dayAt(today, 1020);
+const st = (now, n) => habitStats(hw, now).grid.find(g => dateKey(g.day) === k(n)).state;
+check(heldOver(hw, today, at2)?.key === k(-1) && !heldOver(hw, today, at5), 'handoff: last week\'s stays until 4:30 PM, then the new one');
+check(st(at2, -7) === 'open' && st(at5, -7) === 'lapsed', 'handoff: open until the new one\'s time, lapsed after');
+hw.completions = { [k(-1)]: iso(at2) };            // checked off at 2 PM on handoff day → counts for last week's
+check(heldOver(hw, today, at2) && st(at2, -7) === 'done' && st(at2, 0) === 'open' && st(at5, -7) === 'done' && habitStats(hw, at2).streak === 1,
+  'handoff: a check-off before the new one\'s time counts for the old one');
+check(!heldOver({ ...hw, timeMinutes: null, completions: {} }, today, at2), 'handoff: no time means it switches at midnight');
 const lt = newTask({ mode: 'longTerm', startDate: iso(today), recurrence: { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: iso(addDays(today, 10)) } } } });
 check(occurs(lt, addDays(today, 10)) && !occurs(lt, addDays(today, 11)) && planSummary(lt).includes('10 days left'), 'long-term: every day through the end date');
 // After it's done, with a break: 3 rounds, 7-day break.

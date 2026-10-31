@@ -80,7 +80,8 @@ extension PlanTask {
             let until = next.map(DateKey.string) ?? "9999"
             if done.contains(where: { $0 >= key && $0 < until }) { return .done }
             if missedKeys.contains(where: { $0 >= key && $0 < until }) { return .missed }
-            return next.map { $0 <= t0 } == true ? .lapsed : .open
+            // It stays open until the next one's time, not just its day.
+            return next.map { handoff(on: $0) <= today } == true ? .lapsed : .open
         }
         var states: [(day: Date, state: DayState)] = []
         var c = t0.adding(days: -365)
@@ -89,8 +90,8 @@ extension PlanTask {
             c = c.adding(days: 1)
         }
         var s = HabitStats()
-        for (i, x) in states.enumerated().reversed() {
-            if x.state == .open && i == states.count - 1 { continue }
+        // Not counting the ones still open (today, and the previous one until the new one's time).
+        for x in states.reversed().drop(while: { $0.state == .open }) {
             if x.state != .done { break }
             s.streak += 1
         }

@@ -187,8 +187,28 @@ extension PlanTask {
         return (k, completions[k] == nil)
     }
 
+    /// When the next one of a repeating until-done task takes over on its day: at its time (midnight if it has none).
+    func handoff(on day: Date) -> Date { timeMinutes.map { dayAt(day, minutes: $0) } ?? day.startOfDay }
+
+    /// Until the new one's time arrives, the previous one stays on your list (today only): if it's still open,
+    /// or you settled it earlier today. Checking it off then is filed under yesterday, so it counts for the old
+    /// one and not the new one. Same rule as heldOver() in model.js.
+    func heldOver(on day: Date, now: Date = Date()) -> (rep: Date, key: String, until: Date)? {
+        guard isUntilDone, !isCycle, recurrence.isRepeating, timeMinutes != nil else { return nil }
+        let d = day.startOfDay
+        guard d.isSameDay(now), occursByPattern(d) else { return nil }
+        let until = handoff(on: d)
+        guard now < until, let prev = repStart(on: d.adding(days: -1)) else { return nil }
+        let from = DateKey.string(prev), key = DateKey.string(d.adding(days: -1)), today = DateKey.string(d)
+        let settled = settledKeys.filter { $0 >= from && $0 < today }
+        if settled.isEmpty { return (prev, key, until) }
+        guard settled == [key], let at = completions[key] ?? missed?[key], at.isSameDay(d) else { return nil }
+        return (prev, key, until)
+    }
+
     /// Whether an until-done task was (or will be) on your list on `day`, past days included: for drawing its whole stretch.
     func untilDoneActive(on day: Date) -> Bool {
+        if archived != true, heldOver(on: day) != nil { return true }
         guard archived != true, let rep = repStart(on: day) else { return false }
         let key = DateKey.string(day.startOfDay), from = DateKey.string(rep)
         return !settledKeys.contains { $0 >= from && $0 < key }
@@ -196,10 +216,16 @@ extension PlanTask {
 
     /// For an until-done occurrence: "On your list since Mon · day 3", so carried-over items read as one task.
     func carryLabel(on day: Date) -> String {
-        guard let rep = repStart(on: day) else { return "" }
+        let held = heldOver(on: day)
+        guard let rep = held?.rep ?? repStart(on: day) else { return "" }
         let n = (Calendar.current.dateComponents([.day], from: rep, to: day.startOfDay).day ?? 0) + 1
-        return n <= 1 ? "New today" : "On your list since \(rep.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) · day \(n)"
+        let label = n <= 1 ? "New today" : "On your list since \(rep.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) · day \(n)"
+        guard let held else { return label }
+        return "\(label) · until \(held.until.formatted(date: .omitted, time: .shortened))"
     }
+
+    /// The day an until-done stretch on `day` belongs to (the held-over one before the new one's time).
+    func currentRepStart(on day: Date) -> Date? { heldOver(on: day)?.rep ?? repStart(on: day) }
 
     /// The plain repeat schedule (no until-done carry-over).
     func occursByPattern(_ d: Date) -> Bool {

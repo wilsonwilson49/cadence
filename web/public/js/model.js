@@ -205,6 +205,29 @@ export function finishOf(task, day = new Date()) {
 }
 export const finishedKey = (task, day) => finishOf(task, day)?.key ?? null;
 
+/** When the next one of a repeating until-done task takes over on its day: at its time (midnight if it has none). */
+export const handoffAt = (task, day) => task.timeMinutes != null ? dayAt(day, task.timeMinutes) : startOfDay(day);
+
+/**
+ * Until the new one's time arrives, the previous one stays on your list (today only): if it's still open,
+ * or you settled it earlier today. Checking it off then is filed under yesterday, so it counts for the old
+ * one and not the new one. Returns { rep, key, until } or null.
+ */
+export function heldOver(task, day, now = new Date()) {
+  if (!isUntilDone(task) || isCycle(task) || task.recurrence.frequency === 'none' || task.timeMinutes == null) return null;
+  const d = startOfDay(day);
+  if (!sameDay(d, now) || !occursByPattern(task, d)) return null;
+  const until = handoffAt(task, d);
+  if (now >= until) return null;
+  const prev = repStartOn(task, addDays(d, -1));
+  if (!prev) return null;
+  const from = dateKey(prev), key = dateKey(addDays(d, -1)), today = dateKey(d);
+  const settled = [...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].filter(k => k >= from && k < today);
+  if (!settled.length) return { rep: prev, key, until };
+  const at = (task.completions || {})[key] ?? (task.missed || {})[key];
+  return settled.length === 1 && settled[0] === key && at && sameDay(new Date(at), d) ? { rep: prev, key, until } : null;
+}
+
 // ---------- habit tracker ----------
 /** The next day the habit's schedule lands on after `day` (null if none within a year). */
 function nextScheduled(task, day) {
@@ -226,18 +249,16 @@ export function habitStats(task, today = new Date()) {
     const inRep = k => k >= key && k < until;
     if ([...done].some(inRep)) return 'done';
     if ([...missed].some(inRep)) return 'missed';
-    return next && next <= t0 ? 'lapsed' : 'open';
+    // It stays open until the next one's time, not just its day.
+    return next && handoffAt(task, next) <= today ? 'lapsed' : 'open';
   };
   const days = [];   // scheduled days, oldest first, up to today (a year at most)
   for (let c = addDays(t0, -365), i = 0; i <= 365; c = addDays(c, 1), i++) if (c >= start && occursByPattern(task, c)) days.push(c);
   const states = days.map(d => ({ day: d, state: stateOf(d) }));
-  // Current streak: done days in a row, not counting today if it's still open.
-  let streak = 0;
-  for (let i = states.length - 1; i >= 0; i--) {
-    if (states[i].state === 'open' && i === states.length - 1) continue;
-    if (states[i].state !== 'done') break;
-    streak++;
-  }
+  // Current streak: done days in a row, not counting the ones still open (today, and yesterday's until its handoff).
+  let streak = 0, i = states.length - 1;
+  while (i >= 0 && states[i].state === 'open') i--;
+  for (; i >= 0 && states[i].state === 'done'; i--) streak++;
   let best = 0, run = 0;
   for (const s of states) { run = s.state === 'done' ? run + 1 : 0; best = Math.max(best, run); }
   const recent = states.filter(s => s.day > addDays(t0, -30) && s.state !== 'open');
@@ -255,15 +276,19 @@ export function habitStats(task, today = new Date()) {
 
 /** For an until-done occurrence: "On your list since Mon · day 3", so carried-over items read as one task. */
 export function carryLabel(task, day) {
-  const rep = repStartOn(task, day);
+  const held = heldOver(task, day);
+  const rep = held?.rep ?? repStartOn(task, day);
   if (!rep) return '';
   const n = daysBetween(rep, day) + 1;
-  return n <= 1 ? 'New today' : `On your list since ${fmtDay(rep, { weekday: 'short', month: 'short', day: 'numeric' })} · day ${n}`;
+  const label = n <= 1 ? 'New today' : `On your list since ${fmtDay(rep, { weekday: 'short', month: 'short', day: 'numeric' })} · day ${n}`;
+  return held ? `${label} · until ${fmtTime(held.until)}` : label;
 }
 /** Whether an until-done task was (or will be) on your list on `day`, past days included: for drawing its whole stretch. */
 export function untilDoneActive(task, day) {
   if (task.archived) return false;
-  const d = startOfDay(day), rep = repStartOn(task, d);
+  const d = startOfDay(day);
+  if (heldOver(task, d)) return true;
+  const rep = repStartOn(task, d);
   if (!rep) return false;
   const key = dateKey(d), from = dateKey(rep);
   return ![...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].some(k => k >= from && k < key);
@@ -384,7 +409,9 @@ export function rrule(rec, start) {
 // ---------- occurrences ----------
 export function makeOccurrence(task, day) {
   const d = startOfDay(day);
-  const key = dateKey(d);
+  // Before the new one's time, today's item is still the previous one (see heldOver).
+  const held = heldOver(task, d);
+  const key = held ? held.key : dateKey(d);
   const start = task.timeMinutes != null ? dayAt(d, task.timeMinutes) : null;
   const event = isEvent(task);
   const done = !event && Boolean(task.completions && task.completions[key]);
@@ -397,6 +424,7 @@ export function makeOccurrence(task, day) {
     end: start ? addMinutes(start, Math.max(5, task.durationMinutes || 30)) : null,
     event,
     busy: isBusy(task),
+    held: Boolean(held),
     done, missed, resolved: done || missed,
     overdue: !event && !done && !missed && d < startOfDay(new Date()),
   };

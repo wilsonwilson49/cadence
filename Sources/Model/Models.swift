@@ -269,7 +269,8 @@ struct Occurrence: Identifiable, Hashable {
     let task: PlanTask
     let day: Date
 
-    var key: String { DateKey.string(day) }
+    /// The check-off key. Before a new repeat's time, today's item is still the previous one (see heldOver).
+    var key: String { task.heldOver(on: day)?.key ?? DateKey.string(day) }
     var id: String { "\(task.id.uuidString)|\(key)" }
     var start: Date? { task.timeMinutes.map { dayAt(day, minutes: $0) } }
     var end: Date? { start?.adding(minutes: max(5, task.durationMinutes)) }

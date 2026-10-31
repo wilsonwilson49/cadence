@@ -686,7 +686,7 @@ function untilDoneSpans(days) {
     let run = null;
     days.forEach((d, i) => {
       if (!M.untilDoneActive(t, d)) { run = null; return; }
-      const rep = +M.repStartOn(t, d), o = M.makeOccurrence(t, d);
+      const rep = +(M.heldOver(t, d)?.rep ?? M.repStartOn(t, d)), o = M.makeOccurrence(t, d);
       if (run && run.rep === rep && run.end === i - 1) { run.end = i; run.last = o; return; }
       run = { task: t, rep, start: i, end: i, first: o, last: o, before: i === 0 && rep < +d };
       spans.push(run);
