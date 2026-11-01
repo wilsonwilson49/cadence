@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import SwiftUI
 
 /// Launch-argument hooks for headless verification (GUI scripting is unavailable on this Mac):
 ///   -dataDir <path>   use a separate data folder
@@ -61,6 +62,20 @@ enum DebugDriver {
         runClickScan(model)
         reportSync(model)
         runFocusTest(model)
+        if LaunchOptions.has("-menuWindow") { showMenuWindow(model) }
+        if LaunchOptions.has("-openMenuBar") {
+            // Click our own menu bar icon, so the real dropdown can be screenshotted.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                func find(_ v: NSView) -> NSStatusBarButton? {
+                    if let b = v as? NSStatusBarButton { return b }
+                    for s in v.subviews { if let b = find(s) { return b } }
+                    return nil
+                }
+                for w in NSApp.windows where String(describing: type(of: w)).contains("StatusBar") {
+                    if let v = w.contentView, let b = find(v) { b.performClick(nil); break }
+                }
+            }
+        }
         let delay = Double(LaunchOptions.value("-listAfter") ?? "") ?? 3.5
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { writeWindowList(model) }
     }
@@ -200,6 +215,22 @@ enum DebugDriver {
             try? line.write(to: LaunchOptions.dataDirectory.appendingPathComponent("relaunch.txt"), atomically: true, encoding: .utf8)
         }
     }
+
+    /// -menuWindow: the menu bar dropdown's content in a normal window, sized to fit the same way, for screenshots.
+    static func showMenuWindow(_ model: AppModel) {
+        let host = NSHostingController(rootView: MenuBarView()
+            .environmentObject(model).environmentObject(model.store).environmentObject(model.google)
+            .environmentObject(model.engine).environmentObject(model.sync).environmentObject(model.calendly)
+            .environmentObject(model.importer).environmentObject(model.focus).environmentObject(model.screenTime))
+        host.sizingOptions = .preferredContentSize
+        let w = NSPanel(contentViewController: host)
+        w.styleMask = [.titled, .nonactivatingPanel]
+        w.title = "Menu bar"
+        w.setFrameOrigin(NSPoint(x: 60, y: 200))
+        w.orderFrontRegardless()
+        menuWindow = w
+    }
+    private static var menuWindow: NSWindow?
 
     static func writeWindowList(_ model: AppModel) {
         let lines = NSApp.windows.filter(\.isVisible).map { w -> String in
