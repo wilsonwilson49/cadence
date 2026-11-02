@@ -149,6 +149,14 @@ struct FocusSession: Codable, Identifiable, Hashable {
 }
 
 enum Focus {
+    /// Longest focus session you can set, in minutes (8 hours).
+    static let maxMinutes = 480
+    static let defaultLengths = [10, 15, 25, 45, 60]
+    static func clamp(_ m: Int) -> Int { min(maxMinutes, max(1, m)) }
+    /// A saved length list: valid, no repeats, shortest first, at most 8.
+    static func normalized(_ lengths: [Int]) -> [Int] { Array(Set(lengths.filter { $0 > 0 }.map(clamp))).sorted().prefix(8).map { $0 } }
+    /// "25 min", "1h 30m", "2h".
+    static func label(_ m: Int) -> String { m < 60 ? "\(m) min" : m % 60 == 0 ? "\(m / 60)h" : "\(m / 60)h \(m % 60)m" }
     /// 10 points per task finished in time, ×1.5 at 90% focused (×1.25 at 75%), +20 for clearing the list.
     static func multiplier(_ percent: Int) -> Double { percent >= 90 ? 1.5 : percent >= 75 ? 1.25 : 1 }
     static func points(finished: Int, picked: Int, focusPercent: Int) -> Int {

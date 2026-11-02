@@ -564,6 +564,14 @@ main.enter > * { animation: rise .26s cubic-bezier(.2, .8, .2, 1) both; }
 .fc-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .fc-time { font-size: 46px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .focus-final .fc-time { color: var(--orange); }
+/* Focus length buttons: hover shows an × to remove a saved length. */
+.flen { position: relative; display: inline-flex; }
+.flen-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--muted); display: none; align-items: center; justify-content: center; cursor: pointer; }
+.flen-x svg { width: 10px; height: 10px; }
+.flen:hover .flen-x, .flen-x:focus-visible { display: inline-flex; }
+@media (hover: none) { .flen-x { display: inline-flex; } }
+.flen-custom { display: inline-flex; align-items: center; gap: 6px; }
 .focus-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 14px; }
 .focus-pick .check { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .focus-pick .tiny { margin-left: auto; flex: none; }

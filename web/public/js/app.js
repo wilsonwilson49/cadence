@@ -563,7 +563,8 @@ function focusView() {
   } else {
     const open = store.todayChecklist().filter(o => !o.resolved);
     const pick = ui.focusPick ?? new Set(open.map(o => o.id));
-    const mins = ui.focusMinutes ?? store.settings.focusMinutes ?? 25;
+    const mins = M.clampFocus(ui.focusMinutes ?? store.settings.focusMinutes ?? 25);
+    const lengths = M.focusLengths(store.settings.focusLengths);
     const r = ui.focusResult;
     const unreflected = r ? (r.finishedIds || []).map(findOcc).filter(o => o && !o.resolved) : [];
     body = `${r ? `<div class="focus-result"><div class="fr-big">${r.finished}</div><div class="grow"><b>Time! ${r.finished} of ${r.picked} done in ${r.actualMinutes} min</b>
@@ -574,14 +575,16 @@ function focusView() {
         <button class="btn ghost sm icon" data-act="focus-dismiss" title="Close">${ic('x')}</button></div>` : ''}
       <div class="card pad stack" style="gap:14px">
         <div><div class="section-title" style="margin:0 0 8px">${ic('timer')}How long?</div>
-          <div class="row" style="flex-wrap:wrap">${[10, 15, 25, 45, 60].map(n => `<button class="btn ${mins === n ? 'primary' : ''}" data-act="focus-mins" data-m="${n}">${n} min</button>`).join('')}
-            <input class="input" type="number" min="1" max="240" style="width:90px" value="${mins}" data-bind="focusMinutes" title="Minutes"></div></div>
+          <div class="row" style="flex-wrap:wrap">${lengths.map(n => `<span class="flen"><button class="btn ${mins === n ? 'primary' : ''}" data-act="focus-mins" data-m="${n}">${M.fmtFocusLength(n)}</button><button class="flen-x" data-act="focus-len-remove" data-m="${n}" title="Remove this length">${ic('x')}</button></span>`).join('')}
+            <span class="flen-custom"><input class="input" type="number" min="1" max="${M.FOCUS_MAX_MINUTES}" style="width:80px" value="${mins}" data-bind="focusMinutes" title="Any length, in minutes"><span class="small muted">min</span></span>
+            ${lengths.includes(mins) ? '' : `<button class="btn sm" data-act="focus-len-save" title="Add ${M.fmtFocusLength(mins)} to the length buttons">${ic('plus')} Save ${M.fmtFocusLength(mins)}</button>`}</div>
+          <div class="tiny muted" style="margin-top:6px">Type any length up to ${M.FOCUS_MAX_MINUTES / 60} hours. Save it to keep it as a button; hover a button and click × to remove it.</div></div>
         <div><div class="section-title" style="margin:0 0 8px">${ic('list')}What will you get through? <span class="count">${pick.size}</span></div>
           ${open.length ? `<div class="focus-pick">${open.map(o => `<label class="check"><input type="checkbox" data-act-change="focus-pick" value="${esc(o.id)}" ${pick.has(o.id) ? 'checked' : ''}>
             <span class="ellipsis">${esc(o.task.title)}</span><span class="tiny muted">${M.isHabit(o.task) ? 'habit' : M.isUntilDone(o.task) ? 'until done' : 'today'}</span></label>`).join('')}</div>`
             : '<div class="muted">Nothing open on today’s list. Add a task first.</div>'}</div>
         <div class="row"><div class="small muted grow">Score: 10 points per task finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.</div>
-          <button class="btn primary" data-act="focus-start" ${pick.size ? '' : 'disabled'}>${ic('target')} Start ${mins}-minute focus</button></div>
+          <button class="btn primary" data-act="focus-start" ${pick.size ? '' : 'disabled'}>${ic('target')} Start ${M.fmtFocusLength(mins)} focus</button></div>
       </div>`;
   }
   return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Race the clock: set a time, then see how much of your list you can finish before it runs out.</div></div></div>
@@ -1825,9 +1828,20 @@ const actions = {
     store.updateSettings({ distractingApps: has ? list.filter(x => x.toLowerCase() !== app.toLowerCase()) : [...list, app] });
   },
   'focus-mins': el => { ui.focusMinutes = Number(el.dataset.m); render(); },
+  'focus-len-save': () => {
+    const m = M.clampFocus(ui.focusMinutes ?? store.settings.focusMinutes);
+    const list = M.focusLengths(store.settings.focusLengths);
+    if (list.length >= 8) { toast('You can keep up to 8 lengths. Remove one first.', { icon: 'alert' }); return; }
+    store.updateSettings({ focusLengths: M.focusLengths([...list, m]) });
+  },
+  'focus-len-remove': el => {
+    const m = Number(el.dataset.m), before = M.focusLengths(store.settings.focusLengths);
+    store.updateSettings({ focusLengths: before.filter(x => x !== m) });
+    toast(`Removed ${M.fmtFocusLength(m)}`, { icon: 'trash', undo: () => store.updateSettings({ focusLengths: before }) });
+  },
   'focus-start': () => {
     const pick = ui.focusPick ?? new Set(store.todayChecklist().filter(o => !o.resolved).map(o => o.id));
-    const mins = Math.min(240, Math.max(1, ui.focusMinutes ?? store.settings.focusMinutes ?? 25));
+    const mins = M.clampFocus(ui.focusMinutes ?? store.settings.focusMinutes ?? 25);
     if (mins !== store.settings.focusMinutes) store.updateSettings({ focusMinutes: mins });
     ui.focusPick = null;
     startFocus(mins, [...pick]);
@@ -2074,7 +2088,7 @@ document.addEventListener('change', e => {
     ui.focusPick = pick; render();
     return;
   }
-  if (el.dataset.bind === 'focusMinutes') { ui.focusMinutes = Math.min(240, Math.max(1, Number(el.value) || 25)); render(); return; }
+  if (el.dataset.bind === 'focusMinutes') { ui.focusMinutes = M.clampFocus(el.value); render(); return; }
   if (el.dataset.actChange === 'open-at-login') { ui.openAtLogin = el.checked; window.cadenceDesktop?.setOpenAtLogin(el.checked); return; }
   if (el.dataset.actChange === 'cal-toggle') {
     store.setCalendarShown(el.value, el.checked);

@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -78,6 +78,9 @@ check(habitStats(hab).missTwice && habitStats(hab).streak === 0, 'habits: never 
 // Focus scoring and levels.
 check(focusPoints({ finished: 3, picked: 3, focusPercent: 95 }) === 65 && focusPoints({ finished: 2, picked: 5, focusPercent: 60 }) === 20, 'focus: points');
 check(focusLevel(0).level === 1 && focusLevel(100).level === 2 && focusLevel(299).level === 2 && focusLevel(300).level === 3, 'focus: levels');
+// Custom focus lengths: cleaned up, capped at 8 hours, labelled like the Mac.
+check(focusLengths([90, 25, 25, 0, 999]).join() === '25,90,480' && focusLengths(undefined).join() === '10,15,25,45,60' && clampFocus('75') === 75, 'focus: custom lengths');
+check(fmtFocusLength(45) === '45 min' && fmtFocusLength(90) === '1h 30m' && fmtFocusLength(120) === '2h', 'focus: length labels');
 // Google Tasks become until-done tasks with a stable ID (same on the Mac).
 const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });
 check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && isUntilDone(gtask) && gtask.source === 'gtasks' && gtask.sourceCalendar === 'L1'

@@ -104,12 +104,7 @@ struct FocusView: View {
             Card {
                 VStack(alignment: .leading, spacing: 14) {
                     SectionTitle(text: "How long?", symbol: "timer")
-                    HStack {
-                        ForEach([10, 15, 25, 45, 60], id: \.self) { m in
-                            Button("\(m) min") { minutes = m }.buttonStyle(.bordered).tint(minutes == m ? .accentColor : nil)
-                        }
-                        Stepper("\(minutes) min", value: $minutes, in: 1...240).fixedSize()
-                    }
+                    FocusLengthPicker(minutes: $minutes)
                     SectionTitle(text: "What will you get through?", symbol: "checklist", count: selected.count)
                     if open.isEmpty {
                         Text("Nothing open on today's list. Add a task first.").foregroundStyle(.secondary)
@@ -138,7 +133,7 @@ struct FocusView: View {
                             if minutes != store.settings.focusMinutes { store.settings.focusMinutes = minutes }
                             focus.start(minutes: minutes, picked: open.map(\.id).filter(selected.contains))
                             picks = nil
-                        } label: { Label("Start \(minutes)-minute focus", systemImage: "scope") }
+                        } label: { Label("Start \(Focus.label(minutes)) focus", systemImage: "scope") }
                         .buttonStyle(.borderedProminent).tint(.pink)
                         .disabled(selected.isEmpty)
                     }
@@ -400,5 +395,52 @@ struct ScreenTimeView: View {
             }
             .labelsHidden().fixedSize()
         }
+    }
+}
+
+/// The length buttons (your saved lengths) plus a box to type any length, which you can save as a button.
+/// Right-click a button to remove it.
+struct FocusLengthPicker: View {
+    @EnvironmentObject private var store: Store
+    @Binding var minutes: Int
+    @State private var text = ""
+    @FocusState private var typing: Bool
+
+    var body: some View {
+        let lengths = store.settings.focusLengths
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ForEach(lengths, id: \.self) { m in
+                    Button(Focus.label(m)) { minutes = m }
+                        .buttonStyle(.bordered).tint(minutes == m ? .accentColor : nil)
+                        .contextMenu {
+                            Button("Remove \(Focus.label(m))", role: .destructive) {
+                                store.settings.focusLengths.removeAll { $0 == m }
+                            }
+                        }
+                }
+                Divider().frame(height: 18)
+                TextField("Minutes", text: $text)
+                    .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 54)
+                    .focused($typing)
+                    .help("Any length, in minutes")
+                    .onChange(of: text) { _, t in if let v = Int(t.filter(\.isNumber)), v > 0 { minutes = Focus.clamp(v) } }
+                    .onChange(of: typing) { _, on in if !on { text = String(minutes) } }
+                    .onSubmit { text = String(minutes) }
+                Stepper("min", value: $minutes, in: 1...Focus.maxMinutes, step: 5).fixedSize()
+                if !lengths.contains(minutes) {
+                    Button { store.settings.focusLengths = Focus.normalized(lengths + [minutes]) } label: {
+                        Label("Save \(Focus.label(minutes))", systemImage: "plus")
+                    }
+                    .controlSize(.small)
+                    .disabled(lengths.count >= 8)
+                    .help(lengths.count >= 8 ? "You can keep up to 8 lengths. Right-click one to remove it." : "Add \(Focus.label(minutes)) to the length buttons")
+                }
+            }
+            Text("Type any length up to \(Focus.maxMinutes / 60) hours. Save it to keep it as a button; right-click a button to remove it.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .onAppear { text = String(minutes) }
+        .onChange(of: minutes) { _, m in if Int(text) != m { text = String(m) } }
     }
 }

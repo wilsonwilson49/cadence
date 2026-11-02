@@ -458,6 +458,8 @@ struct AppSettings: Codable {
     var screenLimitMinutes = 0
     var distractingLimitMinutes = 0
     var focusMinutes = 25
+    /// The length buttons on the Focus screen; add your own, remove any.
+    var focusLengths = Focus.defaultLengths
     var syncGoogleTasks = true
 
     init() {}
@@ -494,6 +496,7 @@ struct AppSettings: Codable {
         screenLimitMinutes = c.value(.screenLimitMinutes, d.screenLimitMinutes)
         distractingLimitMinutes = c.value(.distractingLimitMinutes, d.distractingLimitMinutes)
         focusMinutes = c.value(.focusMinutes, d.focusMinutes)
+        focusLengths = Focus.normalized(c.value(.focusLengths, d.focusLengths))
         syncGoogleTasks = c.value(.syncGoogleTasks, d.syncGoogleTasks)
     }
 }
@@ -526,6 +529,7 @@ struct SyncedSettings: Codable, Equatable {
     var screenLimitMinutes: Int
     var distractingLimitMinutes: Int
     var focusMinutes: Int
+    var focusLengths: [Int]
     var syncGoogleTasks: Bool
 
     init(_ s: AppSettings) {
@@ -542,7 +546,7 @@ struct SyncedSettings: Codable, Equatable {
         taskPresets = s.taskPresets
         habitScorecard = s.habitScorecard; distractingApps = s.distractingApps
         screenLimitMinutes = s.screenLimitMinutes; distractingLimitMinutes = s.distractingLimitMinutes
-        focusMinutes = s.focusMinutes; syncGoogleTasks = s.syncGoogleTasks
+        focusMinutes = s.focusMinutes; focusLengths = s.focusLengths; syncGoogleTasks = s.syncGoogleTasks
     }
 
     init(from decoder: Decoder) throws {
@@ -573,6 +577,7 @@ struct SyncedSettings: Codable, Equatable {
         screenLimitMinutes = c.value(.screenLimitMinutes, screenLimitMinutes)
         distractingLimitMinutes = c.value(.distractingLimitMinutes, distractingLimitMinutes)
         focusMinutes = c.value(.focusMinutes, focusMinutes)
+        focusLengths = Focus.normalized(c.value(.focusLengths, focusLengths))
         syncGoogleTasks = c.value(.syncGoogleTasks, syncGoogleTasks)
     }
 
@@ -590,7 +595,7 @@ struct SyncedSettings: Codable, Equatable {
         s.taskPresets = taskPresets
         s.habitScorecard = habitScorecard; s.distractingApps = distractingApps
         s.screenLimitMinutes = screenLimitMinutes; s.distractingLimitMinutes = distractingLimitMinutes
-        s.focusMinutes = focusMinutes; s.syncGoogleTasks = syncGoogleTasks
+        s.focusMinutes = focusMinutes; s.focusLengths = focusLengths; s.syncGoogleTasks = syncGoogleTasks
     }
 }
 

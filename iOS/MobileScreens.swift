@@ -321,6 +321,8 @@ struct FocusScreen: View {
     @EnvironmentObject private var focus: MobileFocus
     @State private var minutes = 25
     @State private var picks: Set<String>?
+    @State private var minutesText = "25"
+    @FocusState private var typingMinutes: Bool
 
     var body: some View {
         let sessions = store.sortedFocusSessions
@@ -357,7 +359,9 @@ struct FocusScreen: View {
                 }
             }
             .navigationTitle("Focus")
-            .onAppear { minutes = store.settings.focusMinutes }
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { typingMinutes = false } } }
+            .onAppear { minutes = store.settings.focusMinutes; minutesText = String(minutes) }
         }
     }
 
@@ -414,15 +418,40 @@ struct FocusScreen: View {
                 Button("Dismiss") { focus.result = nil }
             }
         }
-        Section("How long?") {
+        Section {
+            let lengths = store.settings.focusLengths
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach([10, 15, 25, 45, 60], id: \.self) { m in
-                        Button("\(m) min") { minutes = m }.buttonStyle(.bordered).tint(minutes == m ? .pink : .gray)
+                    ForEach(lengths, id: \.self) { m in
+                        Button(Focus.label(m)) { minutes = m }.buttonStyle(.bordered).tint(minutes == m ? .pink : .gray)
+                            .contextMenu {
+                                Button("Remove \(Focus.label(m))", systemImage: "trash", role: .destructive) {
+                                    store.settings.focusLengths.removeAll { $0 == m }
+                                }
+                            }
                     }
                 }
             }
-            Stepper("\(minutes) minutes", value: $minutes, in: 1...240)
+            HStack {
+                Text("Custom")
+                Spacer()
+                TextField("Minutes", text: $minutesText)
+                    .keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 60)
+                    .focused($typingMinutes)
+                    .onChange(of: minutesText) { _, t in if let v = Int(t.filter(\.isNumber)), v > 0 { minutes = Focus.clamp(v) } }
+                    .onChange(of: minutes) { _, m in if Int(minutesText) != m { minutesText = String(m) } }
+                    .onChange(of: typingMinutes) { _, on in if !on { minutesText = String(minutes) } }
+                Text("min").foregroundStyle(.secondary)
+                Stepper("Minutes", value: $minutes, in: 1...Focus.maxMinutes, step: 5).labelsHidden()
+            }
+            if !lengths.contains(minutes) {
+                Button { store.settings.focusLengths = Focus.normalized(lengths + [minutes]); typingMinutes = false } label: {
+                    Label("Save \(Focus.label(minutes)) as a button", systemImage: "plus")
+                }
+                .disabled(lengths.count >= 8)
+            }
+        } header: { Text("How long?") } footer: {
+            Text("Type any length up to \(Focus.maxMinutes / 60) hours. Touch and hold a button to remove it.")
         }
         Section("What will you get through?") {
             if open.isEmpty { Text("Nothing open on today's list.").foregroundStyle(.secondary) }
@@ -445,10 +474,11 @@ struct FocusScreen: View {
         }
         Section {
             Button {
+                typingMinutes = false
                 if minutes != store.settings.focusMinutes { store.settings.focusMinutes = minutes }
                 focus.start(minutes: minutes, picked: open.map(\.id).filter(selected.contains))
                 picks = nil
-            } label: { Label("Start \(minutes)-minute focus", systemImage: "scope").frame(maxWidth: .infinity) }
+            } label: { Label("Start \(Focus.label(minutes)) focus", systemImage: "scope").frame(maxWidth: .infinity) }
             .buttonStyle(.borderedProminent).disabled(selected.isEmpty)
             .listRowBackground(Color.clear)
         } footer: {

@@ -483,6 +483,8 @@ export const DEFAULT_SETTINGS = {
   screenLimitMinutes: 0,
   distractingLimitMinutes: 0,
   focusMinutes: 25,
+  // The length buttons on the Focus screen (minutes); add your own, remove any.
+  focusLengths: [10, 15, 25, 45, 60],
   syncGoogleTasks: true,
   // Task presets: saved combinations of conditions to start new tasks from. Dates are stored relative to the
   // start day (spanDays: repeat end / long-term end, dueDays: due date). Same shape as TaskPreset on the Mac.
@@ -517,6 +519,12 @@ export const COLORS = {
 // ---------- focus sessions (time pressure) ----------
 /** Points for a focus session: 10 per task finished in time, multiplied by how focused you stayed
  *  (time not spent away or in distracting apps), plus 20 for clearing everything you picked. */
+export const FOCUS_MAX_MINUTES = 480;
+export const clampFocus = m => Math.min(FOCUS_MAX_MINUTES, Math.max(1, Math.round(Number(m) || 25)));
+/** A saved length list: valid, no repeats, shortest first, at most 8. */
+export const focusLengths = list => [...new Set((Array.isArray(list) ? list : DEFAULT_SETTINGS.focusLengths).filter(m => Number(m) > 0).map(clampFocus))].sort((a, b) => a - b).slice(0, 8);
+/** "25 min", "1h 30m", "2h". */
+export const fmtFocusLength = m => m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m / 60}h`;
 export function focusMultiplier(percent) { return percent >= 90 ? 1.5 : percent >= 75 ? 1.25 : 1; }
 export function focusPoints({ finished, picked, focusPercent }) {
   return Math.round(finished * 10 * focusMultiplier(focusPercent ?? 100) + (picked && finished >= picked ? 20 : 0));
