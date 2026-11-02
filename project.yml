@@ -33,6 +33,7 @@ targets:
     sources:
       - path: iOS
       - path: Sources/Model
+      - path: Sources/Shared
       - path: Sources/Services/SyncService.swift
       - path: Sources/Services/GoogleAuth.swift
     settings:

@@ -44,6 +44,8 @@ struct TodayScreen: View {
         let items = store.checklist(on: Date())
         let overdue = store.overdue()
         let all = overdue + items
+        // Project subtasks on today's list count in the ring too.
+        let proj = store.projectToday()
         let tasks = items.filter { !$0.isHabit && !$0.isUntilDone }
         let habits = items.filter(\.isHabit)
         let ongoing = items.filter { !$0.isHabit && $0.isUntilDone }
@@ -55,10 +57,10 @@ struct TodayScreen: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(greeting).foregroundStyle(.secondary)
                             Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day())).font(.title2.bold())
-                            Text(status(all)).font(.callout).foregroundStyle(.secondary)
+                            Text(status(all, proj)).font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Ring(done: all.filter(\.isDone).count, total: all.count)
+                        Ring(done: all.filter(\.isDone).count + proj.filter { $0.item?.isDone == true }.count, total: all.count + proj.count)
                     }
                     .padding(.vertical, 4)
                     HStack {
@@ -88,6 +90,7 @@ struct TodayScreen: View {
                         Text("These stay on your list until you check them off or mark them “didn't do it”.")
                     }
                 }
+                MobileProjectSections()
                 Section("Schedule") {
                     if events.isEmpty { Text("No events today.").foregroundStyle(.secondary) }
                     ForEach(events) { MobileEventRow(occ: $0) }
@@ -107,12 +110,14 @@ struct TodayScreen: View {
         let h = Calendar.current.component(.hour, from: Date())
         return h >= 5 && h < 12 ? "Good morning" : h >= 12 && h < 17 ? "Good afternoon" : "Good evening"
     }
-    private func status(_ all: [Occurrence]) -> String {
-        if all.isEmpty { return "A clear day." }
-        let done = all.filter(\.isDone).count, settled = all.filter(\.isResolved).count
-        if done == all.count { return "Everything is checked off. Nice work." }
-        if settled == all.count { return "All settled: \(done) done, \(all.count - done) not done." }
-        return "\(all.count - settled) of \(all.count) left to check off."
+    private func status(_ all: [Occurrence], _ proj: [ProjectDeadline]) -> String {
+        let total = all.count + proj.count
+        if total == 0 { return "A clear day." }
+        let pd = proj.filter { $0.item?.isDone == true }.count
+        let done = all.filter(\.isDone).count + pd, settled = all.filter(\.isResolved).count + pd
+        if done == total { return "Everything is checked off. Nice work." }
+        if settled == total { return "All settled: \(done) done, \(total - done) not done." }
+        return "\(total - settled) of \(total) left to check off."
     }
     private func addQuick() {
         let t = quick.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -497,6 +502,9 @@ struct MoreScreen: View {
         NavigationStack {
             List {
                 Section {
+                    NavigationLink { ProjectsScreen() } label: {
+                        Label("Projects", systemImage: "square.stack.3d.up").badge(store.projectToday().filter { $0.item?.isDone == false }.count)
+                    }
                     NavigationLink { TodoScreen() } label: { Label("To-Do List", systemImage: "checklist") }
                     NavigationLink { ReflectionsScreen() } label: { Label("Reflections", systemImage: "text.quote").badge(store.reflections.count) }
                 }

@@ -63,6 +63,7 @@ final class MobileModel: ObservableObject {
             Task { await sync.signIn(username: user, password: pass, create: false) }
         }
         if LaunchOptions.has("-demo") && store.tasks.isEmpty { DemoData.seed(store) }
+        if LaunchOptions.has("-demo") && store.projects.isEmpty { store.projects = [Project.demo()] }
         if let t = LaunchOptions.value("-tab").flatMap(Int.init) { tab = t }
         if let what = LaunchOptions.value("-open") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in

@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -81,6 +81,49 @@ check(focusLevel(0).level === 1 && focusLevel(100).level === 2 && focusLevel(299
 // Custom focus lengths: cleaned up, capped at 8 hours, labelled like the Mac.
 check(focusLengths([90, 25, 25, 0, 999]).join() === '25,90,480' && focusLengths(undefined).join() === '10,15,25,45,60' && clampFocus('75') === 75, 'focus: custom lengths');
 check(fmtFocusLength(45) === '45 min' && fmtFocusLength(90) === '1h 30m' && fmtFocusLength(120) === '2h', 'focus: length labels');
+// Projects: nested subtasks, rolled-up progress, inherited deadlines, conflicts, deadlines list, map layout.
+{
+  const leaf = (title, o) => newProjectItem({ title, ...o });
+  const pr = newProject({ title: 'Essay', start: '2026-11-01', due: '2026-11-20', items: [
+    leaf('Research', { due: '2026-11-05', items: [leaf('Read sources', { due: '2026-11-03' }), leaf('Take notes')] }),
+    leaf('Draft', { due: '2026-11-25' }),
+    leaf('Edit'),
+  ] });
+  const rows = projectRows(pr);
+  check(rows.map(r => `${r.depth}${r.item.title[0]}`).join() === '0R,1R,1T,0D,0E', 'projects: rows in order with depth');
+  check(rows[2].due === '2026-11-05' && rows[4].due === '2026-11-20' && rows[1].start === '2026-11-01', 'projects: dates passed down');
+  check(rows[3].conflict && !rows[1].conflict, 'projects: deadline later than the parent is flagged');
+  check(projectProgress(pr).done === 0 && projectProgress(pr).total === 4, 'projects: progress counts leaves');
+  const research = pr.items[0];
+  updateItem(pr, research.items[0].id, i => setItemDone(i, true));
+  check(!itemDone(research) && projectProgress(pr).done === 1, 'projects: one leaf done');
+  updateItem(pr, research.items[1].id, i => setItemDone(i, true));
+  check(itemDone(research) && research.doneAt, 'projects: parent done when all children are');
+  updateItem(pr, research.items[1].id, i => setItemDone(i, false));
+  check(!itemDone(research) && !research.doneAt, 'projects: parent reopens');
+  indentItem(pr, pr.items[2].id);   // Edit goes under Draft
+  check(pr.items.length === 2 && pr.items[1].items[0].title === 'Edit', 'projects: indent');
+  outdentItem(pr, pr.items[1].items[0].id);
+  check(pr.items.length === 3 && pr.items[2].title === 'Edit', 'projects: outdent');
+  insertItem(pr, leaf('Outline'), research.id);
+  check(findItem(pr, research.items[2].id).parent.id === research.id, 'projects: insert under a parent');
+  updateItem(pr, research.items[0].id, i => setItemDone(i, false));
+  const dl = projectDeadlines(pr, 7, d('2026-11-01'));
+  check(dl.map(x => x.title).join() === 'Research,Read sources' && dl[1].path.join() === 'Research', 'projects: deadlines within a week, with path');
+  check(deadlineStatus('2026-10-31', false, '2026-11-01') === 'overdue' && deadlineStatus('2026-11-03', false, '2026-11-01') === 'soon'
+    && deadlineStatus('2026-11-09', false, '2026-11-01') === 'later' && deadlineStatus('2026-10-31', true, '2026-11-01') === 'done', 'projects: deadline status');
+  // Today's list: due today (and overdue) or urgent count; due later shows apart; done today stays on.
+  const tp = newProject({ title: 'T', due: '2026-11-30', items: [leaf('Due today', { due: '2026-11-01' }), leaf('Late', { due: '2026-10-30' }),
+    leaf('Tomorrow', { due: '2026-11-02' }), leaf('Urgent', { urgent: true }), leaf('Next month', { due: '2026-12-01' }),
+    leaf('Done earlier', { due: '2026-11-01', doneAt: iso(d('2026-10-29')) }), leaf('Done today', { due: '2026-11-01', doneAt: iso(new Date(2026, 10, 1, 9)) })] });
+  const ti = projectTodayItems(tp, 0, new Date(2026, 10, 1, 12));
+  check(ti.today.map(x => x.title).join() === 'Due today,Late,Urgent,Done today' && ti.upcoming.map(x => x.title).join() === 'Tomorrow', 'projects: today list (due today, overdue, urgent)');
+  check(projectTodayItems(tp, 1, new Date(2026, 10, 1, 12)).today.some(x => x.title === 'Tomorrow')
+    && projectTodayItems(tp, -1, new Date(2026, 10, 1, 12)).today.map(x => x.title).join() === 'Urgent', 'projects: today window setting');
+  const lay = projectMapLayout(pr);
+  const root = lay.nodes.find(n => n.id === 'root'), res = lay.nodes.find(n => n.id === research.id);
+  check(lay.rows === 5 && lay.depth === 2 && res.y === 1 && root.y === 2.5 && lay.edges.length === 6, 'projects: map layout');
+}
 // Google Tasks become until-done tasks with a stable ID (same on the Mac).
 const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });
 check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && isUntilDone(gtask) && gtask.source === 'gtasks' && gtask.sourceCalendar === 'L1'

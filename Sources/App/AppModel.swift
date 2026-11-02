@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home, today, week, month, todo, habits, reflections, focus, screentime, booking, settings
+    case home, today, week, month, todo, projects, habits, reflections, focus, screentime, booking, settings
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -12,6 +12,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .week: return "Week"
         case .month: return "Month"
         case .todo: return "To-Do List"
+        case .projects: return "Projects"
         case .reflections: return "Reflections"
         case .habits: return "Habits"
         case .focus: return "Focus"
@@ -27,6 +28,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .week: return "calendar.day.timeline.left"
         case .month: return "calendar"
         case .todo: return "checklist"
+        case .projects: return "square.stack.3d.up"
         case .reflections: return "text.quote"
         case .habits: return "arrow.triangle.2.circlepath.circle"
         case .focus: return "scope"
@@ -58,6 +60,8 @@ final class AppModel: ObservableObject {
     /// True when the open reflection is for "didn't do it" rather than a check-off.
     @Published var reflectionMissed = false
     @Published var editingTask: PlanTask?
+    /// The project open on the Projects screen (nil = the list of projects).
+    @Published var openProjectID: UUID?
 
     private init() {
         store = Store(directory: LaunchOptions.dataDirectory)

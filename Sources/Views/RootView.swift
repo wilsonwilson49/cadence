@@ -33,6 +33,7 @@ struct RootView: View {
                         row(.week)
                         row(.month)
                         row(.todo)
+                        row(.projects, badge: store.projectToday().filter { $0.item?.isDone == false }.count)
                     }
                     Section("Grow") {
                         row(.habits, badge: store.todayChecklist().filter { $0.isHabit && !$0.isResolved }.count)
@@ -103,6 +104,7 @@ struct RootView: View {
         case .week: WeekView()
         case .month: MonthView()
         case .todo: TodoView()
+        case .projects: ProjectsView()
         case .reflections: ReflectionsView()
         case .habits: HabitsView()
         case .focus: FocusView()

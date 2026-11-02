@@ -13,14 +13,16 @@ struct HomeView: View {
         let now = Date()
         let items = store.todayChecklist()
         let open = items.filter { !$0.isResolved }
-        let done = items.count - open.count
+        let proj = store.projectToday()
+        let projOpen = proj.filter { $0.item?.isDone == false }.count
+        let done = items.count - open.count + (proj.count - projOpen)
         let overdue = store.overdue().count
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                header(now: now, open: open.count, total: items.count)
+                header(now: now, open: open.count + projOpen, total: items.count + proj.count)
                 if !sync.isSignedIn { syncPrompt }
                 HStack(alignment: .top, spacing: 14) {
-                    todayCard(items: items, open: open, done: done, overdue: overdue)
+                    todayCard(items: items, open: open, done: done, total: items.count + proj.count, overdue: overdue)
                         .frame(maxWidth: .infinity)
                     VStack(alignment: .leading, spacing: 14) {
                         upNextCard(now: now)
@@ -79,15 +81,15 @@ struct HomeView: View {
         }
     }
 
-    private func todayCard(items: [Occurrence], open: [Occurrence], done: Int, overdue: Int) -> some View {
+    private func todayCard(items: [Occurrence], open: [Occurrence], done: Int, total: Int, overdue: Int) -> some View {
         Button { model.screen = .today } label: {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 16) {
-                    ProgressRing(done: done, total: items.count, size: 72, lineWidth: 8)
+                    ProgressRing(done: done, total: total, size: 72, lineWidth: 8)
                     VStack(alignment: .leading, spacing: 2) {
                         Label("Today", systemImage: "sun.max").font(.headline)
                         HStack(spacing: 4) {
-                            Text(items.isEmpty ? "A clear day" : "\(done) of \(items.count) done")
+                            Text(total == 0 ? "A clear day" : "\(done) of \(total) done")
                             if overdue > 0 { Text("· \(overdue) overdue").foregroundStyle(.red) }
                         }
                         .font(.callout).foregroundStyle(.secondary)

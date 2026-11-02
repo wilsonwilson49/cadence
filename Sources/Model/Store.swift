@@ -10,6 +10,7 @@ final class Store: ObservableObject {
     /// Focus sessions and daily screen-time summaries: written whole, so whoever writes sets updatedAt.
     @Published var focusSessions: [FocusSession] = [] { didSet { scheduleSave() } }
     @Published var screenDays: [ScreenDay] = [] { didSet { scheduleSave() } }
+    @Published var projects: [Project] = [] { didSet { stampProjects(oldValue); scheduleSave() } }
 
     /// Deleted records ("task|<id>" / "reflection|<id>") → when, so deletions sync too.
     private(set) var tombstones: [String: Date] = [:]
@@ -29,6 +30,7 @@ final class Store: ObservableObject {
         var settingsUpdatedAt: Date?
         var focusSessions: [FocusSession]?
         var screenDays: [ScreenDay]?
+        var projects: [Project]?
     }
 
     init(directory: URL) {
@@ -52,6 +54,7 @@ final class Store: ObservableObject {
             tombstones = snap.tombstones ?? [:]
             focusSessions = snap.focusSessions ?? []
             screenDays = snap.screenDays ?? []
+            projects = snap.projects ?? []
             settingsUpdatedAt = snap.settingsUpdatedAt
             isLoading = false
         } catch {
@@ -81,7 +84,7 @@ final class Store: ObservableObject {
         do {
             let data = try encoder.encode(Snapshot(tasks: tasks, reflections: reflections, settings: settings,
                                                    tombstones: tombstones, settingsUpdatedAt: settingsUpdatedAt,
-                                                   focusSessions: focusSessions, screenDays: screenDays))
+                                                   focusSessions: focusSessions, screenDays: screenDays, projects: projects))
             try data.write(to: fileURL, options: .atomic)
         } catch {
             NSLog("Cadence: save failed: %@", "\(error)")
@@ -130,6 +133,26 @@ final class Store: ObservableObject {
         let ids = Set(reflections.map(\.id))
         for o in old where !ids.contains(o.id) { tombstones["reflection|\(o.id.uuidString)"] = now }
         if changed { stamping = true; reflections = updated; stamping = false }
+    }
+
+    private func stampProjects(_ old: [Project]) {
+        guard !isLoading, !applyingRemote, !stamping else { return }
+        let oldByID = Dictionary(old.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let now = Date()
+        var updated = projects
+        var changed = false
+        for i in updated.indices {
+            if let o = oldByID[updated[i].id] {
+                var a = o, b = updated[i]
+                a.updatedAt = nil; b.updatedAt = nil
+                if a == b { continue }
+            }
+            updated[i].updatedAt = now
+            changed = true
+        }
+        let ids = Set(projects.map(\.id))
+        for o in old where !ids.contains(o.id) { tombstones["project|\(o.id.uuidString)"] = now }
+        if changed { stamping = true; projects = updated; stamping = false }
     }
 
     private func stampSettings(_ old: AppSettings) {
@@ -184,6 +207,9 @@ final class Store: ObservableObject {
         for d in screenDays where since == nil || (d.updatedAt.map(newer) ?? false) {
             out.append(SyncChange(kind: "screen", id: d.id, updatedAt: d.updatedAt ?? Date(), deleted: false, data: Self.jsonObject(d)))
         }
+        for p in projects where since == nil || (p.updatedAt.map(newer) ?? false) {
+            out.append(SyncChange(kind: "project", id: p.id.uuidString, updatedAt: p.updatedAt ?? p.createdAt, deleted: false, data: Self.jsonObject(p)))
+        }
         for (key, when) in tombstones where newer(when) {
             let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
             if parts.count == 2 { out.append(SyncChange(kind: parts[0], id: parts[1], updatedAt: when, deleted: true, data: nil)) }
@@ -205,6 +231,7 @@ final class Store: ObservableObject {
         var newTasks = tasks
         var newReflections = reflections
         var newSettings = settings
+        var newProjects = projects
         for c in changes {
             switch c.kind {
             case "task":
@@ -254,11 +281,25 @@ final class Store: ObservableObject {
                       let s = try? Self.syncDecoder.decode(SyncedSettings.self, from: data) else { continue }
                 s.apply(to: &newSettings)
                 settingsUpdatedAt = c.updatedAt
+            case "project":
+                guard let id = UUID(uuidString: c.id) else { continue }
+                let i = newProjects.firstIndex { $0.id == id }
+                if let i, (newProjects[i].updatedAt ?? newProjects[i].createdAt) > c.updatedAt { continue }
+                if c.deleted {
+                    if let i { newProjects.remove(at: i) }
+                    tombstones["project|\(c.id.uppercased())"] = nil
+                    continue
+                }
+                guard let obj = c.data, let data = try? JSONSerialization.data(withJSONObject: obj),
+                      var p = try? Self.syncDecoder.decode(Project.self, from: data) else { continue }
+                p.updatedAt = c.updatedAt
+                if let i { newProjects[i] = p } else { newProjects.append(p) }
             default:
                 continue
             }
         }
         tasks = newTasks
+        projects = newProjects
         reflections = newReflections.sorted { $0.createdAt > $1.createdAt }
         settings = newSettings
     }
@@ -266,6 +307,24 @@ final class Store: ObservableObject {
     // MARK: Queries
 
     func task(_ id: UUID) -> PlanTask? { tasks.first { $0.id == id } }
+
+    // MARK: Projects
+
+    func project(_ id: UUID) -> Project? { projects.first { $0.id == id } }
+    func upsert(_ p: Project) {
+        if let i = projects.firstIndex(where: { $0.id == p.id }) { projects[i] = p } else { projects.append(p) }
+    }
+    func deleteProject(_ id: UUID) { projects.removeAll { $0.id == id } }
+    /// Edits one project in place.
+    func editProject(_ id: UUID, _ change: (inout Project) -> Void) {
+        guard let i = projects.firstIndex(where: { $0.id == id }) else { return }
+        var p = projects[i]; change(&p); projects[i] = p
+    }
+    /// Unfinished project deadlines up to `days` ahead, plus any overdue, soonest first.
+    func projectDeadlines(within days: Int = 7, today: Date = Date()) -> [ProjectDeadline] {
+        projects.flatMap { $0.deadlines(within: days, today: today) }.sorted(by: Store.deadlineOrder)
+    }
+    var activeProjects: [Project] { projects.filter { $0.archived != true }.sorted { ($0.due ?? "9999", $0.title) < ($1.due ?? "9999", $1.title) } }
 
     func saveFocusSession(_ s: FocusSession) {
         var s = s
@@ -298,7 +357,26 @@ final class Store: ObservableObject {
 
     func todayChecklist() -> [Occurrence] { overdue() + checklist(on: Date()) }
 
-    var remainingToday: Int { todayChecklist().filter { !$0.isResolved }.count }
+    var remainingToday: Int { todayChecklist().filter { !$0.isResolved }.count + projectToday().filter { $0.item?.isDone == false }.count }
+
+    /// Project subtasks on today's list and in its progress ring (urgent, or due within the setting's window).
+    func projectToday(today: Date = Date()) -> [ProjectDeadline] {
+        projects.flatMap { $0.todayItems(window: settings.projectTodayDays, today: today).today }.sorted(by: Store.deadlineOrder)
+    }
+    /// Project deadlines in the next week that aren't on today's list: shown apart, not counted.
+    func projectUpcoming(today: Date = Date()) -> [ProjectDeadline] {
+        projects.flatMap { $0.todayItems(window: settings.projectTodayDays, today: today).upcoming }.sorted(by: Store.deadlineOrder)
+    }
+    static func deadlineOrder(_ a: ProjectDeadline, _ b: ProjectDeadline) -> Bool {
+        let ad = a.item?.isDone == true, bd = b.item?.isDone == true
+        if ad != bd { return !ad }
+        return (a.due ?? "0000", a.title) < (b.due ?? "0000", b.title)
+    }
+    /// Checks a project subtask off (or back on). No reflection: these are steps, not daily tasks.
+    func toggleProjectItem(_ d: ProjectDeadline) {
+        guard let item = d.item else { return }
+        editProject(d.project.id) { p in p.update(item.id) { $0.setDone(!item.isDone) } }
+    }
 
     static func order(_ a: Occurrence, _ b: Occurrence) -> Bool {
         switch (a.task.timeMinutes, b.task.timeMinutes) {

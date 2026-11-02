@@ -12,8 +12,12 @@ struct TodayView: View {
         let items = store.checklist(on: today)
         let overdue = store.overdue()
         let all = overdue + items
-        let done = all.filter(\.isDone).count
-        let settled = all.filter(\.isResolved).count
+        // Project subtasks on today's list count in the ring too (see the "On today" setting).
+        let proj = store.projectToday()
+        let projDone = proj.filter { $0.item?.isDone == true }.count
+        let done = all.filter(\.isDone).count + projDone
+        let settled = all.filter(\.isResolved).count + projDone
+        let total = all.count + proj.count
         let events = schedule(on: today, store: store, google: google)
 
         ScrollView {
@@ -23,11 +27,11 @@ struct TodayView: View {
                         Text(greeting).font(.title3).foregroundStyle(.secondary)
                         Text(today.formatted(.dateTime.weekday(.wide).month(.wide).day()))
                             .font(.largeTitle.bold())
-                        Text(statusLine(done: done, settled: settled, total: all.count))
+                        Text(statusLine(done: done, settled: settled, total: total))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    ProgressRing(done: done, total: all.count, size: 76, lineWidth: 9)
+                    ProgressRing(done: done, total: total, size: 76, lineWidth: 9)
                 }
 
                 HStack(spacing: 8) {
@@ -92,6 +96,9 @@ struct TodayView: View {
                         Card { VStack(spacing: 0) { rows(ongoing) } }
                     }
                 }
+                ProjectTodaySection()
+                ProjectUpcomingSection()
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Checking an item off asks for a reflection of at least \(store.settings.minReflectionWords) words. They're saved under Reflections.")
                         .font(.caption).foregroundStyle(.secondary)

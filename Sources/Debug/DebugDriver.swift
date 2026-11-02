@@ -16,7 +16,20 @@ import SwiftUI
 enum DebugDriver {
     static func prepare(_ model: AppModel) {
         if LaunchOptions.has("-demo") && model.store.tasks.isEmpty { seed(model.store) }
+        if LaunchOptions.has("-demo") && model.store.projects.isEmpty {
+            model.store.projects = [Project.demo(), Project(title: "Plan the family trip", color: .teal,
+                                                             due: DateKey.string(Date().adding(days: 40)),
+                                                             items: [ProjectItem(title: "Pick dates"), ProjectItem(title: "Book flights", due: DateKey.string(Date().adding(days: 10)))])]
+        }
         if let s = LaunchOptions.value("-screen"), let screen = Screen(rawValue: s) { model.screen = screen }
+        // -openProject [outline|timeline|map]: opens the first project in that view.
+        if let i = LaunchOptions.args.firstIndex(of: "-openProject") {
+            model.screen = .projects
+            model.openProjectID = model.store.activeProjects.first { $0.title.hasPrefix("Science") }?.id ?? model.store.activeProjects.first?.id
+            if i + 1 < LaunchOptions.args.count, let m = ProjectViewMode(rawValue: LaunchOptions.args[i + 1].capitalized) {
+                UserDefaults.standard.set(m.rawValue, forKey: "projectViewMode")
+            }
+        }
     }
 
     static func run(_ model: AppModel) {

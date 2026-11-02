@@ -84,7 +84,7 @@ async function migrate() {
 }
 
 // focus: one record per focus session; screen: one screen-time summary per day per device.
-const KINDS = new Set(['task', 'reflection', 'settings', 'focus', 'screen']);
+const KINDS = new Set(['task', 'reflection', 'settings', 'focus', 'screen', 'project']);
 
 /**
  * Applies a batch of client changes (last-writer-wins on updatedAt) and returns

@@ -460,6 +460,9 @@ struct AppSettings: Codable {
     var focusMinutes = 25
     /// The length buttons on the Focus screen; add your own, remove any.
     var focusLengths = Focus.defaultLengths
+    /// Project subtasks on today's list (and in its progress ring) when due within this many days
+    /// (0 = due today, overdue included). -1 = only ones marked urgent.
+    var projectTodayDays = 0
     var syncGoogleTasks = true
 
     init() {}
@@ -497,6 +500,7 @@ struct AppSettings: Codable {
         distractingLimitMinutes = c.value(.distractingLimitMinutes, d.distractingLimitMinutes)
         focusMinutes = c.value(.focusMinutes, d.focusMinutes)
         focusLengths = Focus.normalized(c.value(.focusLengths, d.focusLengths))
+        projectTodayDays = c.value(.projectTodayDays, d.projectTodayDays)
         syncGoogleTasks = c.value(.syncGoogleTasks, d.syncGoogleTasks)
     }
 }
@@ -530,6 +534,7 @@ struct SyncedSettings: Codable, Equatable {
     var distractingLimitMinutes: Int
     var focusMinutes: Int
     var focusLengths: [Int]
+    var projectTodayDays: Int
     var syncGoogleTasks: Bool
 
     init(_ s: AppSettings) {
@@ -546,7 +551,7 @@ struct SyncedSettings: Codable, Equatable {
         taskPresets = s.taskPresets
         habitScorecard = s.habitScorecard; distractingApps = s.distractingApps
         screenLimitMinutes = s.screenLimitMinutes; distractingLimitMinutes = s.distractingLimitMinutes
-        focusMinutes = s.focusMinutes; focusLengths = s.focusLengths; syncGoogleTasks = s.syncGoogleTasks
+        focusMinutes = s.focusMinutes; focusLengths = s.focusLengths; projectTodayDays = s.projectTodayDays; syncGoogleTasks = s.syncGoogleTasks
     }
 
     init(from decoder: Decoder) throws {
@@ -578,6 +583,7 @@ struct SyncedSettings: Codable, Equatable {
         distractingLimitMinutes = c.value(.distractingLimitMinutes, distractingLimitMinutes)
         focusMinutes = c.value(.focusMinutes, focusMinutes)
         focusLengths = Focus.normalized(c.value(.focusLengths, focusLengths))
+        projectTodayDays = c.value(.projectTodayDays, projectTodayDays)
         syncGoogleTasks = c.value(.syncGoogleTasks, syncGoogleTasks)
     }
 
@@ -595,7 +601,7 @@ struct SyncedSettings: Codable, Equatable {
         s.taskPresets = taskPresets
         s.habitScorecard = habitScorecard; s.distractingApps = distractingApps
         s.screenLimitMinutes = screenLimitMinutes; s.distractingLimitMinutes = distractingLimitMinutes
-        s.focusMinutes = focusMinutes; s.focusLengths = focusLengths; s.syncGoogleTasks = syncGoogleTasks
+        s.focusMinutes = focusMinutes; s.focusLengths = focusLengths; s.projectTodayDays = projectTodayDays; s.syncGoogleTasks = syncGoogleTasks
     }
 }
 

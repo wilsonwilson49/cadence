@@ -485,6 +485,9 @@ export const DEFAULT_SETTINGS = {
   focusMinutes: 25,
   // The length buttons on the Focus screen (minutes); add your own, remove any.
   focusLengths: [10, 15, 25, 45, 60],
+  // Project subtasks join today's list (and its progress ring) when due within this many days (0 = due today,
+  // overdue included). -1 = only ones marked urgent. Urgent ones are always on.
+  projectTodayDays: 0,
   syncGoogleTasks: true,
   // Task presets: saved combinations of conditions to start new tasks from. Dates are stored relative to the
   // start day (spanDays: repeat end / long-term end, dueDays: due date). Same shape as TaskPreset on the Mac.
@@ -546,3 +549,185 @@ export function focusStreak(sessions) {
   return n;
 }
 export const fmtDuration = sec => { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };
+
+// ---------- Projects ----------
+// A goal broken into subtasks, which can have their own subtasks, to any depth. Every level can have a start
+// date and a deadline ("yyyy-MM-dd"). A subtask with subtasks is done when all of them are; progress counts the
+// smallest pieces (leaves). Same shape and rules as Project / ProjectItem on the Mac.
+
+export const newProject = (o = {}) => ({ id: uuid(), title: '', notes: '', color: 'purple', items: [], createdAt: iso(new Date()), ...o });
+export const newProjectItem = (o = {}) => ({ id: uuid(), title: '', notes: '', items: [], ...o });
+
+export const itemDone = i => (i.items?.length ? i.items.every(itemDone) : Boolean(i.doneAt));
+export function itemProgress(i) {
+  if (!i.items?.length) return { done: i.doneAt ? 1 : 0, total: 1 };
+  return i.items.reduce((a, c) => { const p = itemProgress(c); return { done: a.done + p.done, total: a.total + p.total }; }, { done: 0, total: 0 });
+}
+export const projectProgress = p => (p.items || []).reduce((a, c) => { const x = itemProgress(c); return { done: a.done + x.done, total: a.total + x.total }; }, { done: 0, total: 0 });
+export const projectDone = p => Boolean(p.items?.length) && p.items.every(itemDone);
+export const projectStartKey = p => p.start || dateKey(new Date(p.createdAt || Date.now()));
+
+/** Marks an item and everything under it done (or not). Mutates. */
+export function setItemDone(i, done, now = iso(new Date())) {
+  if (done) i.doneAt = i.doneAt || now; else delete i.doneAt;
+  for (const c of i.items || []) setItemDone(c, done, now);
+}
+/** A parent follows its children: done once all are done. Mutates. */
+export function settleItem(i) {
+  for (const c of i.items || []) settleItem(c);
+  if (i.items?.length) {
+    if (i.items.every(itemDone)) i.doneAt = i.doneAt || i.items.map(c => c.doneAt).filter(Boolean).sort().pop();
+    else delete i.doneAt;
+  }
+}
+const settleAll = p => { for (const i of p.items) settleItem(i); return p; };
+
+/** Finds an item anywhere in the tree: { item, list (its siblings), index, parent }. */
+export function findItem(p, id) {
+  const walk = (list, parent) => {
+    for (let k = 0; k < list.length; k++) {
+      if (list[k].id === id) return { item: list[k], list, index: k, parent };
+      const r = walk(list[k].items || [], list[k]);
+      if (r) return r;
+    }
+    return null;
+  };
+  return walk(p.items, null);
+}
+export function updateItem(p, id, fn) { const f = findItem(p, id); if (f) fn(f.item); return settleAll(p); }
+export function insertItem(p, item, parentId = null, afterId = null) {
+  const list = parentId ? findItem(p, parentId)?.item.items : p.items;
+  if (!list) return p;
+  const k = afterId ? list.findIndex(x => x.id === afterId) : -1;
+  if (k >= 0) list.splice(k + 1, 0, item); else list.push(item);
+  return settleAll(p);
+}
+export function removeItem(p, id) { const f = findItem(p, id); if (f) f.list.splice(f.index, 1); settleAll(p); return f?.item; }
+export function moveItem(p, id, delta) {
+  const f = findItem(p, id), j = f ? f.index + delta : -1;
+  if (f && j >= 0 && j < f.list.length) [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]];
+  return p;
+}
+/** Makes an item a subtask of the sibling above it. */
+export function indentItem(p, id) {
+  const f = findItem(p, id);
+  if (!f || f.index === 0) return p;
+  const above = f.list[f.index - 1];
+  f.list.splice(f.index, 1);
+  (above.items ||= []).push(f.item);
+  return settleAll(p);
+}
+/** Moves an item out one level, just after its old parent. */
+export function outdentItem(p, id) {
+  const f = findItem(p, id);
+  if (!f?.parent) return p;
+  const pf = findItem(p, f.parent.id);
+  f.list.splice(f.index, 1);
+  pf.list.splice(pf.index + 1, 0, f.item);
+  return settleAll(p);
+}
+
+/**
+ * The tree flattened in order. Each row carries the dates that apply to it: its own, or the nearest parent's
+ * (then the project's). `limit` is the deadline it sits under; `conflict` means its own deadline is later.
+ */
+export function projectRows(p, collapsed = new Set()) {
+  const out = [];
+  const walk = (list, depth, parentId, start, due) => {
+    for (const i of list) {
+      const s = i.start || start, d = i.due || due;
+      out.push({ item: i, depth, parentId, start: s, due: d, limit: due, conflict: Boolean(i.due && due && i.due > due) });
+      if (!collapsed.has(i.id)) walk(i.items || [], depth + 1, i.id, s, d);
+    }
+  };
+  walk(p.items || [], 0, null, projectStartKey(p), p.due || null);
+  return out;
+}
+
+/** 'done' | 'overdue' | 'today' | 'soon' (within 3 days) | 'later' | 'none'. */
+export function deadlineStatus(due, done, today = dateKey(new Date())) {
+  if (done) return 'done';
+  if (!due) return 'none';
+  if (due < today) return 'overdue';
+  if (due === today) return 'today';
+  return due <= dateKey(addDays(parseKey(today), 3)) ? 'soon' : 'later';
+}
+
+/** The project's own deadline and every unfinished subtask's own deadline up to `days` ahead (and any overdue). */
+export function projectDeadlines(p, days = 7, today = new Date()) {
+  if (p.archived) return [];
+  const limit = dateKey(addDays(startOfDay(today), days)), out = [];
+  if (p.due && !projectDone(p) && p.due <= limit) out.push({ project: p, item: null, path: [], due: p.due, title: p.title });
+  const titles = new Map(), parents = new Map();
+  for (const r of projectRows(p)) {
+    titles.set(r.item.id, r.item.title);
+    if (r.parentId) parents.set(r.item.id, r.parentId);
+    if (!r.item.due || itemDone(r.item) || r.item.due > limit) continue;
+    const path = [];
+    for (let q = r.parentId; q; q = parents.get(q)) path.unshift(titles.get(q) || '');
+    out.push({ project: p, item: r.item, path, due: r.item.due, title: r.item.title });
+  }
+  return out;
+}
+
+/**
+ * Subtasks for today's list, counted in today's progress ring: urgent ones, and ones whose own deadline is within
+ * `window` days (overdue too). Ones finished today stay on so the ring fills up. `upcoming`: the rest due within
+ * 7 days, plus the project's own deadline, shown apart and not counted. Same as Project.todayItems on the Mac.
+ */
+export function projectTodayItems(p, window = 0, today = new Date()) {
+  if (p.archived) return { today: [], upcoming: [] };
+  const t = startOfDay(today), limit = window >= 0 ? dateKey(addDays(t, window)) : '', week = dateKey(addDays(t, 7));
+  const on = [], later = [], titles = new Map(), parents = new Map();
+  for (const r of projectRows(p)) {
+    titles.set(r.item.id, r.item.title);
+    if (r.parentId) parents.set(r.item.id, r.parentId);
+    const i = r.item, done = itemDone(i), doneToday = Boolean(i.doneAt) && sameDay(new Date(i.doneAt), t);
+    const inWindow = window >= 0 && i.due && i.due <= limit;
+    const entry = () => {
+      const path = [];
+      for (let q = r.parentId; q; q = parents.get(q)) path.unshift(titles.get(q) || '');
+      return { project: p, item: i, path, due: i.due || null, title: i.title };
+    };
+    if (i.urgent || inWindow) { if (!done || doneToday) on.push(entry()); }
+    else if (!done && i.due && i.due <= week) later.push(entry());
+  }
+  if (p.due && !projectDone(p) && p.due <= week) later.push({ project: p, item: null, path: [], due: p.due, title: p.title });
+  return { today: on, upcoming: later };
+}
+export function deadlineOrder(a, b) {
+  const ad = Boolean(a.item && itemDone(a.item)), bd = Boolean(b.item && itemDone(b.item));
+  if (ad !== bd) return ad ? 1 : -1;
+  return (a.due || '0000').localeCompare(b.due || '0000') || (a.title || '').localeCompare(b.title || '');
+}
+
+/** "today", "tomorrow", "in 5 days", "2 days late". */
+export function dueRelative(key, today = new Date()) {
+  const n = Math.round((parseKey(key) - startOfDay(today)) / 86_400_000);
+  return n === 0 ? 'today' : n === 1 ? 'tomorrow' : n === -1 ? '1 day late' : n < 0 ? `${-n} days late` : `in ${n} days`;
+}
+/** "Nov 20", or "Nov 20, 2027" outside this year. */
+export function shortDay(key) {
+  const d = parseKey(key);
+  return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Tidy tree layout for the project map: leaves get their own row, a parent sits level with the middle of its
+ * children. Returns nodes { id, item (null for the root), depth, y } and edges [fromId, toId]. Same as the Mac.
+ */
+export function projectMapLayout(p, collapsed = new Set()) {
+  const nodes = [], edges = [];
+  let next = 0;
+  const place = (item, depth) => {
+    const kids = item.items && !collapsed.has(item.id) ? item.items : [];
+    if (!kids.length) { const n = { id: item.id, item, depth, y: next++ }; nodes.push(n); return n; }
+    const ys = kids.map(k => { const c = place(k, depth + 1); edges.push([item.id, c.id]); return c.y; });
+    const n = { id: item.id, item, depth, y: (ys[0] + ys[ys.length - 1]) / 2 };
+    nodes.push(n);
+    return n;
+  };
+  const root = place({ id: 'root', items: p.items || [] }, 0);
+  root.item = null;
+  return { nodes, edges, rows: Math.max(1, next), depth: Math.max(0, ...nodes.map(n => n.depth)) };
+}

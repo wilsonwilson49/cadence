@@ -246,6 +246,7 @@ async function route(req, res, url) {
       settings: of('settings')[0] ?? null,
       focusSessions: of('focus'),
       screenTime: of('screen'),
+      projects: of('project'),
       connections: {
         google: g ? { email: g.email, timeZone: g.time_zone, calendars: JSON.parse(g.calendar_ids || '[]') } : null,
         calendly: c.connected ? { name: c.name, schedulingUrl: c.schedulingUrl } : null,

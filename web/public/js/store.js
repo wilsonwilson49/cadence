@@ -27,6 +27,7 @@ class Store {
   reflections = new Map();
   focus = new Map();       // focus sessions
   screen = new Map();      // daily screen-time summaries ("yyyy-MM-dd|DEVICE")
+  projects = new Map();    // projects with nested subtasks and deadlines
   settings = structuredClone(M.DEFAULT_SETTINGS);
   stamps = new Map();      // "kind|id" -> updatedAt (ms) of our copy
   pending = new Map();     // "kind|id" -> change waiting to be pushed
@@ -105,7 +106,7 @@ class Store {
 
   #resetData() {
     this.tasks = new Map(); this.reflections = new Map(); this.stamps = new Map(); this.pending = new Map();
-    this.focus = new Map(); this.screen = new Map();
+    this.focus = new Map(); this.screen = new Map(); this.projects = new Map();
     this.settings = structuredClone(M.DEFAULT_SETTINGS); this.cursor = 0;
     this.google = { configured: false, connected: false, email: null, calendars: [], events: new Map(), months: new Set(), loading: new Set() };
   }
@@ -121,6 +122,7 @@ class Store {
       this.reflections = new Map(c.reflections.map(r => [r.id, r]));
       this.focus = new Map((c.focus || []).map(f => [f.id, f]));
       this.screen = new Map((c.screen || []).map(d => [d.id, d]));
+      this.projects = new Map((c.projects || []).map(p => [p.id, p]));
       this.settings = { ...structuredClone(M.DEFAULT_SETTINGS), ...c.settings };
       this.stamps = new Map(c.stamps);
       this.pending = new Map(c.pending);
@@ -133,7 +135,7 @@ class Store {
     try {
       localStorage.setItem(this.#cacheKey(), JSON.stringify({
         tasks: [...this.tasks.values()], reflections: [...this.reflections.values()], settings: this.settings,
-        focus: [...this.focus.values()], screen: [...this.screen.values()],
+        focus: [...this.focus.values()], screen: [...this.screen.values()], projects: [...this.projects.values()],
         stamps: [...this.stamps], pending: [...this.pending], cursor: this.cursor,
       }));
     } catch { /* storage full or blocked */ }
@@ -199,6 +201,8 @@ class Store {
         if (c.deleted) this.tasks.delete(id); else this.tasks.set(id, { ...c.data, id });
       } else if (c.kind === 'reflection') {
         if (c.deleted) this.reflections.delete(id); else this.reflections.set(id, { ...c.data, id });
+      } else if (c.kind === 'project') {
+        if (c.deleted) this.projects.delete(id); else this.projects.set(id, { ...c.data, id });
       } else if (c.kind === 'focus' || c.kind === 'screen') {
         const map = this[c.kind];
         if (c.deleted) map.delete(id); else map.set(id, { ...c.data, id });
@@ -207,6 +211,29 @@ class Store {
       }
     }
     return applied;
+  }
+
+  // ---------- projects ----------
+  upsertProject(p) {
+    const next = { ...p, updatedAt: M.iso(new Date()) };
+    this.projects.set(next.id, next);
+    this.#queue('project', next.id, next);
+  }
+  /** Edits one project: `fn` gets a copy to change (and may return a new one). */
+  editProject(id, fn) {
+    const cur = this.projects.get(id);
+    if (!cur) return;
+    const copy = structuredClone(cur);
+    this.upsertProject(fn(copy) || copy);
+  }
+  deleteProject(id) { this.projects.delete(id); this.#queue('project', id, null, true); }
+  get activeProjects() {
+    return [...this.projects.values()].filter(p => !p.archived)
+      .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.title.localeCompare(b.title));
+  }
+  projectDeadlines(days = 7, today = new Date()) {
+    return [...this.projects.values()].flatMap(p => M.projectDeadlines(p, days, today))
+      .sort((a, b) => a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
   }
 
   // ---------- mutations ----------
@@ -349,7 +376,15 @@ class Store {
   }
 
   todayChecklist() { return [...this.overdue(), ...this.tasksOn(new Date())]; }
-  remainingToday() { return this.todayChecklist().filter(o => !o.resolved).length; }
+  remainingToday() { return this.todayChecklist().filter(o => !o.resolved).length + this.projectToday().filter(d => d.item && !M.itemDone(d.item)).length; }
+  /** Project subtasks on today's list and in its progress ring (urgent, or due within the setting's window). */
+  projectToday(today = new Date()) {
+    return [...this.projects.values()].flatMap(p => M.projectTodayItems(p, this.settings.projectTodayDays ?? 0, today).today).sort(M.deadlineOrder);
+  }
+  /** Project deadlines in the next week that aren't on today's list: shown apart, not counted. */
+  projectUpcoming(today = new Date()) {
+    return [...this.projects.values()].flatMap(p => M.projectTodayItems(p, this.settings.projectTodayDays ?? 0, today).upcoming).sort(M.deadlineOrder);
+  }
   /** The reflection for an occurrence: the check-off one, or with outcome 'missed' the "didn't do it" one. */
   reflectionFor(occ, outcome = 'done') {
     return [...this.reflections.values()].find(r => r.taskID === occ.task.id && r.occurrenceKey === occ.key && (r.outcome || 'done') === outcome);

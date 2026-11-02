@@ -15,7 +15,7 @@ const HOUR = 48;
 const SCREENS = [
   ['home', 'Home', 'house', ''],
   ['today', 'Today', 'sun', 'Plan'], ['week', 'Week', 'week', 'Plan'], ['month', 'Month', 'month', 'Plan'],
-  ['todo', 'To-Do List', 'list', 'Plan'], ['habits', 'Habits', 'habit', 'Grow'], ['reflections', 'Reflections', 'quote', 'Grow'],
+  ['todo', 'To-Do List', 'list', 'Plan'], ['projects', 'Projects', 'layers', 'Plan'], ['habits', 'Habits', 'habit', 'Grow'], ['reflections', 'Reflections', 'quote', 'Grow'],
   ['focus', 'Focus', 'target', 'Focus'], ['screentime', 'Screen Time', 'monitor', 'Focus'],
   ['booking', 'Booking', 'people', 'Connect'], ['settings', 'Settings', 'gear', ''],
 ];
@@ -55,6 +55,9 @@ function readRoute() {
   if (legacy && SCREENS.some(s => s[0] === legacy)) history.replaceState(null, '', `/app/${legacy}`);
   const route = (location.pathname.match(/^\/app\/?([^/]*)/) || [])[1] || 'home';
   ui.route = SCREENS.some(s => s[0] === route) ? route : 'home';
+  const projectId = ui.route === 'projects' ? (location.pathname.match(/^\/app\/projects\/([^/]+)/) || [])[1] || null : null;
+  if (projectId !== ui.projectId) ui.projSelected = null;
+  ui.projectId = projectId;
   const params = new URLSearchParams(location.search);
   const google = params.get('google');
   if (google) {
@@ -125,7 +128,7 @@ function sidebar() {
     if (section !== lastSection) { head = section ? `<div class="nav-section">${section}</div>` : id === 'home' ? '' : '<div class="nav-section"></div>'; lastSection = section; }
     const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
       : id === 'habits' ? (store.tasksOn(new Date()).filter(o => M.isHabit(o.task) && !o.resolved).length || '')
-      : id === 'focus' && focus.running ? fmtClock(focusLeft()) : '';
+      : id === 'focus' && focus.running ? fmtClock(focusLeft()) : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
     return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
   }).join('');
   return `<nav class="sidebar">
@@ -147,6 +150,7 @@ function view() {
     case 'week': return weekView();
     case 'month': return monthView();
     case 'todo': return todoView();
+    case 'projects': return projectsView();
     case 'reflections': return reflectionsView();
     case 'habits': return habitsView();
     case 'focus': return focusView();
@@ -217,7 +221,8 @@ function empty(icon, title, text) {
 function homeView() {
   const now = new Date();
   const all = store.todayChecklist();
-  const done = all.filter(o => o.done).length;
+  const proj = store.projectToday(), projOpen = proj.filter(d => d.item && !M.itemDone(d.item)).length, total = all.length + proj.length;
+  const done = all.filter(o => o.done).length + proj.length - projOpen;
   const open = all.filter(o => !o.resolved);
   const hour = now.getHours();
   const greet = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -239,14 +244,14 @@ function homeView() {
     <div class="hero"><div class="grow">
       <div class="muted" style="font-size:17px">${greet}${store.user ? `, ${esc(store.user.username)}` : ''}</div>
       <h2>${M.fmtDay(now)}</h2>
-      <div class="muted">${!all.length ? 'Nothing on your checklist today.' : done === all.length ? 'Everything is checked off. Nice work.' : `${open.length} thing${open.length === 1 ? '' : 's'} left today.`}</div></div>
+      <div class="muted">${!total ? 'Nothing on your checklist today.' : done === total ? 'Everything is checked off. Nice work.' : `${open.length + projOpen} thing${open.length + projOpen === 1 ? '' : 's'} left today.`}</div></div>
       <div class="row"><button class="btn" data-act="check-in">${ic('sun')} Check in</button><button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn primary" data-act="new-task">${ic('plus')} New task</button></div></div>
 
     <div class="home-grid">
       <a class="card pad home-today" href="/app/today">
-        <div class="row" style="gap:16px">${ring(done, all.length, 76, 9, 'home')}
+        <div class="row" style="gap:16px">${ring(done, total, 76, 9, 'home')}
           <div class="grow"><div class="section-title" style="margin:0">${ic('sun')}Today</div>
-          <div class="muted small">${all.length ? `${done} of ${all.length} done` : 'A clear day'}${overdue ? ` · <span class="red">${overdue} overdue</span>` : ''}</div></div>
+          <div class="muted small">${total ? `${done} of ${total} done` : 'A clear day'}${overdue ? ` · <span class="red">${overdue} overdue</span>` : ''}</div></div>
           <span class="muted">${ic('right')}</span></div>
         ${open.length ? `<div class="home-list">${open.slice(0, 4).map(o => `<div class="row small"><span style="width:7px;height:7px;border-radius:50%;background:${color(o.task.color)}"></span>
           <span class="grow ellipsis">${esc(o.task.title)}</span><span class="muted">${o.start ? M.fmtTime(o.start) : o.overdue ? 'overdue' : 'any time'}</span></div>`).join('')}
@@ -308,18 +313,20 @@ function todayView() {
   // Tasks, habits, and tasks that stay on until you do them each get their own section.
   const habits = items.filter(o => M.isHabit(o.task));
   const daily = items.filter(o => !M.isHabit(o.task) && !M.isUntilDone(o.task)), ongoing = items.filter(o => !M.isHabit(o.task) && M.isUntilDone(o.task));
-  const done = all.filter(o => o.done).length, settled = all.filter(o => o.resolved).length;
+  // Project subtasks on today's list count in the ring too (see "On today").
+  const proj = store.projectToday(), projDone = proj.filter(d => d.item && M.itemDone(d.item)).length, total = all.length + proj.length;
+  const done = all.filter(o => o.done).length + projDone, settled = all.filter(o => o.resolved).length + projDone;
   const hour = today.getHours();
   const greet = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
-  const status = !all.length ? 'A clear day.' : done === all.length ? 'Everything is checked off. Nice work.'
-    : settled === all.length ? `All settled: ${done} done, ${all.length - done} not done.` : `${all.length - settled} of ${all.length} left to check off.`;
+  const status = !total ? 'A clear day.' : done === total ? 'Everything is checked off. Nice work.'
+    : settled === total ? `All settled: ${done} done, ${total - done} not done.` : `${total - settled} of ${total} left to check off.`;
   const events = scheduleOn(today);
   const s = store.settings;
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   return `<div class="page stack" style="padding-top:28px">
     <div class="hero"><div class="grow">
       <div class="muted" style="font-size:17px">${greet}</div>
-      <h2>${M.fmtDay(today)}</h2><div class="muted">${status}</div></div>${ring(done, all.length, 80, 9)}</div>
+      <h2>${M.fmtDay(today)}</h2><div class="muted">${status}</div></div>${ring(done, total, 80, 9)}</div>
     ${perm === 'default' && reminders.enabled ? `<div class="callout warn"><span class="big">${ic('bell')}</span>
       <div class="grow"><b>Turn on notifications</b><div class="small muted">So reminders reach you even when this tab is in the background.</div></div>
       <button class="btn primary" data-act="ask-notify">Allow</button></div>` : ''}
@@ -337,6 +344,8 @@ function todayView() {
         <span class="small muted" style="font-weight:400">stays on your list until you check it off or mark it “didn’t do it”</span></div>
       <div class="card">${ongoing.map(o => crow(o)).join('')}</div>
       <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div></div>` : ''}
+    ${projectTodaySection()}
+    ${projectUpcomingSection()}
     <div><div class="section-title">${ic('cal')}Schedule <span class="count">${events.length}</span><span class="grow"></span>
       <button class="btn sm" data-act="new-event">${ic('plus')} New event</button></div>
       <div class="card">${events.length ? events.map(eventRow).join('') : '<div class="crow muted">No events today. Events show on your calendars but never on the checklist.</div>'}</div></div>
@@ -1772,7 +1781,313 @@ function missOcc(id, ctx) {
 
 function confirmThen(title, text, yes, fn) { openModal({ type: 'confirm', title, text, yes, fn }); }
 
+
+// ---------- Projects ----------
+// Big goals broken into subtasks (and subtasks of subtasks), each with a deadline, plus a timeline and a map.
+const PROJ_STATUS_COLOR = { done: 'var(--green)', overdue: 'var(--red)', today: 'var(--orange)', soon: '#d6a700', later: 'var(--muted)', none: 'var(--muted)' };
+const projMode = () => store.device('projectMode', 'outline');
+const projCollapsed = id => (ui.projCollapsed ||= new Map()).get(id) || new Set();
+
+/** "Nov 20 · in 5 days" chip, coloured by how close it is. `inherited` = shown from the level above. */
+function dueChip(due, { done = false, inherited = false, compact = false } = {}) {
+  const st = M.deadlineStatus(due, done);
+  const c = inherited || st === 'later' || st === 'none' ? 'var(--muted)' : PROJ_STATUS_COLOR[st];
+  return `<span class="duechip ${inherited ? 'inh' : ''}" style="--c:${c}" title="${inherited ? 'Uses the deadline above it' : ''}">${inherited ? '↳' : '⚑'} ${esc(M.shortDay(due))}${compact || done ? '' : ` · ${esc(M.dueRelative(due))}`}</span>`;
+}
+
+/** A date that may be unset: a chip that opens the browser's date picker. */
+function dateField(label, value, attrs, { status = 'none', compact = false, placeholder } = {}) {
+  const c = !value ? 'var(--muted)' : status === 'later' || status === 'none' ? 'var(--text)' : PROJ_STATUS_COLOR[status];
+  const text = value ? (compact ? M.shortDay(value) : `${label}: ${M.shortDay(value)}${label === 'Deadline' ? ` · ${M.dueRelative(value)}` : ''}`) : (placeholder || label);
+  return `<span class="pdate ${value ? 'set' : ''}" style="--c:${c}"><button class="pdate-btn" data-act="pick-date" title="${value ? `Change the ${label.toLowerCase()}` : `Set a ${label.toLowerCase()}`}">${label === 'Start' ? '▸' : '⚑'} ${esc(text)}</button>
+    <input type="date" tabindex="-1" value="${value || ''}" ${attrs}>${value ? `<button class="pdate-x" data-act="clear-date" title="Remove">${ic('x')}</button>` : ''}</span>`;
+}
+
+function projectsView() {
+  const p = ui.projectId && store.projects.get(ui.projectId);
+  return p ? projectDetailView(p) : projectListView();
+}
+
+function projectCard(p) {
+  const pr = M.projectProgress(p), rows = M.projectRows(p), today = M.dateKey(new Date());
+  const overdue = rows.filter(r => !M.itemDone(r.item) && r.item.due && r.item.due < today).length;
+  const next = rows.filter(r => !M.itemDone(r.item) && r.item.due).sort((a, b) => a.item.due.localeCompare(b.item.due))[0];
+  const pct = pr.total ? Math.round(pr.done / pr.total * 100) : 0;
+  return `<a class="pcard" href="/app/projects/${esc(p.id)}" style="--pc:${color(p.color)}">
+    <div class="row" style="align-items:flex-start"><span class="pbar"></span><div class="grow" style="min-width:0">
+      <div class="ptitle ellipsis">${esc(p.title || 'Untitled project')}</div>
+      <div class="small muted">${pr.total ? `${pr.done} of ${pr.total} done` : 'No subtasks yet'}</div></div>
+      ${pr.total ? `<b class="small">${pct}%</b>` : ''}</div>
+    <div class="pprog"><div style="width:${pct}%"></div></div>
+    <div class="row" style="gap:6px;flex-wrap:wrap">${p.due ? dueChip(p.due, { done: M.projectDone(p) }) : ''}
+      ${overdue ? `<span class="small red"><b>${overdue} overdue</b></span>` : ''}</div>
+    ${next ? `<div class="row small" style="gap:6px"><span class="muted">Next:</span><span class="grow ellipsis">${esc(next.item.title || 'Untitled')}</span>${dueChip(next.item.due, { compact: true })}</div>` : ''}
+  </a>`;
+}
+
+function projectListView() {
+  const active = store.activeProjects, archived = [...store.projects.values()].filter(p => p.archived);
+  const gantt = store.device('projectListGantt', false), folded = projCollapsed('all');
+  return `<div class="header"><div class="grow"><h1>Projects</h1><div class="sub">Break a big goal into subtasks, give each a deadline, and see it all on a Gantt chart.</div></div>
+      <div class="seg"><button class="${gantt ? '' : 'on'}" data-act="project-list-mode" data-gantt="0">Cards</button><button class="${gantt ? 'on' : ''}" data-act="project-list-mode" data-gantt="1">Gantt</button></div>
+      <button class="btn primary" data-act="project-new">${ic('plus')} New Project</button></div>
+    <div class="page stack" style="max-width:${gantt ? 1300 : 1100}px">
+      ${active.length && gantt ? `<div class="row small muted"><span class="grow">Every project on one chart. Click a project's name to fold it; click a subtask to open its project.</span>
+          <button class="btn sm" data-act="gantt-fold-all" data-fold="1">Fold all</button><button class="btn sm" data-act="gantt-fold-all" data-fold="0">Unfold all</button></div>
+        <div class="card pad">${ganttChart(active, folded)}</div>`
+      : active.length ? `<div class="pgrid">${active.map(projectCard).join('')}</div>`
+        : `<div class="card pad stack" style="gap:8px"><b>${ic('layers')} No projects yet</b>
+            <div class="muted">A project is anything with several steps: an essay, a science fair entry, a trip. Add subtasks, split those into smaller ones, and give any of them a deadline. Deadlines coming up show on your Today list.</div>
+            <div><button class="btn primary" data-act="project-new">${ic('plus')} Start a project</button></div></div>`}
+      ${archived.length ? `<details><summary class="section-title" style="cursor:pointer">Archived (${archived.length})</summary><div class="pgrid">${archived.map(projectCard).join('')}</div></details>` : ''}
+    </div>`;
+}
+
+function projectDetailView(p) {
+  const pr = M.projectProgress(p), mode = projMode(), collapsed = projCollapsed(p.id);
+  const tabs = [['outline', 'Outline'], ['gantt', 'Gantt'], ['map', 'Map']];
+  const legend = `<div class="plegend small"><span><i style="background:var(--red)"></i>Overdue</span><span><i style="background:var(--orange)"></i>Due today</span>
+    <span><i style="background:var(--green)"></i>Done</span><span><i style="background:${color(p.color)}"></i>On track</span><span>◆ Deadline</span><span><i style="background:var(--red);width:2px"></i>Today</span>
+    <span class="grow"></span><span class="muted">Click a row to edit it.</span></div>`;
+  let body;
+  if (mode === 'gantt' || mode === 'timeline') body = `${legend}<div class="card pad">${ganttChart([p], collapsed, { single: true })}</div>${projectSelected(p, collapsed)}`;
+  else if (mode === 'map') body = `${legend}<div class="card pad">${projectMap(p, collapsed)}</div>${projectSelected(p, collapsed)}`;
+  else body = projectOutline(p, collapsed);
+  return `<div class="header" style="padding-bottom:4px"><a class="btn ghost sm" href="/app/projects">${ic('left')} Projects</a><span class="grow"></span>
+      <div class="seg">${tabs.map(([k, l]) => `<button class="${mode === k || (k === 'gantt' && mode === 'timeline') ? 'on' : ''}" data-act="project-mode" data-mode="${k}">${l}</button>`).join('')}</div>
+      <button class="btn ghost sm" data-act="project-archive" data-project="${esc(p.id)}">${p.archived ? 'Unarchive' : 'Archive'}</button>
+      <button class="btn ghost sm danger" data-act="project-delete" data-project="${esc(p.id)}" title="Delete project">${ic('trash')}</button></div>
+    <div class="page stack" style="max-width:1200px">
+      <div class="phead"><div class="grow stack" style="gap:8px;min-width:0">
+        <input id="ptitle-${esc(p.id)}" class="ptitle-input" placeholder="Project name" value="${esc(p.title)}" data-pfield="title" data-project="${esc(p.id)}" autocomplete="off">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <span class="pswatches">${Object.keys(M.COLORS).map(c => `<button class="pswatch ${p.color === c ? 'on' : ''}" style="background:${M.COLORS[c]}" data-act="project-color" data-color="${c}" data-project="${esc(p.id)}" title="${c}"></button>`).join('')}</span>
+          ${dateField('Start', p.start, `data-pdate="start" data-project="${esc(p.id)}"`, { placeholder: `Started ${M.shortDay(M.projectStartKey(p))}` })}
+          ${dateField('Deadline', p.due, `data-pdate="due" data-project="${esc(p.id)}"`, { status: M.deadlineStatus(p.due, M.projectDone(p)) })}
+          <span class="small muted">${pr.total ? `${pr.done} of ${pr.total} done` : 'Add subtasks below'}</span></div></div>
+        ${pr.total ? ring(pr.done, pr.total, 64, 8, `proj-${p.id}`) : ''}</div>
+      ${body}
+    </div>`;
+}
+
+function projectOutline(p, collapsed) {
+  const rows = M.projectRows(p, collapsed);
+  return `<div class="card poutline" style="--pc:${color(p.color)}">${rows.length ? rows.map(r => projectRow(p, r, collapsed)).join('')
+      : '<div class="muted" style="padding:10px 4px">No subtasks yet. Add the first one below, then use + on a row to break it down further.</div>'}
+      <form class="prow padd" data-form="project-add" data-project="${esc(p.id)}">${ic('plus')}<input id="padd-${esc(p.id)}" placeholder="Add a subtask — press Return" autocomplete="off"></form></div>
+    <div class="small muted">Use + on a row to add a subtask inside it, and the arrows to move it in or out a level. A subtask with subtasks is done when they all are.</div>`;
+}
+
+function projectRow(p, r, collapsed, { selectedView = false } = {}) {
+  const i = r.item, kids = (i.items || []).length > 0, done = M.itemDone(i), pr = M.itemProgress(i), pid = esc(p.id), iid = esc(i.id);
+  const d = `data-project="${pid}" data-item="${iid}"`;
+  return `<div class="prow ${done ? 'done' : ''} ${selectedView ? 'sel' : ''}" style="--depth:${selectedView ? 0 : r.depth}">
+    <button class="pcollapse ${kids ? '' : 'hide'}" data-act="project-collapse" ${d}>${collapsed.has(i.id) ? '▸' : '▾'}</button>
+    <button class="checkbtn" style="${done ? 'color:var(--green)' : ''}" data-act="project-done" ${d} title="${kids ? (done ? 'Mark everything inside not done' : 'Mark everything inside done') : done ? 'Mark not done' : 'Mark done'}">${ic(done ? 'checked' : 'circle')}</button>
+    <input id="pi-${iid}" class="ptext ${r.depth === 0 ? 'top' : ''}" value="${esc(i.title)}" placeholder="Subtask" data-pfield="item-title" ${d} autocomplete="off">
+    ${kids ? `<span class="small muted mono">${pr.done}/${pr.total}</span><span class="pmini"><span style="width:${pr.total ? pr.done / pr.total * 100 : 0}%"></span></span>` : ''}
+    <button class="purgent ${i.urgent ? 'on' : 'hover-only'}" data-act="project-urgent" ${d} title="${i.urgent ? 'Urgent: on today’s list and in today’s progress ring. Click to unmark.' : 'Mark urgent: put it on today’s list and in today’s progress ring'}">! Urgent</button>
+    ${r.conflict ? `<span class="red" title="This deadline is after ${esc(M.shortDay(r.limit))}, the deadline of what it's part of.">${ic('alert')}</span>` : ''}
+    <span class="pdates">${i.start ? dateField('Start', i.start, `data-pdate="start" ${d}`, { compact: true }) : `<span class="hover-only">${dateField('Start', null, `data-pdate="start" ${d}`, { compact: true })}</span>`}
+      ${i.due ? dateField('Deadline', i.due, `data-pdate="due" ${d}`, { compact: true, status: M.deadlineStatus(i.due, done) })
+        : `<span class="hover-only">${dateField('Deadline', null, `data-pdate="due" ${d}`, { compact: true })}</span>${r.due ? `<span class="hover-hide">${dueChip(r.due, { done, inherited: true, compact: true })}</span>` : ''}`}</span>
+    <span class="pacts">
+      <button class="btn ghost sm icon" data-act="project-add-child" ${d} title="Add a subtask inside this one">${ic('plus')}</button>
+      <button class="btn ghost sm icon" data-act="project-outdent" ${d} title="Move out a level" ${r.parentId ? '' : 'disabled'}>${ic('left')}</button>
+      <button class="btn ghost sm icon" data-act="project-indent" ${d} title="Make it a subtask of the one above">${ic('right')}</button>
+      <button class="btn ghost sm icon" data-act="project-move" data-delta="-1" ${d} title="Move up">↑</button>
+      <button class="btn ghost sm icon" data-act="project-move" data-delta="1" ${d} title="Move down">↓</button>
+      <button class="btn ghost sm icon danger" data-act="project-remove" ${d} title="Delete">${ic('trash')}</button></span>
+  </div>`;
+}
+
+/** Under the timeline and map: edit whatever was clicked. */
+function projectSelected(p, collapsed) {
+  const r = ui.projSelected && M.projectRows(p, collapsed).find(x => x.item.id === ui.projSelected);
+  return r ? `<div class="card"><div class="small muted" style="padding-top:6px">Selected${r.parentId ? ` · in ${esc(M.findItem(p, r.parentId)?.item.title || '')}` : ''}</div>${projectRow(p, r, collapsed, { selectedView: true })}</div>` : '';
+}
+
+/**
+ * Gantt chart: one bar per project and per subtask, from its start to its deadline, on a shared day scale with
+ * weekends shaded and today marked. Shows one project or several. `collapsed` holds folded subtask and project ids.
+ */
+function ganttChart(projects, collapsed, { single = false } = {}) {
+  const RH = 30, HEAD = 36, today = M.dateKey(new Date());
+  const lines = projects.flatMap(p => [{ p }, ...(collapsed.has(p.id) ? [] : M.projectRows(p, collapsed).map(r => ({ p, r })))]);
+  const keys = [today, ...projects.flatMap(p => [M.projectStartKey(p), p.due, ...M.projectRows(p).flatMap(r => [r.start, r.due])])].filter(Boolean).sort();
+  const lo = M.addDays(M.parseKey(keys[0]), -1), hi = M.addDays(M.parseKey(keys[keys.length - 1]), 3);
+  const days = Math.max(14, Math.round((hi - lo) / 86_400_000));
+  const DW = Math.max(16, Math.min(34, 900 / days)), W = days * DW, H = HEAD + lines.length * RH;
+  const x = k => Math.round((M.parseKey(k) - lo) / 86_400_000) * DW;
+  const diamond = (cx, cy, s, fill) => `<path d="M${cx} ${cy - s}l${s} ${s}-${s} ${s}-${s}-${s}z" fill="${fill}"/>`;
+  const bar = (start, due, y, inset, c, op, pr, dashed) => {
+    const x0 = Math.min(x(start), x(due)), x1 = x(due) + DW, bw = Math.max(DW - 2, x1 - x0 - 2), h = RH - inset * 2, rx = Math.min(6, h / 2);
+    return { x1, svg: `<rect x="${x0 + 1}" y="${y + inset}" width="${bw}" height="${h}" rx="${rx}" fill="${c}" fill-opacity="${op}" ${dashed ? 'stroke="var(--red)" stroke-width="1.5" stroke-dasharray="3 2"' : ''}/>
+      ${pr.done ? `<rect x="${x0 + 1}" y="${y + inset}" width="${bw * pr.done / pr.total}" height="${h}" rx="${rx}" fill="${c}" fill-opacity="0.55"/>` : ''}` };
+  };
+  let svg = '';
+  for (let i = 0; i <= days; i++) {
+    const d = M.addDays(lo, i), px = i * DW, wd = d.getDay(), mon = wd === 1, first = d.getDate() === 1;
+    if ((wd === 0 || wd === 6) && i < days) svg += `<rect x="${px}" y="${HEAD - 4}" width="${DW}" height="${H}" class="tl-weekend"/>`;
+    if (mon || first || DW >= 22) svg += `<line x1="${px}" y1="${HEAD - 4}" x2="${px}" y2="${H}" class="tl-grid ${first ? 'm' : mon ? 'w' : ''}"/>`;
+    if (first || i === 0) svg += `<text x="${px + 3}" y="12" class="tl-month">${d.toLocaleDateString(undefined, { month: 'short' })}</text>`;
+    if (mon || DW >= 22) svg += `<text x="${px + DW / 2}" y="${HEAD - 8}" class="tl-day">${d.getDate()}</text>`;
+  }
+  lines.forEach((l, i) => {
+    const y = HEAD + i * RH;
+    if (!l.r) {
+      const p = l.p, pc = color(p.color), pr = M.projectProgress(p), due = p.due || M.projectRows(p).map(r => r.due).filter(Boolean).sort().pop();
+      svg += `<rect x="0" y="${y}" width="${W}" height="${RH}" fill="${pc}" fill-opacity="0.07"/>`;
+      if (!due) return;
+      const b = bar(M.projectStartKey(p), due, y, 9, pc, 0.25, pr, false);
+      svg += `<g class="tl-row" data-act="gantt-fold" data-project="${esc(p.id)}">${b.svg}${p.due ? diamond(b.x1 - DW / 2, y + RH / 2, 7, pc) : ''}
+        <text x="${b.x1 - DW / 2 + 10}" y="${y + RH / 2 + 3.5}" class="tl-date" font-weight="700" fill="${pc}">${esc(M.shortDay(due))}${pr.total ? ` · ${Math.round(pr.done / pr.total * 100)}%` : ''}</text></g>`;
+      return;
+    }
+    const { p, r } = l, pc = color(p.color), done = M.itemDone(r.item), st = M.deadlineStatus(r.due, done, today);
+    const c = done ? 'var(--green)' : st === 'overdue' ? 'var(--red)' : st === 'today' || r.item.urgent ? 'var(--orange)' : pc;
+    if (!r.due) { svg += `<circle cx="${x(r.start) + DW / 2}" cy="${y + RH / 2}" r="3" class="tl-dot"/>`; return; }
+    const b = bar(r.start, r.due, y, 8, c, r.item.due ? 0.24 : 0.1, M.itemProgress(r.item), r.conflict);
+    svg += `<g class="tl-row" data-act="${single ? 'project-select' : 'gantt-open'}" data-project="${esc(p.id)}" data-item="${esc(r.item.id)}"><rect x="0" y="${y}" width="${W}" height="${RH}" fill="transparent" ${ui.projSelected === r.item.id ? 'stroke="var(--accent)" stroke-opacity=".6"' : ''}/>${b.svg}
+      ${r.item.due ? `${diamond(b.x1 - DW / 2, y + RH / 2, 6, c)}<text x="${b.x1 - DW / 2 + 9}" y="${y + RH / 2 + 3.5}" class="tl-date" fill="${c}">${esc(M.shortDay(r.item.due))}</text>` : ''}</g>`;
+  });
+  if (single && projects[0]?.due) {
+    const p = projects[0], px = x(p.due) + DW, pc = color(p.color);
+    svg += `<line x1="${px}" y1="${HEAD - 4}" x2="${px}" y2="${H}" stroke="${pc}" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${px - 3}" y="12" text-anchor="end" class="tl-dl" fill="${pc}">deadline</text>`;
+  }
+  const tx = x(today) + DW / 2;
+  svg += `<line x1="${tx}" y1="${HEAD - 14}" x2="${tx}" y2="${H}" stroke="var(--red)" stroke-width="1.5"/><circle cx="${tx}" cy="${HEAD - 14}" r="3.5" fill="var(--red)"/>`;
+  const labels = lines.map(({ p, r }) => {
+    if (!r) return `<div class="tl-label tl-proj" style="--pc:${color(p.color)}" data-act="gantt-fold" data-project="${esc(p.id)}" title="Fold or unfold">
+      <span class="muted tiny">${collapsed.has(p.id) ? '▸' : '▾'}</span><span class="pbar"></span><span class="ellipsis">${esc(p.title || 'Untitled project')}</span></div>`;
+    const done = M.itemDone(r.item), kids = (r.item.items || []).length;
+    return `<div class="tl-label ${ui.projSelected === r.item.id ? 'sel' : ''} ${done ? 'done' : ''}" style="padding-left:${r.depth * 14 + 18}px" data-act="${single ? 'project-select' : 'gantt-open'}" data-project="${esc(p.id)}" data-item="${esc(r.item.id)}">
+      <span class="${done ? 'green' : 'muted'}">${done ? '✓' : kids ? '<b>○</b>' : '○'}</span><span class="ellipsis ${r.depth === 0 ? 'top' : ''}">${esc(r.item.title || 'Untitled')}</span>
+      ${r.item.urgent && !done ? '<span class="red" title="Urgent">!</span>' : ''}</div>`;
+  }).join('');
+  return `<div class="timeline"><div class="tl-labels"><div class="tl-head"><span class="small muted">${single ? 'Subtask' : 'Project / subtask'}</span></div>${labels}</div>
+    <div class="tl-scroll"><svg width="${W}" height="${H}" class="tl-svg">${svg}</svg></div></div>`;
+}
+
+/** The tree of subtasks drawn left to right. */
+function projectMap(p, collapsed) {
+  const lay = M.projectMapLayout(p, collapsed), NW = 180, GAP = 44, RH = 62, pc = color(p.color);
+  const W = (lay.depth + 1) * (NW + GAP) + 20, H = lay.rows * RH + 20;
+  const pos = new Map(lay.nodes.map(n => [n.id, { x: 10 + n.depth * (NW + GAP), y: 10 + n.y * RH + RH / 2 }]));
+  const edges = lay.edges.map(([a, b]) => {
+    const A = pos.get(a), B = pos.get(b), fx = A.x + NW, tx = B.x, mid = (fx + tx) / 2;
+    const done = M.itemDone(M.findItem(p, b)?.item || {});
+    return `<path d="M${fx} ${A.y}C${mid} ${A.y} ${mid} ${B.y} ${tx} ${B.y}" class="map-edge ${done ? 'done' : ''}"/>`;
+  }).join('');
+  const nodes = lay.nodes.map(n => {
+    const at = pos.get(n.id);
+    if (!n.item) {
+      const pr = M.projectProgress(p);
+      return `<div class="map-node root" style="left:${at.x}px;top:${at.y}px;width:${NW}px;background:${pc}">
+        <b>${esc(p.title || 'Untitled project')}</b><div class="row" style="gap:6px"><span class="pmini light"><span style="width:${pr.total ? pr.done / pr.total * 100 : 0}%"></span></span><span class="tiny">${pr.done}/${pr.total}</span></div>
+        ${p.due ? `<div class="tiny">Due ${esc(M.shortDay(p.due))} · ${esc(M.dueRelative(p.due))}</div>` : ''}</div>`;
+    }
+    const i = n.item, done = M.itemDone(i), pr = M.itemProgress(i), st = M.deadlineStatus(i.due, done), kids = (i.items || []).length;
+    const border = ui.projSelected === i.id ? 'var(--accent)' : st === 'overdue' || st === 'today' ? PROJ_STATUS_COLOR[st] : '';
+    return `<div class="map-node ${done ? 'done' : ''}" style="left:${at.x}px;top:${at.y}px;width:${NW}px;${border ? `border-color:${border};` : ''}" data-act="project-select" data-item="${esc(i.id)}">
+      <div class="row" style="gap:5px"><span class="${done ? 'green' : 'muted'}">${done ? '✓' : kids ? '<b>○</b>' : '○'}</span><span class="ellipsis grow">${esc(i.title || 'Untitled')}</span>${i.urgent && !done ? '<b class="red" title="Urgent">!</b>' : ''}${collapsed.has(i.id) && kids ? `<span class="tiny muted">+${kids}</span>` : ''}</div>
+      <div class="row" style="gap:6px">${kids ? `<span class="pmini grow" style="--pc:${pc}"><span style="width:${pr.done / pr.total * 100}%"></span></span><span class="tiny muted">${pr.done}/${pr.total}</span>` : '<span class="grow"></span>'}
+        ${i.due ? dueChip(i.due, { done, compact: true }) : ''}</div></div>`;
+  }).join('');
+  return `<div class="map-scroll"><div class="map" style="width:${W}px;height:${H}px"><svg width="${W}" height="${H}">${edges}</svg>${nodes}</div></div>`;
+}
+
+const PROJECT_TODAY_CHOICES = [[-1, 'Only urgent ones'], [0, 'Due today'], [1, 'Due by tomorrow'], [2, 'Due within 2 days'], [3, 'Due within 3 days'], [7, 'Due within a week']];
+const projectTodaySelect = () => `<label class="small muted row" style="gap:6px" title="Which project subtasks join today’s list and its progress ring. Urgent ones always do.">On today:
+  <select class="input sm" style="width:auto" data-bind="projectTodayDays">${PROJECT_TODAY_CHOICES.map(([v, l]) => `<option value="${v}" ${(store.settings.projectTodayDays ?? 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+
+function projectDeadlineRow(d, { upcoming = false } = {}) {
+  const done = Boolean(d.item && M.itemDone(d.item));
+  const pid = esc(d.project.id), title = d.item ? (d.title || 'Untitled') : `${d.title || 'Untitled project'} (whole project)`;
+  return `<div class="crow ${done ? 'done' : ''}">
+    ${d.item ? `<button class="checkbtn" style="${done ? `color:${color(d.project.color)}` : ''}" data-act="project-done" data-project="${pid}" data-item="${esc(d.item.id)}" title="${done ? 'Mark not done' : (d.item.items || []).length ? 'Mark it and everything inside done' : 'Mark done'}">${ic(done ? 'checked' : 'circle')}</button>`
+      : `<span style="font-size:18px;color:${color(d.project.color)};width:21px;text-align:center">⚑</span>`}
+    <a class="grow" href="/app/projects/${pid}" style="color:inherit;text-decoration:none;min-width:0"><div class="title ellipsis">${esc(title)}${d.item?.urgent && !done ? ' <span class="urgent-tag">URGENT</span>' : ''}</div>
+      <div class="small muted ellipsis">${[d.project.title || 'Untitled project', ...d.path].map(esc).join(' › ')}</div></a>
+    ${d.due ? dueChip(d.due, { done }) : ''}
+    ${upcoming && d.item ? `<button class="btn ghost sm icon" data-act="project-urgent" data-project="${pid}" data-item="${esc(d.item.id)}" title="Mark urgent: move it onto today’s list">!</button>` : ''}</div>`;
+}
+
+/** On the Today screen: project subtasks on today's list (urgent, or due within the setting's window). Counted in the ring. */
+function projectTodaySection() {
+  const list = store.projectToday();
+  if (!list.length) return '';
+  const open = list.filter(d => d.item && !M.itemDone(d.item)).length;
+  return `<div><div class="section-title">${ic('layers')}Project tasks <span class="count">${open}</span><span class="grow"></span>${projectTodaySelect()}</div>
+    <div class="card">${list.map(d => projectDeadlineRow(d)).join('')}</div></div>`;
+}
+
+/** Project deadlines in the next week that aren't on today's list. Not counted. */
+function projectUpcomingSection() {
+  const list = store.projectUpcoming();
+  if (!list.length) return '';
+  return `<div><div class="section-title">⚑ Coming up in projects <span class="count">${list.length}</span>
+      <span class="small muted" style="font-weight:400">not counted in today’s progress</span><span class="grow"></span>${store.projectToday().length ? '' : projectTodaySelect()}</div>
+    <div class="card">${list.map(d => projectDeadlineRow(d, { upcoming: true })).join('')}</div></div>`;
+}
+
+const projectEdit = (el, fn) => store.editProject(el.dataset.project || ui.projectId, fn);
+
 const actions = {
+  'project-new': () => {
+    const colors = Object.keys(M.COLORS).filter(c => c !== 'gray');
+    const p = M.newProject({ color: colors[Math.floor(Math.random() * colors.length)] });
+    store.upsertProject(p);
+    navigate(`projects/${p.id}`);
+    setTimeout(() => document.getElementById(`ptitle-${p.id}`)?.focus(), 0);
+  },
+  'project-urgent': el => projectEdit(el, p => M.updateItem(p, el.dataset.item, i => { if (i.urgent) delete i.urgent; else i.urgent = true; })),
+  'project-list-mode': el => { store.setDevice('projectListGantt', el.dataset.gantt === '1'); render(); },
+  'gantt-fold': el => {
+    const key = ui.route === 'projects' && ui.projectId ? ui.projectId : 'all', set = new Set(projCollapsed(key));
+    if (set.has(el.dataset.project)) set.delete(el.dataset.project); else set.add(el.dataset.project);
+    ui.projCollapsed.set(key, set); render();
+  },
+  'gantt-fold-all': el => { projCollapsed('all'); ui.projCollapsed.set('all', new Set(el.dataset.fold === '1' ? store.activeProjects.map(p => p.id) : [])); render(); },
+  'gantt-open': el => { ui.projSelected = el.dataset.item; store.setDevice('projectMode', 'gantt'); navigate(`projects/${el.dataset.project}`); ui.projSelected = el.dataset.item; render(); },
+  'project-mode': el => { store.setDevice('projectMode', el.dataset.mode); render(); },
+  'project-color': el => projectEdit(el, p => { p.color = el.dataset.color; }),
+  'project-archive': el => projectEdit(el, p => { if (p.archived) delete p.archived; else p.archived = true; }),
+  'project-delete': el => {
+    const p = store.projects.get(el.dataset.project);
+    if (!p || !confirm(`Delete “${p.title || 'Untitled project'}” and all its subtasks?`)) return;
+    store.deleteProject(p.id);
+    navigate('projects');
+    toast(`Deleted “${p.title || 'Untitled project'}”`, { icon: 'trash', undo: () => store.upsertProject(p) });
+  },
+  'project-collapse': el => {
+    const pid = el.dataset.project, set = new Set(projCollapsed(pid));
+    if (set.has(el.dataset.item)) set.delete(el.dataset.item); else set.add(el.dataset.item);
+    ui.projCollapsed.set(pid, set); render();
+  },
+  'project-done': el => projectEdit(el, p => M.updateItem(p, el.dataset.item, i => M.setItemDone(i, !M.itemDone(i)))),
+  'project-add-child': el => {
+    const n = M.newProjectItem(), pid = el.dataset.project;
+    projectEdit(el, p => M.insertItem(p, n, el.dataset.item));
+    const set = new Set(projCollapsed(pid)); set.delete(el.dataset.item); ui.projCollapsed.set(pid, set);
+    render(); setTimeout(() => document.getElementById(`pi-${n.id}`)?.focus(), 0);
+  },
+  'project-indent': el => projectEdit(el, p => M.indentItem(p, el.dataset.item)),
+  'project-outdent': el => projectEdit(el, p => M.outdentItem(p, el.dataset.item)),
+  'project-move': el => projectEdit(el, p => M.moveItem(p, el.dataset.item, Number(el.dataset.delta))),
+  'project-remove': el => {
+    const before = structuredClone(store.projects.get(el.dataset.project));
+    const gone = M.findItem(before, el.dataset.item)?.item;
+    projectEdit(el, p => { M.removeItem(p, el.dataset.item); });
+    if (ui.projSelected === el.dataset.item) ui.projSelected = null;
+    toast(`Deleted “${gone?.title || 'subtask'}”${gone?.items?.length ? ` and ${plural(M.itemProgress(gone).total, 'piece')} inside` : ''}`, { icon: 'trash', undo: () => store.upsertProject(before) });
+  },
+  'project-select': el => { ui.projSelected = ui.projSelected === el.dataset.item ? null : el.dataset.item; render(); },
+  'pick-date': el => {
+    const input = el.parentElement.querySelector('input[type=date]');
+    try { input.showPicker(); } catch { input.focus(); input.click(); }
+  },
+  'clear-date': el => setProjectDate(el.parentElement.querySelector('input[type=date]'), ''),
   'new-task': el => newTaskAt(el.dataset.day ? M.parseKey(el.dataset.day) : new Date()),
   'new-event': el => newEventAt(el.dataset.day ? M.parseKey(el.dataset.day) : new Date()),
   'make-kind': el => {
@@ -2042,13 +2357,26 @@ document.addEventListener('input', e => {
     $('#reflSubmit').disabled = n < min;
     return;
   }
+  if (el.dataset.pfield === 'title') { projectEdit(el, p => { p.title = el.value; }); return; }
+  if (el.dataset.pfield === 'item-title') { projectEdit(el, p => M.updateItem(p, el.dataset.item, i => { i.title = el.value; })); return; }
   const bind = el.dataset.bind;
   if (bind === 'todoSearch') { ui.todo.search = el.value; render(); }
   if (bind === 'reflSearch') { ui.reflSearch = el.value; render(); }
 });
 
+function setProjectDate(el, value) {
+  const field = el.dataset.pdate;
+  projectEdit(el, p => {
+    const target = el.dataset.item ? M.findItem(p, el.dataset.item)?.item : p;
+    if (!target) return;
+    if (value) target[field] = value; else delete target[field];
+  });
+}
+
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.bind === 'projectTodayDays') { store.updateSettings({ projectTodayDays: Number(el.value) }); return; }
   if (el.dataset.bind === 'todoRange') { ui.todo.range = Number(el.value); render(); return; }
   if (el.dataset.bind === 'todoCompleted') { ui.todo.showCompleted = el.checked; render(); return; }
   if (el.closest('[data-form="editor"]')) {
@@ -2106,6 +2434,12 @@ document.addEventListener('submit', async e => {
   const form = e.target;
   e.preventDefault();
   const kind = form.dataset.form;
+  if (kind === 'project-add') {
+    const input = form.querySelector('input'), title = input.value.trim();
+    if (title) store.editProject(form.dataset.project, p => M.insertItem(p, M.newProjectItem({ title })));
+    setTimeout(() => { const i = document.getElementById(`padd-${form.dataset.project}`); if (i) { i.value = ''; i.focus(); } }, 0);
+    return;
+  }
   if (kind === 'quick') {
     const input = form.querySelector('input');
     const title = input.value.trim();
@@ -2199,8 +2533,23 @@ document.addEventListener('submit', async e => {
   }
 });
 
-const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', habits: 'A', reflections: 'R', focus: 'F', screentime: 'U', booking: 'B', settings: ',' };
+const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', projects: 'P', habits: 'A', reflections: 'R', focus: 'F', screentime: 'U', booking: 'B', settings: ',' };
 document.addEventListener('keydown', e => {
+  // Project outline: Return adds the next subtask, Tab / Shift-Tab move a row in or out a level.
+  const pf = e.target.dataset?.pfield === 'item-title' ? e.target : null;
+  if (pf && (e.key === 'Enter' || e.key === 'Tab') && !e.isComposing) {
+    e.preventDefault();
+    const pid = pf.dataset.project, id = pf.dataset.item;
+    if (e.key === 'Enter') {
+      const n = M.newProjectItem();
+      store.editProject(pid, p => M.insertItem(p, n, M.findItem(p, id)?.parent?.id ?? null, id));
+      setTimeout(() => document.getElementById(`pi-${n.id}`)?.focus(), 0);
+    } else {
+      store.editProject(pid, p => (e.shiftKey ? M.outdentItem : M.indentItem)(p, id));
+      setTimeout(() => document.getElementById(`pi-${id}`)?.focus(), 0);
+    }
+    return;
+  }
   const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
   if (!typing && !ui.modal && store.user && !e.metaKey && !e.ctrlKey && !e.altKey) {
     const k = e.key.toLowerCase();
