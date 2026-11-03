@@ -111,6 +111,23 @@ enum DebugDriver {
         runFocusTest(model)
         if LaunchOptions.has("-menuWindow") { showMenuWindow(model) }
         if LaunchOptions.has("-detailWindow") { showDetailWindow(model) }
+        // -renderMenu <file.png>: draws the menu bar dropdown to an image (no screen-recording permission needed).
+        if let out = LaunchOptions.value("-renderMenu") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                let view = MenuBarView()
+                    .environmentObject(model).environmentObject(model.store).environmentObject(model.google)
+                    .environmentObject(model.engine).environmentObject(model.sync).environmentObject(model.calendly)
+                    .environmentObject(model.importer).environmentObject(model.focus).environmentObject(model.screenTime)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .environment(\.colorScheme, .dark)
+                let r = ImageRenderer(content: view)
+                r.scale = 2
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                   let png = rep.representation(using: .png, properties: [:]) {
+                    try? png.write(to: URL(fileURLWithPath: out))
+                }
+            }
+        }
         if LaunchOptions.has("-openMenuBar") {
             // Click our own menu bar icon, so the real dropdown can be screenshotted.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
