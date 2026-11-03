@@ -205,6 +205,8 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var cycleTimes: Int?
     /// Habits: how it's meant to stick (Atomic Habits). nil for tasks and events.
     var habit: HabitInfo?
+    /// Urgent: an until-done item that isn't due yet still goes on today's list and in today's progress ring.
+    var urgent: Bool?
     /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
     var steps: [HabitStep]?
     /// Occurrence key → the steps checked off that time.
@@ -281,6 +283,15 @@ struct Occurrence: Identifiable, Hashable {
     var isEvent: Bool { task.isEvent }
     var isBusy: Bool { task.isBusy }
     var isDone: Bool { !task.isEvent && task.completions[key] != nil }
+    /// An until-done item's deadline for this day (see untilDoneDeadline).
+    var deadline: Date? { task.untilDoneDeadline(on: day) }
+    /// On today's list and in its progress ring: everything, except an until-done item that isn't due within
+    /// `window` days (0 = due by tonight) and isn't urgent. Settled ones stay counted so the ring fills up.
+    func countsToday(window: Int, today: Date = Date()) -> Bool {
+        guard task.isUntilDone, !isEvent, !task.isUrgent, !isResolved, !isOverdue else { return true }
+        guard window >= 0, let d = deadline else { return false }
+        return d <= today.startOfDay.adding(days: window + 1)
+    }
     /// "Didn't do it / couldn't": settles the item like a check-off, without counting as done.
     var isMissed: Bool { !task.isEvent && !isDone && task.missed?[key] != nil }
     var isResolved: Bool { isDone || isMissed }

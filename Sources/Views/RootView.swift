@@ -36,7 +36,7 @@ struct RootView: View {
                         row(.projects, badge: store.projectToday().filter { $0.item?.isDone == false }.count)
                     }
                     Section("Grow") {
-                        row(.habits, badge: store.todayChecklist().filter { $0.isHabit && !$0.isResolved }.count)
+                        row(.habits, badge: store.countedToday().filter { $0.isHabit && !$0.isUntilDone && !$0.isResolved }.count)
                         row(.reflections, badge: store.reflections.count)
                     }
                     Section("Focus") {

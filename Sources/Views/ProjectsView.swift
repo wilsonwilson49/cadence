@@ -516,7 +516,7 @@ struct ProjectTodayMenu: View {
     @EnvironmentObject private var store: Store
     var body: some View {
         Menu {
-            Picker("Project tasks on today's list", selection: $store.settings.projectTodayDays) {
+            Picker("On today’s list when due", selection: $store.settings.projectTodayDays) {
                 ForEach(projectTodayChoices, id: \.0) { Text($0.1).tag($0.0) }
             }
             .pickerStyle(.inline)
@@ -526,7 +526,7 @@ struct ProjectTodayMenu: View {
             Text("On today: \(projectTodayChoices.first { $0.0 == store.settings.projectTodayDays }?.1.lowercased() ?? "due today")")
         }
         .menuStyle(.borderlessButton).fixedSize().font(.caption)
-        .help("Which project subtasks join today's list and its progress ring")
+        .help("Which until-done tasks and project subtasks join today’s list and its progress ring (urgent ones always do)")
     }
 }
 

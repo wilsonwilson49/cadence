@@ -110,7 +110,7 @@ export class Reminders {
 
     if (s.nudgeEnabled && now - this.lastNudge >= s.nudgeIntervalMinutes * 60_000) {
       this.lastNudge = now;
-      const open = store.todayChecklist().filter(o => !o.resolved && !M.isSilent(o.task));
+      const open = store.countedToday().filter(o => !o.resolved && !M.isSilent(o.task));
       if (open.length || !s.nudgeOnlyWhenIncomplete) {
         const names = open.slice(0, 3).map(o => o.task.title).join(', ') + (open.length > 3 ? ` +${open.length - 3} more` : '');
         this.deliver(open.length

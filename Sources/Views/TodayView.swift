@@ -11,7 +11,10 @@ struct TodayView: View {
         let today = Date().startOfDay
         let items = store.checklist(on: today)
         let overdue = store.overdue()
-        let all = overdue + items
+        // Until-done items that aren't due yet sit under "Due later" and stay out of the ring (unless urgent).
+        let counted = store.countedToday(overdue + items)
+        let later = store.dueLater(overdue + items)
+        let all = counted
         // Project subtasks on today's list count in the ring too (see the "On today" setting).
         let proj = store.projectToday()
         let projDone = proj.filter { $0.item?.isDone == true }.count
@@ -56,9 +59,10 @@ struct TodayView: View {
                 }
 
                 // Tasks that stay on until you do them get their own section, apart from what's on for today.
-                let habits = items.filter(\.isHabit)
-                let daily = items.filter { !$0.isHabit && !$0.isUntilDone }
-                let ongoing = items.filter { !$0.isHabit && $0.isUntilDone }
+                let shown = counted.filter { o in !overdue.contains { $0.id == o.id } }
+                let habits = shown.filter { $0.isHabit && !$0.isUntilDone }
+                let daily = shown.filter { !$0.isHabit && !$0.isUntilDone }
+                let ongoing = shown.filter(\.isUntilDone)
                 VStack(alignment: .leading, spacing: 6) {
                     SectionTitle(text: "Today's checklist", symbol: "checklist", count: daily.count)
                     Card {
@@ -94,6 +98,29 @@ struct TodayView: View {
                             Text("stays on your list until you check it off or mark it “didn't do it”").font(.caption).foregroundStyle(.secondary)
                         }
                         Card { VStack(spacing: 0) { rows(ongoing) } }
+                    }
+                }
+                if !later.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(text: "Due later", symbol: "calendar.badge.clock", count: later.count)
+                            Text("not counted in today's progress · mark one urgent to work on it today").font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            ProjectTodayMenu()
+                        }
+                        Card { VStack(spacing: 0) {
+                            ForEach(Array(later.enumerated()), id: \.element.id) { i, occ in
+                                if i > 0 { Divider().padding(.leading, 42) }
+                                HStack {
+                                    ChecklistRow(occ: occ)
+                                    if let d = occ.deadline {
+                                        Text("due \(d.formatted(.dateTime.weekday(.abbreviated))) \(timeString(d))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                    }
+                                    Button { store.setUrgent(occ.task.id, true) } label: { Label("Urgent", systemImage: "exclamationmark.circle") }
+                                        .controlSize(.small).help("Put it on today's list and in today's progress")
+                                }
+                            }
+                        } }
                     }
                 }
                 ProjectTodaySection()

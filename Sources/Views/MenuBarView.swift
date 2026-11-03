@@ -15,7 +15,8 @@ struct MenuBarView: View {
     private static let maxRows = 12
 
     var body: some View {
-        let items = store.todayChecklist()
+        let items = store.countedToday()
+        let laterCount = store.dueLater().count
         let open = items.filter { !$0.isResolved }
         let settled = items.filter(\.isResolved)
         // Project subtasks on today's list count too.
@@ -27,7 +28,7 @@ struct MenuBarView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Today · \(Date().formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))").font(.headline)
-                    Text(total == 0 ? "Nothing scheduled" : openCount == 0 ? "All settled" : "\(openCount) left · \(done) done")
+                    Text((total == 0 ? "Nothing scheduled" : openCount == 0 ? "All settled" : "\(openCount) left · \(done) done") + (laterCount > 0 ? " · \(laterCount) due later" : ""))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

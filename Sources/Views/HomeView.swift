@@ -11,7 +11,7 @@ struct HomeView: View {
 
     var body: some View {
         let now = Date()
-        let items = store.todayChecklist()
+        let items = store.countedToday()
         let open = items.filter { !$0.isResolved }
         let proj = store.projectToday()
         let projOpen = proj.filter { $0.item?.isDone == false }.count

@@ -157,7 +157,7 @@ final class ReminderEngine: ObservableObject {
         if s.nudgeEnabled && !screenLocked && !displayAsleep
             && now.timeIntervalSince(lastNudge) >= Double(s.nudgeIntervalMinutes * 60) {
             lastNudge = now
-            let open = store.todayChecklist().filter { !$0.isResolved && !$0.task.isSilent }
+            let open = store.countedToday().filter { !$0.isResolved && !$0.task.isSilent }
             if !open.isEmpty || !s.nudgeOnlyWhenIncomplete {
                 model.notifier.deliver(nudgeContent(open), channels: s.nudgeChannels)
             }

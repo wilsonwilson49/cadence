@@ -357,7 +357,23 @@ final class Store: ObservableObject {
 
     func todayChecklist() -> [Occurrence] { overdue() + checklist(on: Date()) }
 
-    var remainingToday: Int { todayChecklist().filter { !$0.isResolved }.count + projectToday().filter { $0.item?.isDone == false }.count }
+    var remainingToday: Int { countedToday().filter { !$0.isResolved }.count + projectToday().filter { $0.item?.isDone == false }.count }
+
+    /// Today's list as it counts in the progress ring: until-done items that aren't due yet are left out
+    /// (they're under "Due later") unless marked urgent. Same window as project tasks ("On today").
+    func countedToday(_ items: [Occurrence]? = nil, today: Date = Date()) -> [Occurrence] {
+        (items ?? todayChecklist()).filter { $0.countsToday(window: settings.projectTodayDays, today: today) }
+    }
+    /// Until-done items on the list that aren't due yet: shown apart, not counted.
+    func dueLater(_ items: [Occurrence]? = nil, today: Date = Date()) -> [Occurrence] {
+        (items ?? todayChecklist()).filter { !$0.countsToday(window: settings.projectTodayDays, today: today) }
+            .sorted { ($0.deadline ?? .distantFuture) < ($1.deadline ?? .distantFuture) }
+    }
+    func setUrgent(_ taskID: UUID, _ on: Bool) {
+        guard var t = task(taskID) else { return }
+        t.urgent = on ? true : nil
+        upsert(t)
+    }
 
     /// Project subtasks on today's list and in its progress ring (urgent, or due within the setting's window).
     func projectToday(today: Date = Date()) -> [ProjectDeadline] {

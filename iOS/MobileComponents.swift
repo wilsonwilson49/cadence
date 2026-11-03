@@ -45,6 +45,7 @@ struct MobileRow: View {
                     if occ.isUntilDone && !occ.isResolved { Label(t.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1) }
                     else if let p = t.planSummary { Label(p, systemImage: "repeat").lineLimit(1) }
                     if t.isPastDue { Text("Past due").foregroundStyle(.red) }
+                    if t.isUrgent && t.isUntilDone && !occ.isResolved { Text("URGENT").font(.system(size: 9, weight: .heavy)).foregroundStyle(.red) }
                     if t.hasSteps {
                         let p = t.stepProgress(for: occ)
                         Label("\(p.done)/\(p.total)", systemImage: "checklist").foregroundStyle(p.done == p.total ? .green : .secondary)
@@ -61,6 +62,9 @@ struct MobileRow: View {
         .swipeActions(edge: .trailing) {
             if t.recurrence.isRepeating && !t.isUntilDone {
                 Button("Skip") { model.store.skip(occ) }.tint(.orange)
+            }
+            if t.isUntilDone && !occ.isResolved {
+                Button(t.isUrgent ? "Not urgent" : "Urgent") { model.store.setUrgent(t.id, !t.isUrgent) }.tint(.red)
             }
             Button("Edit") { model.editing = model.store.task(t.id) ?? t }.tint(.blue)
         }

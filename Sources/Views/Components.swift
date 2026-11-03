@@ -199,6 +199,10 @@ struct ChecklistRow: View {
                     if occ.task.source == "calendly" { Label("Calendly", systemImage: "person.2") }
                     if occ.task.source == "google" { Label("Google", systemImage: "calendar") }
                     if occ.task.isSilent { Image(systemName: "bell.slash").help("No notifications") }
+                    if occ.task.isUrgent && occ.isUntilDone && !occ.isResolved {
+                        Text("URGENT").font(.system(size: 9, weight: .heavy)).foregroundStyle(.red)
+                            .padding(.horizontal, 4).padding(.vertical, 1).background(Capsule().fill(Color.red.opacity(0.14)))
+                    }
                     if occ.task.hasSteps {
                         let p = occ.task.stepProgress(for: occ)
                         Label("\(p.done)/\(p.total) steps", systemImage: "checklist").foregroundStyle(p.done == p.total ? .green : .secondary)
@@ -265,6 +269,10 @@ struct OccurrenceMenu: View {
     let occ: Occurrence
 
     var body: some View {
+        if occ.isUntilDone {
+            Button(occ.task.isUrgent ? "Not urgent (back to due later)" : "Mark urgent (on today's list)") { store.setUrgent(occ.task.id, !occ.task.isUrgent) }
+            Divider()
+        }
         if occ.isDone {
             Button("Mark as not done") { store.uncomplete(occ) }
         } else {

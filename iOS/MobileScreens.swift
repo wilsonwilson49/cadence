@@ -41,14 +41,16 @@ struct TodayScreen: View {
     @State private var quick = ""
 
     var body: some View {
-        let items = store.checklist(on: Date())
+        // Until-done items that aren't due yet go under "Due later" and stay out of the ring (unless urgent).
+        let later = store.dueLater(store.overdue() + store.checklist(on: Date()))
+        let items = store.countedToday(store.checklist(on: Date()))
         let overdue = store.overdue()
         let all = overdue + items
         // Project subtasks on today's list count in the ring too.
         let proj = store.projectToday()
         let tasks = items.filter { !$0.isHabit && !$0.isUntilDone }
-        let habits = items.filter(\.isHabit)
-        let ongoing = items.filter { !$0.isHabit && $0.isUntilDone }
+        let habits = items.filter { $0.isHabit && !$0.isUntilDone }
+        let ongoing = items.filter(\.isUntilDone)
         let events = store.events(on: Date())
         NavigationStack {
             List {
@@ -88,6 +90,20 @@ struct TodayScreen: View {
                 if !ongoing.isEmpty {
                     Section { ForEach(ongoing) { MobileRow(occ: $0) } } header: { Text("Until done") } footer: {
                         Text("These stay on your list until you check them off or mark them “didn't do it”.")
+                    }
+                }
+                if !later.isEmpty {
+                    Section {
+                        ForEach(later) { o in
+                            MobileRow(occ: o)
+                                .overlay(alignment: .topTrailing) {
+                                    if let d = o.deadline {
+                                        Text("due \(d.formatted(.dateTime.weekday(.abbreviated))) \(timeString(d))").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                                    }
+                                }
+                        }
+                    } header: { Text("Due later") } footer: {
+                        Text("Not counted in today's progress. Swipe left on one and tap Urgent to put it on today's list.")
                     }
                 }
                 MobileProjectSections()

@@ -127,7 +127,7 @@ function sidebar() {
     let head = '';
     if (section !== lastSection) { head = section ? `<div class="nav-section">${section}</div>` : id === 'home' ? '' : '<div class="nav-section"></div>'; lastSection = section; }
     const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
-      : id === 'habits' ? (store.tasksOn(new Date()).filter(o => M.isHabit(o.task) && !o.resolved).length || '')
+      : id === 'habits' ? (store.countedToday(store.tasksOn(new Date())).filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task) && !o.resolved).length || '')
       : id === 'focus' && focus.running ? fmtClock(focusLeft()) : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
     return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
   }).join('');
@@ -191,6 +191,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (t.externalURL && !compact) meta.push(`<a href="${esc(t.externalURL)}" target="_blank" rel="noopener" title="Open meeting link">${ic('link')}</a>`);
   if (o.missed) meta.unshift(`<span class="red"><b>Didn’t do it</b></span>`);
   const steps = M.habitSteps(t);
+  if (t.urgent && M.isUntilDone(t) && !o.resolved) meta.unshift('<span class="urgent-tag">URGENT</span>');
   if (steps.length) { const n = M.stepsDoneFor(t, o).size; meta.push(`<span class="${n === steps.length ? 'green' : ''}">${ic('list')}${n}/${steps.length} steps</span>`); }
   const hasRefl = o.resolved && store.reflectionFor(o, o.missed ? 'missed' : 'done');
   return `<div class="crow ${o.done ? 'done' : ''} ${o.missed ? 'missed' : ''} ${ui.justDone.has(o.id) ? 'just-done' : ''}">
@@ -204,6 +205,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
     ${ctx === 'checkin' ? '' : `<div class="actions">
       <button class="btn ghost sm" data-act="edit" data-task="${t.id}">Edit</button>
       ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
+      ${M.isUntilDone(t) && t.urgent && !o.resolved ? `<button class="btn ghost sm" data-act="task-urgent" data-task="${t.id}" data-off="1" title="Back to due later">Not urgent</button>` : ''}
     </div>`}
   </div>`;
 }
@@ -229,7 +231,7 @@ function empty(icon, title, text) {
 // ---------- Home (in-app dashboard) ----------
 function homeView() {
   const now = new Date();
-  const all = store.todayChecklist();
+  const all = store.countedToday();
   const proj = store.projectToday(), projOpen = proj.filter(d => d.item && !M.itemDone(d.item)).length, total = all.length + proj.length;
   const done = all.filter(o => o.done).length + proj.length - projOpen;
   const open = all.filter(o => !o.resolved);
@@ -318,10 +320,12 @@ function eventRow(ev) {
 // ---------- Today ----------
 function todayView() {
   const today = new Date();
-  const items = store.tasksOn(today), overdue = store.overdue(), all = [...overdue, ...items];
+  // Until-done items that aren't due yet go under "Due later" and stay out of the ring (unless urgent).
+  const later = store.dueLater([...store.overdue(), ...store.tasksOn(today)]);
+  const items = store.countedToday(store.tasksOn(today)), overdue = store.overdue(), all = [...overdue, ...items];
   // Tasks, habits, and tasks that stay on until you do them each get their own section.
-  const habits = items.filter(o => M.isHabit(o.task));
-  const daily = items.filter(o => !M.isHabit(o.task) && !M.isUntilDone(o.task)), ongoing = items.filter(o => !M.isHabit(o.task) && M.isUntilDone(o.task));
+  const habits = items.filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task));
+  const daily = items.filter(o => !M.isHabit(o.task) && !M.isUntilDone(o.task)), ongoing = items.filter(o => M.isUntilDone(o.task));
   // Project subtasks on today's list count in the ring too (see "On today").
   const proj = store.projectToday(), projDone = proj.filter(d => d.item && M.itemDone(d.item)).length, total = all.length + proj.length;
   const done = all.filter(o => o.done).length + projDone, settled = all.filter(o => o.resolved).length + projDone;
@@ -353,6 +357,11 @@ function todayView() {
         <span class="small muted" style="font-weight:400">stays on your list until you check it off or mark it “didn’t do it”</span></div>
       <div class="card">${ongoing.map(o => crow(o)).join('')}</div>
       <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div></div>` : ''}
+    ${later.length ? `<div><div class="section-title">${ic('clock')}Due later <span class="count">${later.length}</span>
+        <span class="small muted" style="font-weight:400">not counted in today’s progress · mark one urgent to work on it today</span><span class="grow"></span>${projectTodaySelect()}</div>
+      <div class="card">${later.map(o => { const d = M.untilDoneDeadline(o.task, o.day);
+        return `<div class="later-row">${crow(o)}${d ? `<span class="small muted mono">due ${M.WEEKDAY_SHORT[d.getDay()]} ${M.fmtTime(d)}</span>` : ''}
+          <button class="btn sm" data-act="task-urgent" data-task="${o.task.id}" title="Put it on today’s list and in today’s progress">! Urgent</button></div>`; }).join('')}</div></div>` : ''}
     ${projectTodaySection()}
     ${projectUpcomingSection()}
     <div><div class="section-title">${ic('cal')}Schedule <span class="count">${events.length}</span><span class="grow"></span>
@@ -1252,7 +1261,7 @@ function reflectionDialog(o, ctx, mode = 'done') {
 }
 
 function checkInDialog(m) {
-  const items = store.todayChecklist(), done = items.filter(o => o.done).length, left = items.filter(o => !o.resolved).length;
+  const items = store.countedToday(), done = items.filter(o => o.done).length, left = items.filter(o => !o.resolved).length;
   const upcoming = scheduleOn(new Date()).filter(e => !e.allDay && e.end > new Date()).map(e => ({ title: e.title, startDate: e.start, colorHex: e.color }));
   return `<div class="dialog"><div class="body">
     <div class="row" style="gap:14px"><span class="badge-icon" style="width:46px;height:46px;background:linear-gradient(135deg,#ffb340,#ff7a00)">${ic('sun')}</span>
@@ -2189,6 +2198,7 @@ const actions = {
     navigate(`projects/${p.id}`);
     setTimeout(() => document.getElementById(`ptitle-${p.id}`)?.focus(), 0);
   },
+  'task-urgent': el => store.setUrgent(el.dataset.task, el.dataset.off !== '1'),
   'quick-save': el => {
     const it = itemById(el.dataset.item);
     if (!it) return;

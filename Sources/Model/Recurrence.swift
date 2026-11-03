@@ -227,6 +227,24 @@ extension PlanTask {
     /// The day an until-done stretch on `day` belongs to (the held-over one before the new one's time).
     func currentRepStart(on day: Date) -> Date? { heldOver(on: day)?.rep ?? repStart(on: day) }
 
+    var isUrgent: Bool { urgent == true }
+
+    /// When an until-done item is due: when the next one takes over (repeating), or the end of its due date.
+    /// nil = no deadline (a cycle, or no due date).
+    func untilDoneDeadline(on day: Date, now: Date = Date()) -> Date? {
+        guard isUntilDone, !isCycle else { return nil }
+        if let held = heldOver(on: day, now: now) { return held.until }
+        if recurrence.isRepeating {
+            var d = day.startOfDay.adding(days: 1)
+            for _ in 0..<400 {
+                if occursByPattern(d) { return handoff(on: d) }
+                d = d.adding(days: 1)
+            }
+            return nil
+        }
+        return dueDate.map { $0.startOfDay.adding(days: 1) }
+    }
+
     /// The plain repeat schedule (no until-done carry-over).
     func occursByPattern(_ d: Date) -> Bool {
         if archived == true { return false }

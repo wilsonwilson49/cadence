@@ -385,7 +385,20 @@ class Store {
   }
 
   todayChecklist() { return [...this.overdue(), ...this.tasksOn(new Date())]; }
-  remainingToday() { return this.todayChecklist().filter(o => !o.resolved).length + this.projectToday().filter(d => d.item && !M.itemDone(d.item)).length; }
+  remainingToday() { return this.countedToday().filter(o => !o.resolved).length + this.projectToday().filter(d => d.item && !M.itemDone(d.item)).length; }
+  /** Today's list as it counts in the ring: until-done items not due yet are left out ("Due later") unless urgent. */
+  countedToday(items = this.todayChecklist()) { return items.filter(o => M.countsToday(o, this.settings.projectTodayDays ?? 0)); }
+  dueLater(items = this.todayChecklist()) {
+    return items.filter(o => !M.countsToday(o, this.settings.projectTodayDays ?? 0))
+      .sort((a, b) => (M.untilDoneDeadline(a.task, a.day) ?? Infinity) - (M.untilDoneDeadline(b.task, b.day) ?? Infinity));
+  }
+  setUrgent(taskId, on) {
+    const t = this.tasks.get(taskId);
+    if (!t) return;
+    const next = { ...t };
+    if (on) next.urgent = true; else delete next.urgent;
+    this.upsertTask(next);
+  }
   /** Project subtasks on today's list and in its progress ring (urgent, or due within the setting's window). */
   projectToday(today = new Date()) {
     return [...this.projects.values()].flatMap(p => M.projectTodayItems(p, this.settings.projectTodayDays ?? 0, today).today).sort(M.deadlineOrder);

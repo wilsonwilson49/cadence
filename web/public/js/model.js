@@ -228,6 +228,27 @@ export function heldOver(task, day, now = new Date()) {
   return settled.length === 1 && settled[0] === key && at && sameDay(new Date(at), d) ? { rep: prev, key, until } : null;
 }
 
+/**
+ * When an until-done item is due: when the next one takes over (repeating), or the end of its due date.
+ * null = no deadline (a cycle, or no due date). Same as untilDoneDeadline on the Mac.
+ */
+export function untilDoneDeadline(task, day, now = new Date()) {
+  if (!isUntilDone(task) || isCycle(task)) return null;
+  const held = heldOver(task, day, now);
+  if (held) return held.until;
+  if (task.recurrence.frequency !== 'none') { const n = nextScheduled(task, startOfDay(day)); return n ? handoffAt(task, n) : null; }
+  return task.dueDate ? addDays(startOfDay(new Date(task.dueDate)), 1) : null;
+}
+/**
+ * On today's list and in its progress ring: everything, except an until-done item that isn't due within `window`
+ * days (0 = due by tonight) and isn't urgent. Settled ones stay counted so the ring fills up.
+ */
+export function countsToday(o, window = 0, today = new Date()) {
+  if (!isUntilDone(o.task) || o.event || o.task.urgent || o.resolved || o.overdue) return true;
+  const d = untilDoneDeadline(o.task, o.day, today);
+  return window >= 0 && d != null && d <= addDays(startOfDay(today), window + 1);
+}
+
 // ---------- habit tracker ----------
 /** The next day the habit's schedule lands on after `day` (null if none within a year). */
 function nextScheduled(task, day) {

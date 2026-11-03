@@ -28,7 +28,7 @@ struct CheckInView: View {
     }
 
     private var checklist: some View {
-        let items = store.todayChecklist()
+        let items = store.countedToday()
         let done = items.filter(\.isDone).count
         let left = items.filter { !$0.isResolved }.count
         let upcoming = schedule(on: Date(), store: store, google: google).filter { ($0.end ?? .distantPast) > Date() && $0.start != nil }
