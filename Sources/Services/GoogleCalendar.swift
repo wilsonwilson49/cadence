@@ -568,6 +568,28 @@ final class GoogleCalendar: ObservableObject {
         refreshLoadedMonths()
     }
 
+    /// Changes only what's given in a Google event (nil = leave it as it is): quick edits and drags on the calendar.
+    func patch(calendarID: String, eventID: String, title: String? = nil, start: Date? = nil, end: Date? = nil, busy: Bool? = nil) async throws {
+        let tz = TimeZone.current.identifier
+        if viaServer {
+            var body: [String: Any] = ["calendarID": calendarID, "eventId": eventID, "timeZone": tz, "allDay": false]
+            if let title { body["title"] = title }
+            if let start, let end { body["start"] = Self.iso.string(from: start); body["end"] = Self.iso.string(from: end) }
+            if let busy { body["busy"] = busy }
+            _ = try await server("POST", "/api/google/events/update", [], body)
+        } else {
+            var body: [String: Any] = [:]
+            if let title { body["summary"] = title }
+            if let start, let end {
+                body["start"] = ["dateTime": Self.iso.string(from: start), "timeZone": tz, "date": NSNull()]
+                body["end"] = ["dateTime": Self.iso.string(from: end), "timeZone": tz, "date": NSNull()]
+            }
+            if let busy { body["transparency"] = busy ? "opaque" : "transparent" }
+            _ = try await api("PATCH", "/calendars/\(Self.encode(calendarID))/events/\(Self.encode(eventID))", body: body)
+        }
+        refreshLoadedMonths()
+    }
+
     /// Deletes a synced event from Google Calendar (already gone counts as done).
     func deleteEvent(calendarID: String, eventID: String) async throws {
         if viaServer {

@@ -53,6 +53,7 @@ struct WeekView: View {
                                 nowLine(colW)
                             }
                             .frame(height: hourHeight * 24, alignment: .topLeading)
+                            .environment(\.calendarGrid, CalendarGrid(hourHeight: hourHeight, dayWidth: colW))
                         }
                         .onAppear { proxy.scrollTo(7, anchor: .top) }
                     }
@@ -216,11 +217,47 @@ struct WeekView: View {
     }
 }
 
+/// The scale of a calendar grid, so its blocks can be dragged to a new time (and day) or resized.
+struct CalendarGrid { var hourHeight: CGFloat; var dayWidth: CGFloat }
+private struct CalendarGridKey: EnvironmentKey { static let defaultValue: CalendarGrid? = nil }
+extension EnvironmentValues {
+    var calendarGrid: CalendarGrid? {
+        get { self[CalendarGridKey.self] }
+        set { self[CalendarGridKey.self] = newValue }
+    }
+}
+
 struct TimedBlock: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.calendarGrid) private var grid
     let item: CalendarItem
     let height: CGFloat
     @State private var showing = false
+    @State private var drag: CGSize = .zero
+    @State private var stretch: CGFloat = 0
+
+    /// Snapped change from a drag: whole days sideways, 15-minute steps up and down.
+    private func steps(_ t: CGSize) -> (days: Int, minutes: Int) {
+        guard let g = grid else { return (0, 0) }
+        return (Int((t.width / g.dayWidth).rounded()), Int((t.height / g.hourHeight * 4).rounded()) * 15)
+    }
+    private var canMove: Bool {
+        guard grid != nil, item.start != nil else { return false }
+        if case .task(let o) = item { return !o.isDone && !o.isMissed }
+        return true
+    }
+    private var dragLabel: String? {
+        guard let s = item.start, let e = item.end else { return nil }
+        if drag != .zero {
+            let st = steps(drag), ns = s.adding(days: st.days).adding(minutes: st.minutes)
+            return "\(st.days != 0 ? ns.formatted(.dateTime.weekday(.abbreviated)) + " " : "")\(timeString(ns))–\(timeString(ns.addingTimeInterval(e.timeIntervalSince(s))))"
+        }
+        if stretch != 0, let g = grid {
+            let m = max(15, Int((e.timeIntervalSince(s) / 60 + Double(stretch / g.hourHeight * 60)) / 15) * 15)
+            return "\(timeString(s))–\(timeString(s.adding(minutes: m))) · \(m) min"
+        }
+        return nil
+    }
 
     /// The clock time at a vertical position inside the block.
     private func moment(atY y: CGFloat) -> Date? {
@@ -266,7 +303,47 @@ struct TimedBlock: View {
                 .onEnded { v in if let m = moment(atY: v.location.y) { model.newTask(at: m) } }
                 .exclusively(before: TapGesture().onEnded { showing = true })
         )
-        .help("\(item.isBusy ? "Closed" : "Open (just for info)") · click for details · double-click to add a task at this time")
+        .overlay(alignment: .bottom) {
+            // Drag the bottom edge to change how long it is.
+            if canMove {
+                Color.clear.frame(height: 6).contentShape(Rectangle())
+                    .onHover { h in if h { NSCursor.resizeUpDown.push() } else { NSCursor.pop() } }
+                    .gesture(DragGesture(minimumDistance: 2)
+                        .onChanged { stretch = $0.translation.height }
+                        .onEnded { v in
+                            if let s = item.start, let e = item.end, let g = grid {
+                                let m = max(15, Int((e.timeIntervalSince(s) / 60 + Double(v.translation.height / g.hourHeight * 60)) / 15) * 15)
+                                model.applyEdit(item, minutes: m)
+                            }
+                            stretch = 0
+                        })
+            }
+        }
+        .overlay(alignment: .top) {
+            if stretch != 0 {
+                RoundedRectangle(cornerRadius: 5).strokeBorder(item.color, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    .frame(height: max(12, height + stretch)).allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if let l = dragLabel {
+                Text(l).font(.system(size: 10, weight: .bold).monospacedDigit()).foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Capsule().fill(Color.black.opacity(0.75)))
+                    .fixedSize().offset(y: -18).allowsHitTesting(false)
+            }
+        }
+        .offset(drag)
+        .zIndex(drag == .zero && stretch == 0 ? 0 : 10)
+        .simultaneousGesture(DragGesture(minimumDistance: 6)
+            .onChanged { v in if canMove { drag = v.translation } }
+            .onEnded { v in
+                guard canMove, let s = item.start else { drag = .zero; return }
+                let st = steps(v.translation)
+                drag = .zero
+                if st.days != 0 || st.minutes != 0 { model.applyEdit(item, start: s.adding(days: st.days).adding(minutes: st.minutes)) }
+            })
+        .help("\(item.isBusy ? "Closed" : "Open (just for info)") · click for details and quick edits\(canMove ? " · drag to move it, drag its bottom edge to change its length" : "") · double-click to add a task at this time")
         .contextMenu { AddDuringMenu(item: item) }
         .popover(isPresented: $showing, arrowEdge: .trailing) { ItemDetail(item: item) { showing = false } }
     }

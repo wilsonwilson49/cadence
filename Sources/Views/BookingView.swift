@@ -13,6 +13,7 @@ struct BookingView: View {
     @State private var loading = false
     @State private var booking: BookRequest?
     @State private var banner: String?
+    @State private var editingHours = false
 
     struct BookRequest: Identifiable {
         let start: Date
@@ -38,7 +39,7 @@ struct BookingView: View {
         let week = Self.plans(store: store, google: google, busy: busy)
         let total = week.reduce(0) { $0 + $1.total }
         VStack(spacing: 0) {
-            ScreenHeader(title: "Booking", subtitle: "Your open time for the next 7 days. Click any green stretch to book it.") {
+            ScreenHeader(title: "Booking", subtitle: "Your open time for the next 7 days. Click a green stretch to book it; click anything else to change it, or drag it to move it.") {
                 CalendarsMenu()
                 Button { Task { await loadBusy() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     .disabled(loading)
@@ -76,7 +77,8 @@ struct BookingView: View {
                         if loading { ProgressView().controlSize(.small) }
                         Spacer()
                         Text(hoursSummary).font(.caption).foregroundStyle(.secondary)
-                        Button("Edit hours") { model.screen = .settings }.controlSize(.small)
+                        Button("Edit hours") { editingHours = true }.controlSize(.small)
+                            .popover(isPresented: $editingHours, arrowEdge: .bottom) { OpenHoursEditor() }
                     }
                     legend
                     grid(week)
@@ -172,6 +174,7 @@ struct BookingView: View {
                             }
                         }
                         ForEach(week) { d in column(d, h0: h0, h1: h1, width: colW).frame(width: colW, height: height) }
+                            .environment(\.calendarGrid, CalendarGrid(hourHeight: hourHeight, dayWidth: colW))
                     }
                     .padding(.top, 6)
                 }
@@ -209,6 +212,12 @@ struct BookingView: View {
             ForEach(Array(offBands.enumerated()), id: \.offset) { _, b in
                 OpenStripes(color: .secondary, opacity: 0.14).frame(width: width, height: b.1).offset(y: b.0)
             }
+            // Double-click anywhere free to add an event there.
+            Color.clear.contentShape(Rectangle())
+                .gesture(SpatialTapGesture(count: 2).onEnded { v in
+                    let m = h0 * 60 + Int(v.location.y / hourHeight * 60) / 15 * 15
+                    model.newEvent(on: d.day, minutes: min(m, 23 * 60 + 45))
+                })
             if d.day.isToday, let b = band(top, Date()) {
                 Color.secondary.opacity(0.08).frame(width: width, height: b.1).offset(y: b.0).allowsHitTesting(false)
             }
@@ -374,6 +383,47 @@ struct BookingView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         withAnimation { banner = "Open times copied to the clipboard." }
+    }
+}
+
+/// Open hours, edited right on the Booking screen (same setting as in Settings).
+private struct OpenHoursEditor: View {
+    @EnvironmentObject private var store: Store
+
+    private func minutesBinding(_ key: WritableKeyPath<Availability, Int>) -> Binding<Date> {
+        Binding(get: { dayAt(Date(), minutes: store.settings.availability[keyPath: key]) },
+                set: { store.settings.availability[keyPath: key] = $0.minutesSinceMidnight / 15 * 15 })
+    }
+
+    var body: some View {
+        let a = store.settings.availability
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Open hours").font(.headline)
+            HStack(spacing: 4) {
+                ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { wd in
+                    let on = a.weekdays.contains(wd)
+                    Button(Calendar.current.veryShortWeekdaySymbols[wd - 1]) {
+                        var w = Set(a.weekdays)
+                        if on { w.remove(wd) } else { w.insert(wd) }
+                        store.settings.availability.weekdays = w.sorted()
+                    }
+                    .buttonStyle(.bordered).tint(on ? .green : nil)
+                    .help(Calendar.current.weekdaySymbols[wd - 1])
+                }
+            }
+            HStack {
+                DatePicker("From", selection: minutesBinding(\.startMinutes), displayedComponents: .hourAndMinute)
+                DatePicker("to", selection: minutesBinding(\.endMinutes), displayedComponents: .hourAndMinute)
+            }
+            .fixedSize()
+            Stepper("Keep \(a.bufferMinutes) min free around closed items", value: $store.settings.availability.bufferMinutes, in: 0...120, step: 5)
+            if a.endMinutes <= a.startMinutes {
+                Label("The end is before the start, so there's no open time.", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+            }
+            Text("Changes apply right away and sync to your other devices.").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(width: 340)
     }
 }
 

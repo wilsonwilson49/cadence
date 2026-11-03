@@ -287,11 +287,16 @@ export async function createEvent(userId, e) {
   return { id: j.id, link: j.htmlLink, calendarID: e.calendarID || 'primary' };
 }
 
-/** Pushes a Cadence edit of a synced event back to Google (title, notes, time, open/closed). */
+/**
+ * Pushes a Cadence edit of a synced event back to Google (title, notes, time, open/closed). Fields left out stay
+ * as they are in Google, so a drag on the calendar can change just the time.
+ */
 export async function updateEvent(userId, e) {
   const tz = e.timeZone || 'UTC';
-  const body = { summary: e.title, description: e.details ?? '' };
-  if (e.allDay) {
+  const body = {};
+  if (e.title != null) body.summary = e.title;
+  if (e.details != null) body.description = e.details;
+  if (e.start == null && e.startDate == null) { /* time unchanged */ } else if (e.allDay) {
     body.start = { date: e.startDate, dateTime: null, timeZone: null };
     body.end = { date: e.endDate, dateTime: null, timeZone: null };
   } else {

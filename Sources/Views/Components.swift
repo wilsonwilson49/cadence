@@ -560,9 +560,84 @@ struct ItemDetail: View {
                 AddDuringMenu(item: item, before: dismiss)
                     .menuStyle(.borderlessButton).fixedSize().controlSize(.small)
             }
+            Divider()
+            QuickEdit(item: item, done: dismiss)
         }
         .padding(14)
-        .frame(width: 280, alignment: .leading)
+        .frame(width: 300, alignment: .leading)
+    }
+}
+
+/// Change the basics right in the popover: title, when, how long, and whether it blocks the time.
+/// Works on Cadence items and Google events alike; synced events update in Google too.
+private struct QuickEdit: View {
+    @EnvironmentObject private var model: AppModel
+    let item: CalendarItem
+    let done: () -> Void
+    @State private var title = ""
+    @State private var start = Date()
+    @State private var minutes = 30
+    @State private var busy = false
+    @State private var loaded = false
+    @State private var confirmDelete = false
+
+    private var fixedDays: Bool {
+        if case .task(let o) = item { return o.task.recurrence.isRepeating || o.task.isLongTerm || o.task.isCycle }
+        return false
+    }
+    private var original: (title: String, start: Date?, minutes: Int, busy: Bool) {
+        let m = item.start.flatMap { s in item.end.map { Int($0.timeIntervalSince(s) / 60) } } ?? 30
+        return (item.title, item.start, m, item.isBusy)
+    }
+    private var changed: Bool {
+        let o = original
+        return title.trimmingCharacters(in: .whitespaces) != o.title || (o.start != nil && (start != o.start || minutes != o.minutes)) || busy != o.busy
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Quick edit").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            TextField("Title", text: $title).textFieldStyle(.roundedBorder).onSubmit(save)
+            if item.start != nil {
+                DatePicker("Starts", selection: $start, displayedComponents: fixedDays ? [.hourAndMinute] : [.date, .hourAndMinute])
+                Picker("Length", selection: $minutes) {
+                    ForEach(Array(Set([15, 30, 45, 60, 90, 120, 180, 240, minutes])).sorted(), id: \.self) { m in
+                        Text(m < 60 ? "\(m) min" : m % 60 == 0 ? "\(m / 60) hr" : "\(m / 60) hr \(m % 60) min").tag(m)
+                    }
+                }
+            }
+            Toggle("Blocks the time (closed)", isOn: $busy).toggleStyle(.checkbox)
+            if fixedDays && item.start != nil {
+                Text("It repeats, so a new time applies to every repeat.").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                if case .google(let e) = item {
+                    Button("Delete…", role: .destructive) { confirmDelete = true }
+                        .confirmationDialog("Delete “\(e.title)” from Google Calendar?", isPresented: $confirmDelete) {
+                            Button("Delete event", role: .destructive) { model.deleteGoogleEvent(e); done() }
+                        }
+                }
+                Spacer()
+                Button("Save") { save() }.buttonStyle(.borderedProminent).disabled(!changed).keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.small)
+        }
+        .font(.callout)
+        .onAppear {
+            guard !loaded else { return }
+            let o = original
+            title = o.title; start = o.start ?? Date(); minutes = o.minutes; busy = o.busy; loaded = true
+        }
+    }
+
+    private func save() {
+        let o = original
+        let t = title.trimmingCharacters(in: .whitespaces)
+        model.applyEdit(item, title: t != o.title && !t.isEmpty ? t : nil,
+                        start: o.start != nil && start != o.start ? start : nil,
+                        minutes: o.start != nil && minutes != o.minutes ? minutes : nil,
+                        busy: busy != o.busy ? busy : nil)
+        done()
     }
 }
 

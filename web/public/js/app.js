@@ -999,9 +999,9 @@ function bookingView() {
         style="${pos};left:calc(${(p.lane * 100) / p.lanes}% + 2px);width:calc(${100 / p.lanes}% - 4px);--hue:${p.color}"><b>${esc(p.title)}</b>${M.fmtTime(p.start)}</div>`);
     }
     if (M.isToday(d.day)) { const t = y(d.day, now); if (t > 0 && t < (h1 - h0) * OT_HOUR) parts.push(`<div class="nowline" style="top:${t}px"></div>`); }
-    return `<div class="ot-col ${M.isToday(d.day) ? 'today' : ''}" style="height:${(h1 - h0) * OT_HOUR}px">${parts.join('')}</div>`;
+    return `<div class="ot-col ${M.isToday(d.day) ? 'today' : ''}" data-day="${M.dateKey(d.day)}" data-h0="${h0}" style="height:${(h1 - h0) * OT_HOUR}px">${parts.join('')}</div>`;
   };
-  return `<div class="header"><div class="grow"><h1>Booking</h1><div class="sub">Your open time for the next 7 days. Click any green stretch to book it.</div></div>
+  return `<div class="header"><div class="grow"><h1>Booking</h1><div class="sub">Your open time for the next 7 days. Click a green stretch to book it; click anything else to change it, or drag it to move it. Double-click a free spot to add an event.</div></div>
       ${calendarsMenu()}<button class="btn" data-act="busy-refresh" ${b.loading ? 'disabled' : ''}>${ic('refresh', b.loading ? 'spinning' : '')} Refresh</button>
       <button class="btn" data-act="copy-avail" ${total ? '' : 'disabled'}>${ic('copy')} Copy open times</button></div>
     <div class="page stack" style="max-width:1200px">
@@ -1011,7 +1011,17 @@ function bookingView() {
       ${b.message ? `<div class="callout" style="background:${tint('#30d158', .12)}"><span class="big green">${ic('check')}</span><div class="grow">${esc(b.message)}</div></div>` : ''}
       <div class="ot-summary"><div><span class="ot-big">${durLabel(total)}</span> open this week</div><span class="grow"></span>
         <span class="small muted">Open hours: ${a.weekdays.map(w => M.WEEKDAY_SHORT[w - 1]).join(' ')} · ${M.fmtTimeMinutes(a.startMinutes)}–${M.fmtTimeMinutes(a.endMinutes)}</span>
-        <a class="btn sm" href="/app/settings#open-hours">Edit hours</a></div>
+        <button class="btn sm ${b.editHours ? 'primary' : ''}" data-act="ot-hours">${b.editHours ? 'Done' : 'Edit hours'}</button></div>
+      ${b.editHours ? (() => {
+        const times = (from, to) => { const o = []; for (let m = from; m <= to; m += 30) o.push(m); return o; };
+        const sel = (key, opts, v) => `<select class="input sm" style="width:auto" data-setting="${key}">${opts.map(([o, l]) => `<option value="${o}" ${o === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+        return `<div class="card pad row ot-hours-edit" style="flex-wrap:wrap;gap:14px">
+          <div class="row" style="gap:6px"><span class="small muted">Days</span><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button class="${a.weekdays.includes(w) ? 'on' : ''}" data-act="avail-day" data-w="${w}" title="${M.WEEKDAY_SHORT[w - 1]}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div></div>
+          <div class="row" style="gap:6px"><span class="small muted">From</span>${sel('availability.startMinutes', times(300, 1260).map(m => [m, M.fmtTimeMinutes(m)]), a.startMinutes)}
+            <span class="small muted">until</span>${sel('availability.endMinutes', times(420, 1410).map(m => [m, M.fmtTimeMinutes(m)]), a.endMinutes)}</div>
+          <div class="row" style="gap:6px"><span class="small muted">Keep free around closed items</span>${sel('availability.bufferMinutes', [[0, 'None'], [5, '5 min'], [10, '10 min'], [15, '15 min'], [30, '30 min']], a.bufferMinutes)}</div>
+          <span class="small muted">Changes apply right away and sync to your Mac.</span></div>`;
+      })() : ''}
       <div class="ot-legend"><span><i class="sw open-time"></i>Open time</span><span><i class="sw closed"></i>Closed — blocks time</span>
         <span><i class="sw open"></i>Open — just for info</span><span><i class="sw off"></i>Outside your open hours</span></div>
       <div class="ot-wrap"><div class="ot">
@@ -1307,8 +1317,117 @@ function detailDialog(m) {
     buttons = e.link ? `<a class="btn" href="${esc(e.link)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : '';
   }
   return `<div class="dialog sm"><div class="body"><div class="row"><span style="width:10px;height:10px;border-radius:50%;background:${it.color}"></span><h2 class="grow">${esc(it.title)}</h2></div>
-    ${body}${during}</div><div class="foot" style="flex-wrap:wrap">${buttons}<span class="grow"></span><button class="btn" data-act="close">Close</button></div></div>`;
+    ${body}${quickEditFields(it, m.item)}${during}</div><div class="foot" style="flex-wrap:wrap">${buttons}<span class="grow"></span><button class="btn" data-act="close">Close</button></div></div>`;
 }
+
+/** Is this calendar item pinned to its days (repeating, long-term, a cycle)? Then edits change only its time. */
+const fixedDaysOf = it => it.kind === 'task' && (it.o.task.recurrence.frequency !== 'none' || it.o.task.mode === 'longTerm' || M.isCycle(it.o.task));
+const busyOfItem = it => (it.kind === 'task' ? M.isBusy(it.o.task) : !it.e.transparent);
+
+/** The detail dialog's quick edit: title, when, how long, open or closed. Works on Google events too. */
+function quickEditFields(it, id) {
+  const timed = Boolean(it.start), len = timed ? Math.round((it.end - it.start) / 60_000) : 0, fixed = fixedDaysOf(it);
+  const lens = [...new Set([15, 30, 45, 60, 90, 120, 180, 240, len].filter(Boolean))].sort((a, b) => a - b);
+  const hm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `<div class="fieldset quick-edit"><div class="legend">${ic('text')} Quick edit</div>
+    <input class="input" id="qeTitle" value="${esc(it.title)}" placeholder="Title">
+    ${timed ? `<div class="row" style="gap:6px;flex-wrap:wrap">${fixed ? '' : `<input class="input" type="date" id="qeDate" value="${M.dateKey(it.start)}" style="width:auto">`}
+      <input class="input" type="time" id="qeTime" value="${hm(it.start)}" style="width:auto" step="300">
+      <select class="input" id="qeLen" style="width:auto">${lens.map(n => `<option value="${n}" ${n === len ? 'selected' : ''}>${n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} hr ${n % 60} min` : `${n / 60} hr`}</option>`).join('')}</select></div>` : ''}
+    <label class="check"><input type="checkbox" id="qeBusy" ${busyOfItem(it) ? 'checked' : ''}>Blocks the time (closed)</label>
+    ${fixed && timed ? '<div class="small muted">It repeats, so a new time applies to every repeat.</div>' : ''}
+    <div class="row">${it.kind === 'google' ? `<button class="btn sm danger" data-act="gevent-delete" data-item="${esc(id)}">${ic('trash')} Delete from Google</button>` : ''}
+      <span class="grow"></span><button class="btn sm primary" data-act="quick-save" data-item="${esc(id)}">Save changes</button></div>
+    <div class="tiny muted">Tip: on the week and booking grids you can also drag a block to move it, or drag its bottom edge to change its length.</div></div>`;
+}
+
+/**
+ * Quick edit or drag from any calendar: new title, start, length or open/closed (leave a field out to keep it).
+ * A repeating item keeps its days and moves every repeat to the new time. Synced events change in Google too.
+ * Same as AppModel.applyEdit on the Mac.
+ */
+function applyEdit(it, { title, start, minutes, busy } = {}) {
+  title = title?.trim() || undefined;
+  if (it.kind === 'task') {
+    const t0 = store.tasks.get(it.o.task.id);
+    if (!t0) return;
+    const t = structuredClone(t0), fixed = fixedDaysOf(it);
+    if (title) t.title = title;
+    if (start) { if (!fixed) t.startDate = M.iso(M.startOfDay(start)); t.timeMinutes = M.minutesOf(start); }
+    if (minutes != null) t.durationMinutes = Math.max(5, minutes);
+    if (busy != null) t.busy = busy;
+    if (JSON.stringify(t) === JSON.stringify(t0)) return;
+    store.upsertTask(t);
+    toast(`Updated “${t.title}”`, { icon: 'check', undo: () => store.upsertTask(t0) });
+    if (t.source === 'google' && t.googleEventID && store.google.connected) {
+      const moveTime = !fixed && (start || minutes != null) && t.timeMinutes != null;
+      const s0 = moveTime ? M.dayAt(new Date(t.startDate), t.timeMinutes) : null;
+      store.updateGoogleEvent({ calendarID: t.sourceCalendar || 'primary', eventId: t.googleEventID, ...(title ? { title } : {}),
+        ...(s0 ? { start: M.iso(s0), end: M.iso(M.addMinutes(s0, t.durationMinutes)), allDay: false } : {}), ...(busy != null ? { busy } : {}) })
+        .catch(err => toast(`Saved in Cadence, but Google didn’t take it: ${err.message}`, { icon: 'alert' }));
+    }
+  } else {
+    const e = it.e, eventId = e.id.split('|').slice(1).join('|');
+    const s0 = start || e.startDate, len = minutes != null ? minutes * 60_000 : e.endDate - e.startDate;
+    const moved = !e.isAllDay && (start || minutes != null);
+    if (!title && !moved && busy == null) return;
+    store.updateGoogleEvent({ calendarID: e.calendarID, eventId, ...(title ? { title } : {}),
+      ...(moved ? { start: M.iso(s0), end: M.iso(new Date(+s0 + len)), allDay: false } : {}), ...(busy != null ? { busy } : {}) })
+      .then(() => toast(`Updated “${title || e.title}” in Google Calendar`, { icon: 'cal' }))
+      .catch(err => toast(`Google didn’t take the change: ${err.message}`, { icon: 'alert' }));
+  }
+}
+
+// Drag a block on the week or booking grid to move it (15-minute steps, across days), or its bottom edge to resize it.
+let calDrag = null, swallowClick = false;
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.block[data-item], .ot-item[data-item]');
+  if (!el || e.button !== 0) return;
+  const it = itemById(el.dataset.item);
+  if (!it?.start || (it.kind === 'task' && (it.o.done || it.o.missed))) return;
+  const col = el.closest('.wcol, .ot-col');
+  if (!col) return;
+  const r = el.getBoundingClientRect();
+  calDrag = { el, it, x: e.clientX, y: e.clientY, hour: el.closest('.wcol') ? HOUR : OT_HOUR, colW: col.offsetWidth,
+    resize: e.clientY > r.bottom - 7, h: el.offsetHeight, moved: false };
+});
+addEventListener('pointermove', e => {
+  const d = calDrag;
+  if (!d) return;
+  const dx = e.clientX - d.x, dy = e.clientY - d.y;
+  if (!d.moved && Math.hypot(dx, dy) < 5) return;
+  d.moved = true;
+  d.el.classList.add('dragging');
+  const days = d.resize ? 0 : Math.round(dx / d.colW), mins = Math.round(dy / d.hour * 4) * 15;
+  if (d.resize) {
+    d.el.style.height = `${Math.max(12, d.h + dy)}px`;
+    const len = Math.max(15, Math.round(((d.it.end - d.it.start) / 60_000 + dy / d.hour * 60) / 15) * 15);
+    d.el.dataset.dragLabel = `${M.fmtTime(d.it.start)}–${M.fmtTime(M.addMinutes(d.it.start, len))} · ${len} min`;
+  } else {
+    d.el.style.transform = `translate(${dx}px, ${dy}px)`;
+    const ns = M.addMinutes(M.addDays(d.it.start, days), mins);
+    d.el.dataset.dragLabel = `${days ? `${M.WEEKDAY_SHORT[ns.getDay()]} ` : ''}${M.fmtTime(ns)}–${M.fmtTime(new Date(+ns + (d.it.end - d.it.start)))}`;
+  }
+});
+addEventListener('pointerup', e => {
+  const d = calDrag;
+  calDrag = null;
+  if (!d?.moved) return;
+  swallowClick = true;
+  setTimeout(() => { swallowClick = false; }, 50);
+  const dx = e.clientX - d.x, dy = e.clientY - d.y;
+  d.el.classList.remove('dragging'); d.el.style.transform = ''; delete d.el.dataset.dragLabel;
+  if (d.resize) {
+    const len = Math.max(15, Math.round(((d.it.end - d.it.start) / 60_000 + dy / d.hour * 60) / 15) * 15);
+    applyEdit(d.it, { minutes: len });
+  } else {
+    const days = Math.round(dx / d.colW), mins = Math.round(dy / d.hour * 4) * 15;
+    if (days || mins) applyEdit(d.it, { start: M.addMinutes(M.addDays(d.it.start, days), mins) });
+  }
+  render();
+});
+// The click that ends a drag shouldn't also open the details.
+document.addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
 // --- task editor ---
 const DURATIONS = [5, 10, 15, 30, 45, 60, 90, 120, 180, 240];
@@ -2070,6 +2189,29 @@ const actions = {
     navigate(`projects/${p.id}`);
     setTimeout(() => document.getElementById(`ptitle-${p.id}`)?.focus(), 0);
   },
+  'quick-save': el => {
+    const it = itemById(el.dataset.item);
+    if (!it) return;
+    const title = $('#qeTitle')?.value, len = $('#qeLen') ? Number($('#qeLen').value) : null;
+    let start = null;
+    if (it.start && $('#qeTime')?.value) {
+      const [h, mi] = $('#qeTime').value.split(':').map(Number);
+      start = M.dayAt($('#qeDate')?.value ? M.parseKey($('#qeDate').value) : it.start, h * 60 + mi);
+    }
+    const oldLen = it.start ? Math.round((it.end - it.start) / 60_000) : null;
+    applyEdit(it, { title: title !== it.title ? title : undefined, start: start && +start !== +it.start ? start : undefined,
+      minutes: len != null && len !== oldLen ? len : undefined, busy: $('#qeBusy').checked !== busyOfItem(it) ? $('#qeBusy').checked : undefined });
+    closeModal();
+  },
+  'gevent-delete': el => {
+    const it = itemById(el.dataset.item);
+    if (it?.kind !== 'google' || !confirm(`Delete “${it.title}” from Google Calendar?`)) return;
+    const e = it.e;
+    store.deleteGoogleEvent(e.calendarID, e.id.split('|').slice(1).join('|')).then(() => toast(`Deleted “${e.title}” from Google Calendar`, { icon: 'trash' }))
+      .catch(err => toast(`Google didn’t delete it: ${err.message}`, { icon: 'alert' }));
+    closeModal();
+  },
+  'ot-hours': () => { ui.booking.editHours = !ui.booking.editHours; render(); },
   'project-urgent': el => projectEdit(el, p => M.updateItem(p, el.dataset.item, i => { if (i.urgent) delete i.urgent; else i.urgent = true; })),
   'project-list-mode': el => { store.setDevice('projectListGantt', el.dataset.gantt === '1'); render(); },
   'gantt-fold': el => {
@@ -2385,6 +2527,13 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('dblclick', e => {
+  // Booking grid: double-click a free spot to add an event there.
+  const oc = e.target.closest('.ot-col');
+  if (oc && !e.target.closest('.ot-open, .ot-item')) {
+    const y = e.clientY - oc.getBoundingClientRect().top;
+    newEventAt(M.parseKey(oc.dataset.day), Math.min(1425, Number(oc.dataset.h0) * 60 + Math.floor((y / OT_HOUR) * 60 / 15) * 15));
+    return;
+  }
   const col = e.target.closest('.wcol');
   if (!col) return;
   clearTimeout(blockClickTimer);

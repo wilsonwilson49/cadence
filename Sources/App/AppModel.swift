@@ -141,6 +141,46 @@ final class AppModel: ObservableObject {
         windows.showMain()
     }
 
+    /// Quick edit from any calendar (week, month, booking): new title, start, length or open/closed.
+    /// nil leaves a field as it is. A repeating item keeps its days and moves every repeat to the new time.
+    /// Changes to events synced with Google go to Google too.
+    func applyEdit(_ item: CalendarItem, title: String? = nil, start: Date? = nil, minutes: Int? = nil, busy: Bool? = nil) {
+        let title = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch item {
+        case .task(let occ):
+            guard var t = store.task(occ.task.id) else { return }
+            if let title, !title.isEmpty { t.title = title }
+            let fixedDays = t.recurrence.isRepeating || t.isLongTerm || t.isCycle
+            if let start {
+                if !fixedDays { t.startDate = start.startOfDay }
+                t.timeMinutes = start.minutesSinceMidnight
+            }
+            if let minutes { t.durationMinutes = max(5, minutes) }
+            if let busy { t.busy = busy }
+            guard t != store.task(t.id) else { return }
+            store.upsert(t)
+            if t.source == "google", let eid = t.googleEventID, google.isConnected {
+                let s = t.timeMinutes.map { dayAt(fixedDays ? occ.day : t.startDate, minutes: $0) }
+                let moveTime = !fixedDays && (start != nil || minutes != nil) && s != nil
+                Task { try? await google.patch(calendarID: t.sourceCalendar ?? "primary", eventID: eid, title: title.flatMap { $0.isEmpty ? nil : $0 },
+                                               start: moveTime ? s : nil, end: moveTime ? s?.adding(minutes: t.durationMinutes) : nil, busy: busy) }
+            }
+        case .google(let e):
+            let raw = e.id.split(separator: "|", maxSplits: 1).last.map(String.init) ?? e.id
+            let s = start ?? e.start
+            let len = minutes.map { TimeInterval($0 * 60) } ?? e.end.timeIntervalSince(e.start)
+            let moved = !e.isAllDay && (start != nil || minutes != nil)
+            Task { try? await google.patch(calendarID: e.calendarID, eventID: raw, title: title.flatMap { $0.isEmpty ? nil : $0 },
+                                           start: moved ? s : nil, end: moved ? s.addingTimeInterval(len) : nil, busy: busy) }
+        }
+    }
+
+    /// Deletes a Google Calendar event shown on the calendars.
+    func deleteGoogleEvent(_ e: GoogleEvent) {
+        let raw = e.id.split(separator: "|", maxSplits: 1).last.map(String.init) ?? e.id
+        Task { try? await google.deleteEvent(calendarID: e.calendarID, eventID: raw) }
+    }
+
     func edit(_ task: PlanTask) {
         editingTask = store.task(task.id) ?? task
         windows.showMain()

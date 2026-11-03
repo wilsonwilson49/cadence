@@ -38,6 +38,35 @@ enum DebugDriver {
     }
 
     static func run(_ model: AppModel) {
+        // -editTest: the same edits a drag, a bottom-edge drag and the quick-edit popover make, written to edit-result.txt.
+        if LaunchOptions.has("-editTest") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                let store = model.store
+                var log: [String] = []
+                let today = Date().startOfDay
+                if let t = store.tasks.first(where: { !$0.recurrence.isRepeating && $0.timeMinutes != nil && !$0.isHabit && $0.archived != true }) {
+                    let occ = Occurrence(task: t, day: t.startDate.startOfDay)
+                    let s = occ.start!
+                    model.applyEdit(.task(occ), start: s.adding(days: 1).adding(minutes: 45))
+                    var u = store.task(t.id)!
+                    log.append("move: \(t.title) \(DateKey.string(t.startDate)) \(t.timeMinutes!) -> \(DateKey.string(u.startDate)) \(u.timeMinutes!)")
+                    model.applyEdit(.task(Occurrence(task: u, day: u.startDate)), minutes: 75)
+                    u = store.task(t.id)!
+                    log.append("resize: \(t.durationMinutes) -> \(u.durationMinutes)")
+                    model.applyEdit(.task(Occurrence(task: u, day: u.startDate)), title: "Renamed", busy: true)
+                    u = store.task(t.id)!
+                    log.append("quick: title=\(u.title) busy=\(u.isBusy)")
+                }
+                if let r = store.tasks.first(where: { $0.recurrence.isRepeating && $0.timeMinutes != nil }) {
+                    let day = r.nextOccurrence(onOrAfter: today) ?? today
+                    let occ = Occurrence(task: r, day: day)
+                    model.applyEdit(.task(occ), start: occ.start!.adding(days: 2).adding(minutes: 30))
+                    let u = store.task(r.id)!
+                    log.append("repeating: start \(DateKey.string(r.startDate)) -> \(DateKey.string(u.startDate)), time \(r.timeMinutes!) -> \(u.timeMinutes!)")
+                }
+                try? log.joined(separator: "\n").write(to: LaunchOptions.dataDirectory.appendingPathComponent("edit-result.txt"), atomically: true, encoding: .utf8)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             if LaunchOptions.has("-checkin") { model.windows.showCheckIn(reason: "Welcome back — check your list") }
             if LaunchOptions.has("-banner") {
@@ -81,6 +110,7 @@ enum DebugDriver {
         reportSync(model)
         runFocusTest(model)
         if LaunchOptions.has("-menuWindow") { showMenuWindow(model) }
+        if LaunchOptions.has("-detailWindow") { showDetailWindow(model) }
         if LaunchOptions.has("-openMenuBar") {
             // Click our own menu bar icon, so the real dropdown can be screenshotted.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
@@ -249,6 +279,21 @@ enum DebugDriver {
         menuWindow = w
     }
     private static var menuWindow: NSWindow?
+
+    /// -detailWindow: the click-on-a-block popover (with quick edit) for the first timed event, in a panel for screenshots.
+    static func showDetailWindow(_ model: AppModel) {
+        guard let t = model.store.tasks.first(where: { $0.timeMinutes != nil && !$0.recurrence.isRepeating && !$0.isHabit }) else { return }
+        let item = CalendarItem.task(Occurrence(task: t, day: t.startDate.startOfDay))
+        let host = NSHostingController(rootView: ItemDetail(item: item) {}
+            .environmentObject(model).environmentObject(model.store).environmentObject(model.google))
+        host.sizingOptions = .preferredContentSize
+        let w = NSPanel(contentViewController: host)
+        w.styleMask = [.titled, .nonactivatingPanel]
+        w.title = "Detail"
+        w.setFrameOrigin(NSPoint(x: 60, y: 200))
+        w.orderFrontRegardless()
+        menuWindow = w
+    }
 
     static func writeWindowList(_ model: AppModel) {
         let lines = NSApp.windows.filter(\.isVisible).map { w -> String in

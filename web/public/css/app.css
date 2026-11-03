@@ -725,3 +725,11 @@ main.enter > * { animation: rise .26s cubic-bezier(.2, .8, .2, 1) both; }
 .step:disabled { cursor: default; }
 .step:not(:disabled):hover .box { border-color: var(--c); }
 .step-edit { gap: 4px; }
+
+/* ---------- Calendar editing: drag to move, drag the bottom edge to resize ---------- */
+.block, .ot-item[data-item] { touch-action: none; }
+.block::after, .ot-item[data-item]::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+.block.dragging, .ot-item.dragging { z-index: 20; opacity: .9; box-shadow: 0 6px 18px rgba(0,0,0,.25); cursor: grabbing; overflow: visible; }
+.block.dragging[data-drag-label]::before, .ot-item.dragging[data-drag-label]::before { content: attr(data-drag-label); position: absolute; top: -20px; right: 0;
+  background: rgba(0,0,0,.78); color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.quick-edit { display: flex; flex-direction: column; gap: 8px; }
