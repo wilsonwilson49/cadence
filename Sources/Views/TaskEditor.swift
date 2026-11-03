@@ -7,6 +7,7 @@ struct TaskEditor: View {
 
     let isNew: Bool
     @State private var task: PlanTask
+    @State private var newStep = ""
     @State private var hasTime: Bool
     @State private var time: Date
     @State private var endMode: Int
@@ -277,7 +278,7 @@ struct TaskEditor: View {
                     }
                 }
 
-                if task.isHabit { habitSection }
+                if task.isHabit { stepsSection; habitSection }
 
                 if google.isConnected && google.tasksGranted && isNew && !task.isEvent && !task.isHabit && task.source == nil {
                     Section("Google Tasks") {
@@ -390,6 +391,45 @@ struct TaskEditor: View {
         Binding(get: { task.habit?[keyPath: key] ?? "" }, set: { v in
             var h = task.habit ?? HabitInfo(); h[keyPath: key] = v.isEmpty ? nil : v; task.habit = h
         })
+    }
+
+    /// Steps: a small checklist that starts fresh each time the habit comes around.
+    @ViewBuilder private var stepsSection: some View {
+        Section {
+            ForEach(Array(task.habitSteps.enumerated()), id: \.element.id) { i, s in
+                HStack {
+                    Image(systemName: "square").foregroundStyle(.secondary)
+                    TextField("Step \(i + 1)", text: Binding(get: { task.habitSteps.indices.contains(i) ? task.habitSteps[i].title : "" },
+                                                            set: { v in if task.steps?.indices.contains(i) == true { task.steps?[i].title = v } }))
+                        .textFieldStyle(.plain)
+                    Button { moveStep(i, -1) } label: { Image(systemName: "arrow.up") }.buttonStyle(.borderless).disabled(i == 0)
+                    Button { moveStep(i, 1) } label: { Image(systemName: "arrow.down") }.buttonStyle(.borderless).disabled(i == task.habitSteps.count - 1)
+                    Button { task.steps?.remove(at: i); if task.steps?.isEmpty == true { task.steps = nil } } label: { Image(systemName: "minus.circle") }
+                        .buttonStyle(.borderless).foregroundStyle(.red)
+                }
+            }
+            HStack {
+                Image(systemName: "plus.circle.fill").foregroundStyle(task.color.color)
+                TextField("Add a step — press Return", text: $newStep).textFieldStyle(.plain).onSubmit(addStep)
+            }
+        } header: {
+            Text("Steps")
+        } footer: {
+            Text("Optional. Break the habit into steps you tick off each time, e.g. stretch, journal, make the bed. They start fresh every time it comes around; ticking the last one opens the check-off.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func addStep() {
+        let t = newStep.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        task.steps = task.habitSteps + [HabitStep(title: t)]
+        newStep = ""
+    }
+
+    private func moveStep(_ i: Int, _ d: Int) {
+        guard var s = task.steps, s.indices.contains(i + d) else { return }
+        s.swapAt(i, i + d); task.steps = s
     }
 
     @ViewBuilder private var habitSection: some View {
@@ -556,6 +596,11 @@ struct TaskEditor: View {
             t.recurrence = Recurrence()
         } else { t.cycleGapDays = nil; t.cycleTimes = nil }
         t.dueDate = t.isUntilDone && !t.isCycle && !t.recurrence.isRepeating && hasDue ? dueDate.startOfDay : nil
+        let pending = newStep.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !pending.isEmpty { t.steps = t.habitSteps + [HabitStep(title: pending)] }
+        let steps = t.habitSteps.map { var s = $0; s.title = s.title.trimmingCharacters(in: .whitespacesAndNewlines); return s }.filter { !$0.title.isEmpty }
+        t.steps = t.isHabit && !steps.isEmpty ? steps : nil
+        if t.steps == nil { t.stepsDone = nil }
         if t.isHabit {
             t.kind = "habit"
             var h = t.habit ?? HabitInfo()

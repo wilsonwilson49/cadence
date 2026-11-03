@@ -307,6 +307,9 @@ private struct HabitCard: View {
                 if let r = h.reward, !r.isEmpty { Label("then \(r)", systemImage: "gift") }
             }
             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            if let occ, task.hasSteps {
+                StepChecklist(occ: occ) { model.beginReflection($0) }
+            }
             if stats.missTwice {
                 Label("Missed last time. Never miss twice: even the 2-minute version counts today.", systemImage: "exclamationmark.circle")
                     .font(.caption).foregroundStyle(.orange)

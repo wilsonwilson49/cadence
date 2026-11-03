@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems, toggleStep, stepsDoneFor, makeOccurrence } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -123,6 +123,20 @@ check(fmtFocusLength(45) === '45 min' && fmtFocusLength(90) === '1h 30m' && fmtF
   const lay = projectMapLayout(pr);
   const root = lay.nodes.find(n => n.id === 'root'), res = lay.nodes.find(n => n.id === research.id);
   check(lay.rows === 5 && lay.depth === 2 && res.y === 1 && root.y === 2.5 && lay.edges.length === 6, 'projects: map layout');
+}
+// Habit steps: ticked per occurrence, fresh each time, all shown done once the habit is checked off.
+{
+  let h = task('2026-10-01', { frequency: 'daily' });
+  h.steps = [{ id: 'A', title: 'Stretch' }, { id: 'B', title: 'Journal' }];
+  const o1 = makeOccurrence(h, d('2026-11-02'));
+  h = toggleStep(h, 'B', o1.key, d('2026-11-02'));
+  check(stepsDoneFor(h, makeOccurrence(h, d('2026-11-02'))).size === 1 && stepsDoneFor(h, makeOccurrence(h, d('2026-11-03'))).size === 0, 'habit steps: per occurrence');
+  h = toggleStep(h, 'B', o1.key, d('2026-11-02'));
+  check(!h.stepsDone, 'habit steps: untick clears');
+  h = toggleStep(h, 'A', '2026-08-01', d('2026-11-02'));
+  check(!h.stepsDone, 'habit steps: old days dropped');
+  h.completions = { '2026-11-02': iso(new Date()) };
+  check(stepsDoneFor(h, makeOccurrence(h, d('2026-11-02'))).size === 2, 'habit steps: all done once checked off');
 }
 // Google Tasks become until-done tasks with a stable ID (same on the Mac).
 const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });

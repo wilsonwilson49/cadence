@@ -205,6 +205,10 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var cycleTimes: Int?
     /// Habits: how it's meant to stick (Atomic Habits). nil for tasks and events.
     var habit: HabitInfo?
+    /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
+    var steps: [HabitStep]?
+    /// Occurrence key → the steps checked off that time.
+    var stepsDone: [String: [UUID]]?
     /// Google Tasks items (source "gtasks"): the Google task ID; its list ID is in sourceCalendar.
     var googleTaskID: String?
 

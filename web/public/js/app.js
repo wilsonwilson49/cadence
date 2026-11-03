@@ -190,6 +190,8 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (M.isSilent(t)) meta.push(`<span title="No notifications">${ic('bell-off')}</span>`);
   if (t.externalURL && !compact) meta.push(`<a href="${esc(t.externalURL)}" target="_blank" rel="noopener" title="Open meeting link">${ic('link')}</a>`);
   if (o.missed) meta.unshift(`<span class="red"><b>Didn’t do it</b></span>`);
+  const steps = M.habitSteps(t);
+  if (steps.length) { const n = M.stepsDoneFor(t, o).size; meta.push(`<span class="${n === steps.length ? 'green' : ''}">${ic('list')}${n}/${steps.length} steps</span>`); }
   const hasRefl = o.resolved && store.reflectionFor(o, o.missed ? 'missed' : 'done');
   return `<div class="crow ${o.done ? 'done' : ''} ${o.missed ? 'missed' : ''} ${ui.justDone.has(o.id) ? 'just-done' : ''}">
     <button class="checkbtn" style="${o.done ? `color:${color(t.color)}` : ''}" data-act="toggle" data-occ="${esc(o.id)}" data-ctx="${ctx}"
@@ -197,13 +199,20 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
     <button class="missbtn ${o.missed ? 'on' : ''}" data-act="miss" data-occ="${esc(o.id)}" data-ctx="${ctx}"
       title="${o.missed ? 'Undo “didn’t do it”' : 'Didn’t do it / couldn’t — you’ll reflect on why'}">${ic('x')}</button>
     ${compact ? '' : `<span class="bar" style="background:${color(t.color)}"></span>`}
-    <div class="grow"><div class="title ellipsis">${esc(t.title)}</div><div class="meta">${meta.join('')}</div></div>
+    <div class="grow"><div class="title ellipsis">${esc(t.title)}</div><div class="meta">${meta.join('')}</div>${steps.length && !compact ? stepList(o, ctx) : ''}</div>
     ${hasRefl ? `<span class="muted" title="Reflection saved">${ic('quote')}</span>` : ''}
     ${ctx === 'checkin' ? '' : `<div class="actions">
       <button class="btn ghost sm" data-act="edit" data-task="${t.id}">Edit</button>
       ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
     </div>`}
   </div>`;
+}
+
+/** A habit's steps for one occurrence: tick them off as you go; ticking the last one opens the check-off. */
+function stepList(o, ctx = '') {
+  const done = M.stepsDoneFor(o.task, o);
+  return `<div class="steps">${M.habitSteps(o.task).map(s => `<button class="step ${done.has(s.id) ? 'on' : ''}" data-act="step-toggle" data-occ="${esc(o.id)}" data-step="${esc(s.id)}" data-ctx="${ctx}"
+    ${o.resolved ? 'disabled' : ''} style="--c:${color(o.task.color)}"><span class="box">${done.has(s.id) ? '✓' : ''}</span>${esc(s.title)}</button>`).join('')}</div>`;
 }
 
 function findOcc(id) {
@@ -414,6 +423,7 @@ function habitCard(t, st) {
     <div class="hc-grid" title="Last 30 days">${st.grid.map(g => `<i class="${g.state}" title="${M.fmtDay(g.day, { month: 'short', day: 'numeric' })}: ${{ done: 'done', missed: 'didn’t do it', lapsed: 'missed', open: 'today', off: 'not scheduled' }[g.state]}"></i>`).join('')}</div>
     <div class="hc-meta"><span>${st.rate == null ? 'New' : `${st.rate}% kept`}</span><span>${st.votes} vote${st.votes === 1 ? '' : 's'}${h.identity ? ' for who you’re becoming' : ''}</span>
       ${h.twoMinute ? `<span title="The 2-minute version">${ic('timer')}${esc(h.twoMinute)}</span>` : ''}${h.reward ? `<span title="Reward">${ic('check')}then ${esc(h.reward)}</span>` : ''}</div>
+    ${occ && M.habitSteps(t).length ? stepList(occ) : ''}
     ${st.missTwice ? `<div class="hc-warn">${ic('alert')} Missed last time. Never miss twice: even the 2-minute version counts today.</div>` : ''}
     <div class="row" style="flex-wrap:wrap">
       ${occ && !occ.resolved ? `<button class="btn primary sm" data-act="toggle" data-occ="${esc(occ.id)}">${ic('check')} Done today…</button>
@@ -1332,6 +1342,18 @@ function habitSentence(t) {
   return h.cue ? `I will ${lower} ${h.cue}.` : '';
 }
 
+/** Habit editor: the steps checklist. */
+function stepFields(m) {
+  const steps = m.draft.steps || [];
+  return `<div class="fieldset"><div class="legend">${ic('list')} Steps <span class="small muted" style="font-weight:400">optional</span></div>
+    ${steps.map((s, i) => `<div class="row step-edit"><span class="muted">☐</span><input class="input grow" data-edit="step-${i}" value="${esc(s.title)}" placeholder="Step ${i + 1}">
+      <button type="button" class="btn ghost sm icon" data-act="step-move" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Move up">↑</button>
+      <button type="button" class="btn ghost sm icon" data-act="step-move" data-i="${i}" data-d="1" ${i < steps.length - 1 ? '' : 'disabled'} title="Move down">↓</button>
+      <button type="button" class="btn ghost sm icon danger" data-act="step-remove" data-i="${i}" title="Remove">${ic('x')}</button></div>`).join('')}
+    <div class="row"><input class="input grow" id="stepNew" data-edit="step-new" placeholder="Add a step, e.g. stretch — press Return"><button type="button" class="btn sm" data-act="step-add">${ic('plus')} Add</button></div>
+    <div class="small muted">Tick them off each time; they start fresh every time it comes around. Ticking the last one opens the check-off.</div></div>`;
+}
+
 function habitFields(m) {
   const d = m.draft, h = d.habit || (d.habit = { style: 'build' }), style = h.style || 'build';
   const others = [...store.tasks.values()].filter(t => M.isHabit(t) && !t.archived && t.id !== d.id).map(t => t.title);
@@ -1492,6 +1514,7 @@ function editorDialog(m) {
             ${m.hasDue ? `<input class="input" style="width:auto" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"><span class="small muted">It keeps going past the due date, marked “Past due”.</span>` : ''}</div>` : ''}` : ''}`}
     </div>
     `}
+    ${isHab ? stepFields(m) : ''}
     ${isHab ? habitFields(m) : ''}
     <div class="fieldset"><div class="legend">Reminders</div>
       <label class="check"><input type="checkbox" data-edit="notify" data-rerender ${d.channels.length ? 'checked' : ''}>
@@ -1523,6 +1546,8 @@ function readEditorInputs() {
   const val = k => root.querySelector(`[data-edit="${k}"]`);
   if (val('title')) m.draft.title = val('title').value;
   for (const k of HABIT_FIELDS) if (val(`h-${k}`)) (m.draft.habit ??= { style: 'build' })[k] = val(`h-${k}`).value;
+  (m.draft.steps || []).forEach((s, i) => { if (val(`step-${i}`)) s.title = val(`step-${i}`).value; });
+  if (val('step-new')) m.stepNew = val('step-new').value;
   if (val('presetName')) m.presetName = val('presetName').value;
   if (val('notes')) m.draft.notes = val('notes').value;
   if (val('date')?.value) m.date = val('date').value;
@@ -1583,6 +1608,10 @@ async function saveEditor() {
   if (t.recurrence.frequency !== 'weekly') t.recurrence.weekdays = [];
   if (M.isEvent(t)) delete t.mode;
   // Habits keep their Atomic Habits notes (trimmed); tasks and events don't have any.
+  // Habit steps: drop empty ones (and add one still typed in the box).
+  const steps = [...(t.steps || []), ...(m.stepNew?.trim() ? [{ id: M.uuid(), title: m.stepNew }] : [])]
+    .map(s => ({ ...s, title: s.title.trim() })).filter(s => s.title);
+  if (M.isHabit(t) && steps.length) t.steps = steps; else { delete t.steps; delete t.stepsDone; }
   if (M.isHabit(t)) {
     t.kind = 'habit';
     const h = { style: t.habit?.style || 'build' };
@@ -2177,6 +2206,28 @@ const actions = {
     if (c) newHabitAt(new Date(), { habit: { style: 'replace', replaces: c.text[0].toLowerCase() + c.text.slice(1) } });
   },
   'habit-range': el => { ui.habitRange = Number(el.dataset.n); render(); },
+  'step-add': () => {
+    readEditorInputs();
+    const m = ui.modal, title = (m.stepNew || '').trim();
+    if (!title) return;
+    (m.draft.steps ||= []).push({ id: M.uuid(), title });
+    m.stepNew = '';
+    renderModal();
+    const box = $('#stepNew');
+    if (box) { box.value = ''; box.focus(); }
+  },
+  'step-remove': el => { readEditorInputs(); ui.modal.draft.steps.splice(Number(el.dataset.i), 1); renderModal(); },
+  'step-move': el => {
+    readEditorInputs();
+    const a = ui.modal.draft.steps, i = Number(el.dataset.i), j = i + Number(el.dataset.d);
+    if (a[j]) [a[i], a[j]] = [a[j], a[i]];
+    renderModal();
+  },
+  'step-toggle': el => {
+    const o = findOcc(el.dataset.occ);
+    if (!o) return;
+    if (store.toggleStep(o, el.dataset.step)) toggleOcc(el.dataset.occ, el.dataset.ctx);
+  },
   'habit-style': el => { readEditorInputs(); (ui.modal.draft.habit ??= {}).style = el.dataset.style; renderModal(); },
   'new-habit': () => newHabitAt(new Date()),
   'edit-busy': el => { readEditorInputs(); ui.modal.draft.busy = el.dataset.busy === '1'; ui.modal.busyChosen = true; renderModal(); },
@@ -2535,6 +2586,8 @@ document.addEventListener('submit', async e => {
 
 const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', projects: 'P', habits: 'A', reflections: 'R', focus: 'F', screentime: 'U', booking: 'B', settings: ',' };
 document.addEventListener('keydown', e => {
+  // Habit editor: Return in the "add a step" box adds the step instead of saving the habit.
+  if (e.target.dataset?.edit === 'step-new' && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); actions['step-add'](e.target); return; }
   // Project outline: Return adds the next subtask, Tab / Shift-Tab move a row in or out a level.
   const pf = e.target.dataset?.pfield === 'item-title' ? e.target : null;
   if (pf && (e.key === 'Enter' || e.key === 'Tab') && !e.isComposing) {

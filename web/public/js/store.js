@@ -331,6 +331,15 @@ class Store {
 
   /** Put back a deleted task/reflection (Undo). A fresh edit time makes it win over the deletion everywhere. */
   restoreTask(task) { this.upsertTask(task); }
+  /** Ticks a habit step for one occurrence. Returns true when that was the last one (time to check it off). */
+  toggleStep(occ, stepId) {
+    const t = this.tasks.get(occ.task.id);
+    if (!t) return false;
+    const next = M.toggleStep(t, stepId, occ.key);
+    this.upsertTask(next);
+    const o = M.makeOccurrence(next, occ.day);
+    return !o.resolved && M.habitSteps(next).length > 0 && M.stepsDoneFor(next, o).size === M.habitSteps(next).length;
+  }
   restoreReflection(r) {
     this.reflections.set(r.id, r);
     this.#queue('reflection', r.id, r);

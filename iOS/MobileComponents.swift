@@ -45,8 +45,13 @@ struct MobileRow: View {
                     if occ.isUntilDone && !occ.isResolved { Label(t.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1) }
                     else if let p = t.planSummary { Label(p, systemImage: "repeat").lineLimit(1) }
                     if t.isPastDue { Text("Past due").foregroundStyle(.red) }
+                    if t.hasSteps {
+                        let p = t.stepProgress(for: occ)
+                        Label("\(p.done)/\(p.total)", systemImage: "checklist").foregroundStyle(p.done == p.total ? .green : .secondary)
+                    }
                 }
                 .font(.caption).foregroundStyle(.secondary).labelStyle(TightLabel())
+                if t.hasSteps && !inDayList { MobileStepList(occ: occ).padding(.top, 4) }
             }
             Spacer(minLength: 0)
         }
@@ -198,6 +203,34 @@ struct BulletLabel: LabelStyle {
 
 // MARK: - Editor
 
+/// A habit's steps for one occurrence: tap to tick; ticking the last one opens the check-off.
+struct MobileStepList: View {
+    @EnvironmentObject private var model: MobileModel
+    @EnvironmentObject private var store: Store
+    let occ: Occurrence
+
+    var body: some View {
+        let t = store.task(occ.task.id) ?? occ.task
+        let o = Occurrence(task: t, day: occ.day)
+        let done = t.stepsDone(for: o)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(t.habitSteps) { s in
+                let on = done.contains(s.id)
+                Button { if store.toggleStep(o, s.id) { model.reflect(Occurrence(task: store.task(t.id) ?? t, day: o.day)) } } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? t.color.color : .secondary)
+                        Text(s.title).strikethrough(on).foregroundStyle(on ? .secondary : .primary)
+                    }
+                    .font(.subheadline)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(o.isResolved)
+            }
+        }
+    }
+}
+
 /// Make or change a task, habit or event (the most-used options; everything else is kept as it is).
 struct EditorSheet: View {
     @EnvironmentObject private var model: MobileModel
@@ -209,6 +242,7 @@ struct EditorSheet: View {
     @State private var hasDue: Bool
     @State private var due: Date
     @State private var confirmDelete = false
+    @State private var newStep = ""
     private let isNew: Bool
 
     init(task: PlanTask, isNew: Bool) {
@@ -275,7 +309,7 @@ struct EditorSheet: View {
                         }
                     }
                 }
-                if task.isHabit { habitSection }
+                if task.isHabit { stepsSection; habitSection }
                 Section("Reminders") {
                     Toggle("Notify me", isOn: Binding(get: { !task.channels.isEmpty }, set: { task.channels = $0 ? store.settings.defaultChannels : [] }))
                     if !task.channels.isEmpty {
@@ -338,6 +372,31 @@ struct EditorSheet: View {
         Binding(get: { task.habit?[keyPath: key] ?? "" }, set: { v in var h = task.habit ?? HabitInfo(); h[keyPath: key] = v.isEmpty ? nil : v; task.habit = h })
     }
 
+    /// Steps: a small checklist that starts fresh each time the habit comes around.
+    @ViewBuilder private var stepsSection: some View {
+        Section {
+            ForEach(Array(task.habitSteps.enumerated()), id: \.element.id) { i, _ in
+                TextField("Step \(i + 1)", text: Binding(get: { task.habitSteps.indices.contains(i) ? task.habitSteps[i].title : "" },
+                                                        set: { v in if task.steps?.indices.contains(i) == true { task.steps?[i].title = v } }))
+            }
+            .onDelete { task.steps?.remove(atOffsets: $0); if task.steps?.isEmpty == true { task.steps = nil } }
+            .onMove { task.steps?.move(fromOffsets: $0, toOffset: $1) }
+            HStack {
+                Image(systemName: "plus.circle.fill").foregroundStyle(task.color.color)
+                TextField("Add a step", text: $newStep).submitLabel(.done).onSubmit(addStep)
+            }
+        } header: { Text("Steps") } footer: {
+            Text("Optional. Tick them off each time; they start fresh every time it comes around. Ticking the last one opens the check-off. Swipe a step to delete it.")
+        }
+    }
+
+    private func addStep() {
+        let t = newStep.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        task.steps = task.habitSteps + [HabitStep(title: t)]
+        newStep = ""
+    }
+
     @ViewBuilder private var habitSection: some View {
         let style = task.habit?.style ?? "build"
         Section {
@@ -367,6 +426,11 @@ struct EditorSheet: View {
         if t.reminderOffsets.isEmpty { t.reminderOffsets = [0] }
         if t.isEvent { t.mode = nil }
         t.dueDate = t.isUntilDone && !t.isCycle && !t.recurrence.isRepeating && hasDue ? due.startOfDay : nil
+        let pending = newStep.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !pending.isEmpty { t.steps = t.habitSteps + [HabitStep(title: pending)] }
+        let steps = t.habitSteps.map { var s = $0; s.title = s.title.trimmingCharacters(in: .whitespacesAndNewlines); return s }.filter { !$0.title.isEmpty }
+        t.steps = t.isHabit && !steps.isEmpty ? steps : nil
+        if t.steps == nil { t.stepsDone = nil }
         if t.isHabit {
             t.kind = "habit"
             var h = t.habit ?? HabitInfo()

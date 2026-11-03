@@ -15,7 +15,12 @@ import SwiftUI
 @MainActor
 enum DebugDriver {
     static func prepare(_ model: AppModel) {
-        if LaunchOptions.has("-demo") && model.store.tasks.isEmpty { seed(model.store) }
+        if LaunchOptions.has("-demo") && model.store.tasks.isEmpty {
+            seed(model.store)
+            if let i = model.store.tasks.firstIndex(where: { $0.title == "Read 20 pages" }) {
+                model.store.tasks[i].steps = ["Put the phone in another room", "Read 20 pages", "Write down one idea"].map { HabitStep(title: $0) }
+            }
+        }
         if LaunchOptions.has("-demo") && model.store.projects.isEmpty {
             model.store.projects = [Project.demo(), Project(title: "Plan the family trip", color: .teal,
                                                              due: DateKey.string(Date().adding(days: 40)),

@@ -199,10 +199,18 @@ struct ChecklistRow: View {
                     if occ.task.source == "calendly" { Label("Calendly", systemImage: "person.2") }
                     if occ.task.source == "google" { Label("Google", systemImage: "calendar") }
                     if occ.task.isSilent { Image(systemName: "bell.slash").help("No notifications") }
+                    if occ.task.hasSteps {
+                        let p = occ.task.stepProgress(for: occ)
+                        Label("\(p.done)/\(p.total) steps", systemImage: "checklist").foregroundStyle(p.done == p.total ? .green : .secondary)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .labelStyle(CompactLabelStyle())
+                if occ.task.hasSteps && !compact {
+                    StepChecklist(occ: occ) { o in if let onToggle { onToggle(o) } else { model.toggle(o) } }
+                        .padding(.top, 3)
+                }
             }
             Spacer(minLength: 4)
             if occ.isResolved && store.reflection(for: occ, missed: occ.isMissed) != nil {
@@ -212,6 +220,36 @@ struct ChecklistRow: View {
         .padding(.vertical, compact ? 3 : 6)
         .contentShape(Rectangle())
         .contextMenu { OccurrenceMenu(occ: occ) }
+    }
+}
+
+/// A habit's steps for one occurrence: tick them off as you go. Ticking the last one opens the check-off.
+struct StepChecklist: View {
+    @EnvironmentObject private var store: Store
+    let occ: Occurrence
+    var onAllDone: (Occurrence) -> Void
+
+    var body: some View {
+        let t = store.task(occ.task.id) ?? occ.task
+        let o = Occurrence(task: t, day: occ.day)
+        let done = t.stepsDone(for: o)
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(t.habitSteps) { s in
+                let on = done.contains(s.id)
+                Button { if store.toggleStep(o, s.id) { onAllDone(o) } } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: on ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(on ? t.color.color : .secondary)
+                        Text(s.title).strikethrough(on).foregroundStyle(on ? .secondary : .primary).lineLimit(1)
+                    }
+                    .font(.callout)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(o.isResolved)
+                .help(o.isResolved ? "" : on ? "Untick" : "Tick this step")
+            }
+        }
     }
 }
 

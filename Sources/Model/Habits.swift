@@ -3,6 +3,40 @@ import Foundation
 // MARK: - Habits (Atomic Habits)
 
 /// How a habit is meant to stick. Same JSON as the web app's `task.habit`.
+/// One step of a habit ("Stretch", "Journal", "Make the bed").
+struct HabitStep: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var title: String
+
+    init(title: String) { self.title = title }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.value(.id, UUID()); title = c.value(.title, "")
+    }
+}
+
+extension PlanTask {
+    var habitSteps: [HabitStep] { steps ?? [] }
+    var hasSteps: Bool { !habitSteps.isEmpty }
+    /// Steps checked off for one occurrence (all of them once the habit itself is checked off).
+    func stepsDone(for occ: Occurrence) -> Set<UUID> {
+        if occ.isDone { return Set(habitSteps.map(\.id)) }
+        return Set(stepsDone?[occ.key] ?? []).intersection(habitSteps.map(\.id))
+    }
+    func stepProgress(for occ: Occurrence) -> (done: Int, total: Int) { (stepsDone(for: occ).count, habitSteps.count) }
+    /// Ticks a step for one occurrence (or unticks it). Old days are dropped after 60 days.
+    mutating func toggleStep(_ step: UUID, key: String) {
+        var map = stepsDone ?? [:]
+        var set = Set(map[key] ?? [])
+        if set.contains(step) { set.remove(step) } else { set.insert(step) }
+        map[key] = set.isEmpty ? nil : habitSteps.map(\.id).filter(set.contains)
+        if let cutoff = Calendar.current.date(byAdding: .day, value: -60, to: Date()).map(DateKey.string) {
+            map = map.filter { $0.key >= cutoff }
+        }
+        stepsDone = map.isEmpty ? nil : map
+    }
+}
+
 struct HabitInfo: Codable, Hashable {
     /// "build" (a new habit), "stack" (after an existing one), "replace" (instead of a bad one), "break" (quit one).
     var style = "build"

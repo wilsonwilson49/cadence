@@ -550,6 +550,29 @@ export function focusStreak(sessions) {
 }
 export const fmtDuration = sec => { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };
 
+// ---------- Habit steps ----------
+// A habit can have steps (subtasks): a small checklist that starts fresh each time it comes around.
+// task.steps = [{ id, title }], task.stepsDone = { occurrenceKey: [stepId…] }. Same as HabitStep on the Mac.
+export const habitSteps = t => t.steps || [];
+/** Steps ticked for one occurrence (all of them once the habit itself is checked off). */
+export function stepsDoneFor(t, occ) {
+  const ids = habitSteps(t).map(s => s.id);
+  if (occ.done) return new Set(ids);
+  const on = new Set(t.stepsDone?.[occ.key] || []);
+  return new Set(ids.filter(id => on.has(id)));
+}
+/** Returns a copy of the task with one step ticked (or unticked) for `key`; days older than 60 are dropped. */
+export function toggleStep(t, stepId, key, today = new Date()) {
+  const map = { ...(t.stepsDone || {}) }, set = new Set(map[key] || []);
+  if (set.has(stepId)) set.delete(stepId); else set.add(stepId);
+  if (set.size) map[key] = habitSteps(t).map(s => s.id).filter(id => set.has(id)); else delete map[key];
+  const cutoff = dateKey(addDays(today, -60));
+  for (const k of Object.keys(map)) if (k < cutoff) delete map[k];
+  const next = { ...t };
+  if (Object.keys(map).length) next.stepsDone = map; else delete next.stepsDone;
+  return next;
+}
+
 // ---------- Projects ----------
 // A goal broken into subtasks, which can have their own subtasks, to any depth. Every level can have a start
 // date and a deadline ("yyyy-MM-dd"). A subtask with subtasks is done when all of them are; progress counts the

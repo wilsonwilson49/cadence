@@ -372,6 +372,15 @@ final class Store: ObservableObject {
         if ad != bd { return !ad }
         return (a.due ?? "0000", a.title) < (b.due ?? "0000", b.title)
     }
+    /// Ticks a habit step for one occurrence. Returns true when that was the last one (time to check it off).
+    @discardableResult func toggleStep(_ occ: Occurrence, _ step: UUID) -> Bool {
+        guard var t = task(occ.task.id) else { return false }
+        t.toggleStep(step, key: occ.key)
+        upsert(t)
+        let o = Occurrence(task: t, day: occ.day)
+        return !o.isResolved && t.stepsDone(for: o).count == t.habitSteps.count && t.hasSteps
+    }
+
     /// Checks a project subtask off (or back on). No reflection: these are steps, not daily tasks.
     func toggleProjectItem(_ d: ProjectDeadline) {
         guard let item = d.item else { return }

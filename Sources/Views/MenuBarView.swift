@@ -158,6 +158,9 @@ private struct MenuRow: View {
             Text("until \(timeString(held.until))").foregroundStyle(.orange)
         } else if let s = occ.start {
             Text(timeString(s)).foregroundStyle(s < Date() && !occ.isResolved ? .orange : .secondary)
+        } else if occ.task.hasSteps {
+            let p = occ.task.stepProgress(for: occ)
+            Text("\(p.done)/\(p.total)").foregroundStyle(.secondary).help("Steps ticked off")
         } else if occ.task.isHabit {
             Image(systemName: "repeat").foregroundStyle(.secondary)
         }

@@ -63,6 +63,9 @@ final class MobileModel: ObservableObject {
             Task { await sync.signIn(username: user, password: pass, create: false) }
         }
         if LaunchOptions.has("-demo") && store.tasks.isEmpty { DemoData.seed(store) }
+        if LaunchOptions.has("-demo"), let i = store.tasks.firstIndex(where: { $0.isHabit && $0.steps == nil && $0.title.hasPrefix("Read") }) {
+            store.tasks[i].steps = ["Put the phone in another room", "Read 20 pages", "Write down one idea"].map { HabitStep(title: $0) }
+        }
         if LaunchOptions.has("-demo") && store.projects.isEmpty { store.projects = [Project.demo()] }
         if let t = LaunchOptions.value("-tab").flatMap(Int.init) { tab = t }
         if let what = LaunchOptions.value("-open") {
