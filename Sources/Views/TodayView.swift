@@ -34,7 +34,10 @@ struct TodayView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    ProgressRing(done: done, total: total, size: 76, lineWidth: 9)
+                    ProgressRing(done: done, total: total, size: 76, lineWidth: 9, showsLeft: store.settings.ringShowsLeft)
+                        .contentShape(Circle())
+                        .onTapGesture { store.settings.ringShowsLeft.toggle() }
+                        .contextMenu { RingModePicker() }
                 }
 
                 HStack(spacing: 8) {

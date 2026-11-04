@@ -59,24 +59,51 @@ struct ProgressRing: View {
     let total: Int
     var size: CGFloat = 56
     var lineWidth: CGFloat = 7
+    /// Show what's left instead: the ring starts full and empties as things get checked off.
+    var showsLeft = false
 
-    var fraction: Double { total == 0 ? 1 : Double(done) / Double(total) }
+    private var left: Int { max(0, total - done) }
+    var fraction: Double {
+        if showsLeft { return total == 0 ? 0 : Double(left) / Double(total) }
+        return total == 0 ? 1 : Double(done) / Double(total)
+    }
 
     var body: some View {
         ZStack {
             Circle().stroke(Color.secondary.opacity(0.18), lineWidth: lineWidth)
             Circle().trim(from: 0, to: fraction)
-                .stroke(fraction >= 1 ? Color.green : Color.accentColor,
+                .stroke(!showsLeft && fraction >= 1 ? Color.green : Color.accentColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.spring(duration: 0.5), value: fraction)
-            if size >= 44 {
-                Text(total == 0 ? "–" : "\(done)/\(total)")
-                    .font(.system(size: size * 0.24, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+            if showsLeft && total > 0 && left == 0 {
+                Image(systemName: "checkmark").font(.system(size: size * 0.34, weight: .bold)).foregroundStyle(.green)
+            } else if size >= 44 {
+                if showsLeft && total > 0 {
+                    VStack(spacing: -2) {
+                        Text("\(left)").font(.system(size: size * 0.3, weight: .semibold, design: .rounded)).monospacedDigit()
+                        Text("left").font(.system(size: size * 0.13, weight: .medium)).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(total == 0 ? "–" : "\(done)/\(total)")
+                        .font(.system(size: size * 0.24, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                }
             }
         }
         .frame(width: size, height: size)
+        .help(total == 0 ? "" : showsLeft ? "\(left) of \(total) left" : "\(done) of \(total) done")
+    }
+}
+
+/// The two ways today's ring can show progress, for menus and Settings.
+struct RingModePicker: View {
+    @EnvironmentObject private var store: Store
+    var body: some View {
+        Picker("Today's ring shows", selection: $store.settings.ringShowsLeft) {
+            Text("What's left (starts full, empties as you go)").tag(true)
+            Text("What's done (fills up as you go)").tag(false)
+        }
     }
 }
 
@@ -288,7 +315,31 @@ struct OccurrenceMenu: View {
             Button("Skip this occurrence") { store.skip(occ) }
         }
         Divider()
-        Button("Delete task", role: .destructive) { store.delete(taskID: occ.task.id) }
+        DeleteMenu(occ: occ)
+    }
+}
+
+/// Delete for any checklist or calendar item. A repeating one asks: only this one, this and later ones, or all.
+struct DeleteMenu: View {
+    @EnvironmentObject private var store: Store
+    let occ: Occurrence
+    var after: () -> Void = {}
+
+    var body: some View {
+        let t = occ.task, verb = t.isImported ? "Hide" : "Delete"
+        if t.recurrence.isRepeating {
+            let day = (t.isUntilDone ? t.currentRepStart(on: occ.day) : nil) ?? occ.day
+            Menu("\(verb)…") {
+                Button("Only this one (\(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())))") {
+                    store.delete(occ, scope: .one); after()
+                }
+                Button("This one and all later ones") { store.delete(occ, scope: .fromHere); after() }
+                Divider()
+                Button("All of them, past and future", role: .destructive) { store.delete(occ, scope: .all); after() }
+            }
+        } else {
+            Button(verb, role: .destructive) { store.delete(occ, scope: .all); after() }
+        }
     }
 }
 
@@ -512,7 +563,7 @@ struct ItemDetail: View {
                         dismiss()
                     }
                     .help("Put it on your checklist")
-                    Button(occ.task.isImported ? "Hide" : "Delete", role: .destructive) { store.delete(taskID: occ.task.id); dismiss() }
+                    DeleteMenu(occ: occ, after: dismiss).fixedSize()
                 }
                 .controlSize(.small)
             case .task(let occ):
@@ -543,6 +594,7 @@ struct ItemDetail: View {
                     if occ.task.recurrence.isRepeating && !occ.task.isUntilDone {
                         Button("Skip") { store.skip(occ); dismiss() }
                     }
+                    DeleteMenu(occ: occ, after: dismiss).fixedSize()
                     if occ.task.isImported {
                         Button("Make it an event") {
                             if var t = store.task(occ.task.id) { t.kind = "event"; store.upsert(t) }

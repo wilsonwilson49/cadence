@@ -163,16 +163,21 @@ function view() {
 }
 
 // ---------- shared bits ----------
-function ring(done, total, size = 72, width = 8, key = `ring${size}`) {
+/** Today's progress ring, following the "ring shows" setting (what's left, or what's done). */
+const todayRing = (done, total, size, width, key) => ring(done, total, size, width, key, { left: store.settings.ringShowsLeft ?? true });
+
+function ring(done, total, size = 72, width = 8, key = `ring${size}`, { left = false } = {}) {
   const r = (size - width) / 2, c = 2 * Math.PI * r;
-  const f = total ? done / total : 1;
+  const remaining = Math.max(0, total - done);
+  const f = left ? (total ? remaining / total : 0) : total ? done / total : 1;
   const from = ringPrev.has(key) ? ringPrev.get(key) : f;
   ringPrev.set(key, f);
   return `<div class="ring" style="width:${size}px;height:${size}px">
     <svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--line-strong)" stroke-width="${width}"/>
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${f >= 1 ? 'var(--green)' : 'var(--accent)'}" stroke-width="${width}" stroke-linecap="round"
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${!left && f >= 1 ? 'var(--green)' : 'var(--accent)'}" stroke-width="${width}" stroke-linecap="round"
       stroke-dasharray="${c}" class="ring-arc" style="stroke-dashoffset:${c * (1 - from)}" data-to="${c * (1 - f)}"/></svg>
-    ${size >= 44 ? `<div class="lbl" style="font-size:${size * 0.24}px">${total ? `${done}/${total}` : '–'}</div>` : ''}</div>`;
+    ${left && total && !remaining ? `<div class="lbl green" style="font-size:${size * 0.34}px">✓</div>`
+      : size >= 44 ? `<div class="lbl" style="font-size:${size * 0.24}px">${!total ? '–' : left ? `${remaining}<small style="display:block;font-size:.45em;opacity:.65;margin-top:-2px">left</small>` : `${done}/${total}`}</div>` : ''}</div>`;
 }
 
 function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
@@ -260,7 +265,7 @@ function homeView() {
 
     <div class="home-grid">
       <a class="card pad home-today" href="/app/today">
-        <div class="row" style="gap:16px">${ring(done, total, 76, 9, 'home')}
+        <div class="row" style="gap:16px">${todayRing(done, total, 76, 9, 'home')}
           <div class="grow"><div class="section-title" style="margin:0">${ic('sun')}Today</div>
           <div class="muted small">${total ? `${done} of ${total} done` : 'A clear day'}${overdue ? ` · <span class="red">${overdue} overdue</span>` : ''}</div></div>
           <span class="muted">${ic('right')}</span></div>
@@ -339,7 +344,7 @@ function todayView() {
   return `<div class="page stack" style="padding-top:28px">
     <div class="hero"><div class="grow">
       <div class="muted" style="font-size:17px">${greet}</div>
-      <h2>${M.fmtDay(today)}</h2><div class="muted">${status}</div></div>${ring(done, total, 80, 9)}</div>
+      <h2>${M.fmtDay(today)}</h2><div class="muted">${status}</div></div><button class="ring-btn" data-act="ring-mode" title="${store.settings.ringShowsLeft ?? true ? 'Showing what’s left · click to show what’s done' : 'Showing what’s done · click to show what’s left'}">${todayRing(done, total, 80, 9)}</button></div>
     ${perm === 'default' && reminders.enabled ? `<div class="callout warn"><span class="big">${ic('bell')}</span>
       <div class="grow"><b>Turn on notifications</b><div class="small muted">So reminders reach you even when this tab is in the background.</div></div>
       <button class="btn primary" data-act="ask-notify">Allow</button></div>` : ''}
@@ -1156,6 +1161,11 @@ function settingsView() {
         || '<div class="srow muted">No presets. Make one from the New Task window.</div>'}
     </div></div>
 
+    <div><h3>Today’s progress ring</h3><div class="card">
+      <div class="srow"><div>The ring shows<div class="small muted">What’s left starts full and empties as you check things off; what’s done fills up. Click the ring on Today to switch quickly. Syncs to your Mac.</div></div>
+        <div class="seg"><button class="${s.ringShowsLeft ?? true ? 'on' : ''}" data-act="ring-mode-set" data-v="1">What’s left</button><button class="${s.ringShowsLeft ?? true ? '' : 'on'}" data-act="ring-mode-set" data-v="0">What’s done</button></div></div>
+      <div class="srow"><div>Until-done tasks and project subtasks count today when<div class="small muted">Ones due later are listed apart and don’t count. Urgent ones always count.</div></div>${projectTodaySelect()}</div>
+    </div></div>
     <div id="open-hours"><h3>Open hours</h3><div class="card">
       <div class="srow small muted">When you’re normally free to be booked. Booking shows what’s left of these hours after your closed tasks and events.</div>
       <div class="srow"><span>Days</span><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button class="${a.weekdays.includes(w) ? 'on' : ''}" data-act="avail-day" data-w="${w}" title="${M.WEEKDAY_SHORT[w - 1]}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div></div>
@@ -1214,6 +1224,7 @@ function renderModal() {
   else if (m.type === 'checkin') html = m.reflecting ? reflectionDialog(m.reflecting, 'checkin', m.reflectMode) : checkInDialog(m);
   else if (m.type === 'editor') html = editorDialog(m);
   else if (m.type === 'detail') html = detailDialog(m);
+  else if (m.type === 'delete-repeat') html = deleteRepeatDialog(m);
   else if (m.type === 'booking') html = bookingDialog(m);
   else if (m.type === 'delete-account') html = `<form class="dialog sm" data-form="delete-account"><div class="body">
     <div class="row" style="gap:12px"><span class="badge-icon" style="background:var(--red)">${ic('trash')}</span><h2>Delete your account?</h2></div>
@@ -1266,7 +1277,7 @@ function checkInDialog(m) {
   return `<div class="dialog"><div class="body">
     <div class="row" style="gap:14px"><span class="badge-icon" style="width:46px;height:46px;background:linear-gradient(135deg,#ffb340,#ff7a00)">${ic('sun')}</span>
       <div class="grow"><h2>${esc(m.title)}</h2><div class="muted">${M.fmtDay(new Date())} · ${!items.length ? 'nothing scheduled' : done === items.length ? 'all done' : left ? `${left} left` : 'all settled'}</div></div>
-      ${ring(done, items.length, 54, 6, 'checkin')}</div>
+      ${todayRing(done, items.length, 54, 6, 'checkin')}</div>
     ${done && done === items.length ? `<div class="green">${ic('check')} Everything is checked off. Nice work.</div>` : ''}
     <div class="card" style="max-height:340px;overflow:auto">${items.length ? splitUntilDone(items).map(([label, list]) => (label ? `<div class="crow-sub">${ic(label === 'Habits' ? 'habit' : 'flame')}${label}</div>` : '') + list.map(o => crow(o, { ctx: 'checkin' })).join('')).join('') : '<div class="crow muted">Nothing on today’s checklist. Add something so future-you knows the plan.</div>'}</div>
     ${upcoming.length ? `<div><b>Still ahead on your calendar</b>${upcoming.slice(0, 4).map(e => `<div class="row small" style="margin-top:4px">
@@ -1283,6 +1294,20 @@ function itemById(id) {
   if (!e) return null;
   const ev = { ...e, startDate: e.isAllDay ? M.parseKey(e.start) : new Date(e.start), endDate: e.isAllDay ? M.parseKey(e.end) : new Date(e.end) };
   return { kind: 'google', e: ev, title: e.title, start: e.isAllDay ? null : ev.startDate, end: e.isAllDay ? null : ev.endDate, color: e.colorHex || '#0a84ff' };
+}
+
+/** Deleting a repeating item: only this one, this and later ones, or all of them. */
+function deleteRepeatDialog(m) {
+  const t = store.tasks.get(m.task);
+  if (!t) return '<div class="dialog sm"><div class="body">This item no longer exists.</div><div class="foot"><span class="grow"></span><button class="btn" data-act="close">Close</button></div></div>';
+  const day = M.parseKey(m.day), label = M.fmtDay(day, { weekday: 'short', month: 'short', day: 'numeric' });
+  const b = (scope, text, sub, cls = '') => `<button class="btn ${cls} del-opt" data-act="delete-task" data-task="${t.id}" data-scope="${scope}" data-day="${m.day}"><b>${text}</b><span class="small muted">${sub}</span></button>`;
+  return `<div class="dialog sm"><div class="body"><h2>Delete “${esc(t.title)}”?</h2><div class="muted">It repeats (${esc(M.planSummary(t) || 'repeating')}).</div>
+    <div class="stack" style="gap:8px;margin-top:6px">
+      ${b('one', `Only this one (${label})`, M.isUntilDone(t) ? 'That round is skipped; the next one comes as usual.' : 'Just that day is skipped; the rest stay.')}
+      ${b('fromHere', 'This one and all later ones', 'It stops here. Past days and their reflections stay.')}
+      ${b('all', 'All of them, past and future', 'The whole task goes. Reflections you wrote are kept.', 'danger')}
+    </div></div><div class="foot"><span class="grow"></span><button class="btn" data-act="close">Cancel</button></div></div>`;
 }
 
 function detailDialog(m) {
@@ -1307,7 +1332,7 @@ function detailDialog(m) {
     buttons = `${t.externalURL ? `<a class="btn" href="${esc(t.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open</a>` : ''}
       <button class="btn" data-act="edit" data-task="${t.id}">Edit…</button>
       <button class="btn" data-act="make-kind" data-task="${t.id}" data-kind="task" title="Put it on your checklist">${ic('list')} Make it a task</button>
-      <button class="btn danger" data-act="delete-task" data-task="${t.id}">${t.source ? 'Hide' : 'Delete'}</button>`;
+      <button class="btn danger" data-act="delete-task" data-task="${t.id}" data-occ="${esc(o.id)}">${t.source ? 'Hide' : 'Delete'}${t.recurrence.frequency !== 'none' ? '…' : ''}</button>`;
   } else if (it.kind === 'task') {
     const o = it.o, t = o.task, r = store.reflectionFor(o, o.missed ? 'missed' : 'done');
     body = `<div class="muted">${ic('cal')} ${M.fmtDay(o.day)}</div>
@@ -1318,7 +1343,8 @@ function detailDialog(m) {
       ${o.missed ? `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">Undo “didn’t do it”</button>` : o.done ? '' : `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">${ic('x')} Didn’t do it…</button>`}
       <button class="btn" data-act="edit" data-task="${t.id}">Edit…</button>
       ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn" data-act="skip" data-occ="${esc(o.id)}">Skip</button>` : ''}
-      ${t.source ? `<button class="btn" data-act="make-kind" data-task="${t.id}" data-kind="event" title="Take it off your checklist">${ic('cal')} Make it an event</button>` : ''}`;
+      ${t.source ? `<button class="btn" data-act="make-kind" data-task="${t.id}" data-kind="event" title="Take it off your checklist">${ic('cal')} Make it an event</button>` : ''}
+      <button class="btn danger" data-act="delete-task" data-task="${t.id}" data-occ="${esc(o.id)}">${ic('trash')} Delete${t.recurrence.frequency !== 'none' ? '…' : ''}</button>`;
   } else {
     const e = it.e;
     body = `<div class="muted">${ic('cal')} ${M.fmtDay(e.startDate)}</div>${!e.isAllDay ? `<div class="muted">${ic('clock')} ${M.fmtTime(e.startDate)} – ${M.fmtTime(e.endDate)}</div>` : ''}
@@ -2198,6 +2224,8 @@ const actions = {
     navigate(`projects/${p.id}`);
     setTimeout(() => document.getElementById(`ptitle-${p.id}`)?.focus(), 0);
   },
+  'ring-mode-set': el => store.updateSettings({ ringShowsLeft: el.dataset.v === '1' }),
+  'ring-mode': () => store.updateSettings({ ringShowsLeft: !(store.settings.ringShowsLeft ?? true) }),
   'task-urgent': el => store.setUrgent(el.dataset.task, el.dataset.off !== '1'),
   'quick-save': el => {
     const it = itemById(el.dataset.item);
@@ -2400,6 +2428,22 @@ const actions = {
   'delete-task': el => {
     const t = store.tasks.get(el.dataset.task);
     if (!t) return;
+    // A repeating one: ask whether it's only this one, this and later ones, or all of them.
+    if (t.recurrence.frequency !== 'none' && !el.dataset.scope) {
+      const o = el.dataset.occ ? findOcc(el.dataset.occ) : null;
+      openModal({ type: 'delete-repeat', task: t.id, day: M.dateKey(o?.day ?? M.nextOccurrence(t, new Date()) ?? new Date()) });
+      return;
+    }
+    if (el.dataset.scope && el.dataset.scope !== 'all') {
+      const next = M.deleteOccurrence(t, M.parseKey(el.dataset.day), el.dataset.scope);
+      if (ui.modal) closeModal();
+      if (next) {
+        store.upsertTask(next);
+        toast(el.dataset.scope === 'one' ? `Deleted “${t.title}” on ${M.fmtDay(M.parseKey(el.dataset.day), { weekday: 'short', month: 'short', day: 'numeric' })}` : `“${t.title}” stops from ${M.fmtDay(M.parseKey(el.dataset.day), { weekday: 'short', month: 'short', day: 'numeric' })}`,
+          { icon: 'trash', undo: () => store.upsertTask(t) });
+        return;
+      }
+    }
     if (t.source === 'google' && t.googleEventID && store.google.connected) { openModal({ type: 'delete-google', task: t }); return; }
     const copy = structuredClone(t);
     store.deleteTask(t.id);

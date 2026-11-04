@@ -23,6 +23,7 @@ struct SettingsView: View {
         Form {
             syncSection
             notificationsSection
+            ringSection
             nudgeSection
             checkInSection
             reflectionSection
@@ -121,6 +122,19 @@ struct SettingsView: View {
             }
         } header: {
             Text("Notifications")
+        }
+    }
+
+    private var ringSection: some View {
+        Section {
+            RingModePicker().pickerStyle(.radioGroup)
+            Picker("Until-done tasks and project subtasks count today when", selection: $store.settings.projectTodayDays) {
+                ForEach(projectTodayChoices, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            Text("Click the ring on Today to switch quickly. Urgent items always count today. Syncs to your iPhone and the web.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Today's progress ring")
         }
     }
 

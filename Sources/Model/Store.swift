@@ -513,6 +513,27 @@ final class Store: ObservableObject {
         if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "needsAction") }
     }
 
+    enum DeleteScope { case one, fromHere, all }
+
+    /// Deletes a repeating item's occurrence: just this one (its day is skipped; for an until-done task, the whole
+    /// round), this one and every later one (the repeat ends the day before; past check-offs stay), or all of it.
+    func delete(_ occ: Occurrence, scope: DeleteScope) {
+        guard var t = task(occ.task.id) else { return }
+        let day = (t.isUntilDone ? t.currentRepStart(on: occ.day) : nil) ?? occ.day.startOfDay
+        switch scope {
+        case .all:
+            delete(taskID: t.id)
+        case .one:
+            guard t.recurrence.isRepeating else { delete(taskID: t.id); return }
+            t.skipped.insert(DateKey.string(day))
+            upsert(t)
+        case .fromHere:
+            guard t.recurrence.isRepeating, day > t.startDate.startOfDay else { delete(taskID: t.id); return }
+            t.recurrence.end = .onDate(day.adding(days: -1))
+            upsert(t)
+        }
+    }
+
     func skip(_ occ: Occurrence) {
         guard let i = tasks.firstIndex(where: { $0.id == occ.task.id }) else { return }
         tasks[i].skipped.insert(occ.key)

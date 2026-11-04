@@ -736,3 +736,6 @@ main.enter > * { animation: rise .26s cubic-bezier(.2, .8, .2, 1) both; }
 .later-row { display: flex; align-items: center; gap: 10px; }
 .later-row + .later-row { border-top: 1px solid var(--line); }
 .later-row > .crow { flex: 1; min-width: 0; }
+.ring-btn { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; }
+.ring .lbl { line-height: 1.05; text-align: center; }
+.del-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; width: 100%; padding: 8px 12px; }

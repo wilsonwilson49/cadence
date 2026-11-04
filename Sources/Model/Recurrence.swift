@@ -131,6 +131,8 @@ extension PlanTask {
         // Until done: shows every day from its repeat day until it's settled (checked off or "didn't do it");
         // the next repeat replaces it. Past days only keep the day it was settled. Same rule as model.js.
         guard let rep = repStart(on: d) else { return false }
+        // A deleted round (its repeat day is in `skipped`) is gone: don't fall back to the round before it.
+        if let raw = repStart(on: d, ignoringSkips: true), raw != rep { return false }
         let key = DateKey.string(d), from = DateKey.string(rep)
         if settledKeys.contains(where: { $0 >= from && $0 < key }) { return false }
         if d < Date().startOfDay { return completions[key] != nil || missed?[key] != nil }
@@ -167,13 +169,13 @@ extension PlanTask {
     }
 
     /// Where an until-done task's current one started: the latest repeat day on or before `day`.
-    func repStart(on day: Date) -> Date? {
+    func repStart(on day: Date, ignoringSkips: Bool = false) -> Date? {
         if isCycle { return cycleRounds().last { $0.start <= day.startOfDay }?.start }
         let s = startDate.startOfDay
         var c = day.startOfDay
         for _ in 0..<400 {
             guard c >= s else { return nil }
-            if occursByPattern(c) { return c }
+            if occursByPattern(c, ignoringSkips: ignoringSkips) { return c }
             c = c.adding(days: -1)
         }
         return nil
@@ -210,6 +212,7 @@ extension PlanTask {
     func untilDoneActive(on day: Date) -> Bool {
         if archived != true, heldOver(on: day) != nil { return true }
         guard archived != true, let rep = repStart(on: day) else { return false }
+        if let raw = repStart(on: day, ignoringSkips: true), raw != rep { return false }
         let key = DateKey.string(day.startOfDay), from = DateKey.string(rep)
         return !settledKeys.contains { $0 >= from && $0 < key }
     }
@@ -246,7 +249,7 @@ extension PlanTask {
     }
 
     /// The plain repeat schedule (no until-done carry-over).
-    func occursByPattern(_ d: Date) -> Bool {
+    func occursByPattern(_ d: Date, ignoringSkips: Bool = false) -> Bool {
         if archived == true { return false }
         let s = startDate.startOfDay
         guard d >= s else { return false }
@@ -255,7 +258,7 @@ extension PlanTask {
         if case .afterCount(let limit) = recurrence.end, recurrence.isRepeating {
             guard patternIndex(of: d, start: s) < limit else { return false }
         }
-        return !skipped.contains(DateKey.string(d))
+        return ignoringSkips || !skipped.contains(DateKey.string(d))
     }
 
     private func matchesPattern(_ d: Date, start s: Date) -> Bool {

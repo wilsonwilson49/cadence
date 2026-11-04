@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems, toggleStep, stepsDoneFor, makeOccurrence, countsToday, untilDoneDeadline } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems, toggleStep, stepsDoneFor, makeOccurrence, countsToday, untilDoneDeadline, deleteOccurrence } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -140,18 +140,32 @@ check(fmtFocusLength(45) === '45 min' && fmtFocusLength(90) === '1h 30m' && fmtF
 }
 // Until-done items not due yet stay out of today's ring ("Due later") unless urgent or due within the window.
 {
-  const now = new Date(2026, 10, 2, 20, 0);   // Mon Nov 2, 8 PM
-  const hw = task('2026-10-29', { frequency: 'weekly', weekdays: [5] });   // weekly on Thu, at noon
+  const now = new Date(); now.setHours(20, 0, 0, 0);   // tonight, 8 PM
+  const dueDay = addDays(startOfDay(now), 3);
+  const hw = task(dateKey(addDays(dueDay, -7)), { frequency: 'weekly', weekdays: [dueDay.getDay() + 1] });   // weekly, 3 days from now, at noon
   hw.mode = 'untilDone'; hw.timeMinutes = 720;
   const o = makeOccurrence(hw, now);
   const due = untilDoneDeadline(hw, now, now);
-  check(due && dateKey(due) === '2026-11-05' && due.getHours() === 12, 'due later: weekly deadline is the next handoff');
+  check(due && dateKey(due) === dateKey(dueDay) && due.getHours() === 12, 'due later: weekly deadline is the next handoff');
   check(!countsToday(o, 0, now) && countsToday(o, 3, now), 'due later: not counted today, counted within 3 days');
   hw.urgent = true;
   check(countsToday(makeOccurrence(hw, now), 0, now), 'due later: urgent counts today');
-  const one = newTask({ startDate: iso(d('2026-11-01')), mode: 'untilDone', dueDate: iso(d('2026-11-02')) });
+  const one = newTask({ startDate: iso(addDays(startOfDay(now), -1)), mode: 'untilDone', dueDate: iso(startOfDay(now)) });
   check(countsToday(makeOccurrence(one, now), 0, now), 'due later: due today counts');
   check(countsToday(makeOccurrence(task('2026-10-01', { frequency: 'daily' }), now), 0, now), 'due later: regular items always count');
+}
+// Deleting a repeat: only this one, this and later ones, or all.
+{
+  const daily = task('2026-11-01', { frequency: 'daily' });
+  const one = deleteOccurrence(daily, d('2026-12-03'), 'one');
+  check(!occurs(one, d('2026-12-03')) && occurs(one, d('2026-12-04')) && occurs(one, d('2026-12-02')), 'delete repeat: only this one');
+  const later = deleteOccurrence(daily, d('2026-12-03'), 'fromHere');
+  check(!occurs(later, d('2026-12-03')) && !occurs(later, d('2026-12-20')) && occurs(later, d('2026-12-02')), 'delete repeat: this and later');
+  check(deleteOccurrence(daily, d('2026-12-03'), 'all') === null && deleteOccurrence(daily, d('2026-11-01'), 'fromHere') === null, 'delete repeat: all (or from its first day)');
+  // Until done, weekly on Thursdays: deleting a future round hides that round without bringing back the one before.
+  const hw = task('2026-12-03', { frequency: 'weekly', weekdays: [5] }); hw.mode = 'untilDone';
+  const gone = deleteOccurrence(hw, d('2026-12-10'), 'one');
+  check(!occurs(gone, d('2026-12-11')) && !occurs(gone, d('2026-12-10')) && occurs(gone, d('2026-12-17')), 'delete repeat: until-done round');
 }
 // Google Tasks become until-done tasks with a stable ID (same on the Mac).
 const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });

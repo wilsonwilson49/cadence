@@ -85,7 +85,7 @@ struct HomeView: View {
         Button { model.screen = .today } label: {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 16) {
-                    ProgressRing(done: done, total: total, size: 72, lineWidth: 8)
+                    ProgressRing(done: done, total: total, size: 72, lineWidth: 8, showsLeft: store.settings.ringShowsLeft)
                     VStack(alignment: .leading, spacing: 2) {
                         Label("Today", systemImage: "sun.max").font(.headline)
                         HStack(spacing: 4) {

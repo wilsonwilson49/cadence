@@ -58,7 +58,7 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.borderless)
                 .help(grouped ? "Grouped by kind · click for one list in time order" : "One list in time order · click to group by kind")
-                ProgressRing(done: done, total: total, size: 26, lineWidth: 3.5)
+                ProgressRing(done: done, total: total, size: 26, lineWidth: 3.5, showsLeft: store.settings.ringShowsLeft)
             }
             Divider()
             if total == 0 && laterCount == 0 {

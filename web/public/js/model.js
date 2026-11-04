@@ -185,13 +185,13 @@ export function cycleStatus(task, day = new Date()) {
 }
 
 /** Where an until-done task's current one started: the latest repeat day on or before `day` (its start if it doesn't repeat). */
-export function repStartOn(task, day) {
+export function repStartOn(task, day, ignoringSkips = false) {
   if (isCycle(task)) {
     const d = startOfDay(day);
     return cycleRounds(task).filter(r => r.start <= d).pop()?.start ?? null;
   }
   const s = startOfDay(task.startDate);
-  for (let c = startOfDay(day), i = 0; c >= s && i < 400; c = addDays(c, -1), i++) if (occursByPattern(task, c)) return c;
+  for (let c = startOfDay(day), i = 0; c >= s && i < 400; c = addDays(c, -1), i++) if (occursByPattern(task, c, ignoringSkips)) return c;
   return null;
 }
 
@@ -310,7 +310,7 @@ export function untilDoneActive(task, day) {
   const d = startOfDay(day);
   if (heldOver(task, d)) return true;
   const rep = repStartOn(task, d);
-  if (!rep) return false;
+  if (!rep || roundDeleted(task, d, rep)) return false;
   const key = dateKey(d), from = dateKey(rep);
   return ![...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].some(k => k >= from && k < key);
 }
@@ -328,7 +328,7 @@ export function occurs(task, day) {
   // Until done: shows every day from its repeat day until it's settled (checked off or "didn't do it");
   // the next repeat replaces it. Past days only keep the day it was settled.
   const rep = repStartOn(task, d);
-  if (!rep) return false;
+  if (!rep || roundDeleted(task, d, rep)) return false;
   const key = dateKey(d), from = dateKey(rep);
   const settled = [...Object.keys(task.completions || {}), ...Object.keys(task.missed || {})].some(k => k >= from && k < key);
   if (settled) return false;
@@ -337,7 +337,7 @@ export function occurs(task, day) {
 }
 
 /** The plain repeat schedule (no until-done carry-over). */
-function occursByPattern(task, d) {
+function occursByPattern(task, d, ignoringSkips = false) {
   const s = startOfDay(task.startDate);
   if (d < s) return false;
   const repeating = task.recurrence.frequency !== 'none';
@@ -345,8 +345,10 @@ function occursByPattern(task, d) {
   if (repeating && end.type === 'onDate' && d > startOfDay(end.date)) return false;
   if (!matches(task, d, s)) return false;
   if (repeating && end.type === 'afterCount' && patternIndex(task, d, s) >= end.count) return false;
-  return !(task.skipped || []).includes(dateKey(d));
+  return ignoringSkips || !(task.skipped || []).includes(dateKey(d));
 }
+/** A deleted round of an until-done task (its repeat day is in `skipped`) is gone; don't fall back to the round before it. */
+const roundDeleted = (task, d, rep) => { const raw = repStartOn(task, d, true); return Boolean(raw) && +raw !== +rep; };
 
 export function nextOccurrence(task, from = new Date()) {
   let day = startOfDay(Math.max(startOfDay(from), startOfDay(task.startDate)));
@@ -504,6 +506,8 @@ export const DEFAULT_SETTINGS = {
   screenLimitMinutes: 0,
   distractingLimitMinutes: 0,
   focusMinutes: 25,
+  // Today's ring: true = shows what's left (starts full, empties as you go); false = what's done (fills up).
+  ringShowsLeft: true,
   // The length buttons on the Focus screen (minutes); add your own, remove any.
   focusLengths: [10, 15, 25, 45, 60],
   // Project subtasks join today's list (and its progress ring) when due within this many days (0 = due today,
@@ -743,6 +747,21 @@ export function deadlineOrder(a, b) {
   const ad = Boolean(a.item && itemDone(a.item)), bd = Boolean(b.item && itemDone(b.item));
   if (ad !== bd) return ad ? 1 : -1;
   return (a.due || '0000').localeCompare(b.due || '0000') || (a.title || '').localeCompare(b.title || '');
+}
+
+/**
+ * Deletes a repeating item's occurrence: 'one' (its day is skipped; for an until-done task, the whole round),
+ * 'fromHere' (the repeat ends the day before; past check-offs stay) or 'all'. Returns the changed task, or null
+ * when the whole task should go. Same as Store.delete(_:scope:) on the Mac.
+ */
+export function deleteOccurrence(task, day, scope) {
+  if (scope === 'all' || task.recurrence.frequency === 'none') return null;
+  const d = (isUntilDone(task) ? repStartOn(task, heldOver(task, day)?.rep ?? day) : null) ?? startOfDay(day);
+  const t = structuredClone(task);
+  if (scope === 'one') { t.skipped = [...new Set([...(t.skipped || []), dateKey(d)])]; return t; }
+  if (d <= startOfDay(new Date(task.startDate))) return null;
+  t.recurrence = { ...t.recurrence, end: { onDate: { _0: iso(addDays(d, -1)) } } };
+  return t;
 }
 
 /** "today", "tomorrow", "in 5 days", "2 days late". */

@@ -9,6 +9,7 @@ struct MobileRow: View {
     var showDate = false
     /// In a list already grouped by day (Week), don't repeat the date on every row.
     var inDayList = false
+    @State private var confirmDelete = false
 
     var body: some View {
         let t = occ.task
@@ -63,10 +64,23 @@ struct MobileRow: View {
             if t.recurrence.isRepeating && !t.isUntilDone {
                 Button("Skip") { model.store.skip(occ) }.tint(.orange)
             }
+            Button("Delete", role: .destructive) { confirmDelete = true }
             if t.isUntilDone && !occ.isResolved {
-                Button(t.isUrgent ? "Not urgent" : "Urgent") { model.store.setUrgent(t.id, !t.isUrgent) }.tint(.red)
+                Button(t.isUrgent ? "Not urgent" : "Urgent") { model.store.setUrgent(t.id, !t.isUrgent) }.tint(.orange)
             }
             Button("Edit") { model.editing = model.store.task(t.id) ?? t }.tint(.blue)
+        }
+        .confirmationDialog("Delete “\(t.title)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            if t.recurrence.isRepeating {
+                let day = (t.isUntilDone ? t.currentRepStart(on: occ.day) : nil) ?? occ.day
+                Button("Only this one (\(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())))") { model.store.delete(occ, scope: .one) }
+                Button("This one and all later ones") { model.store.delete(occ, scope: .fromHere) }
+                Button("All of them, past and future", role: .destructive) { model.store.delete(occ, scope: .all) }
+            } else {
+                Button("Delete", role: .destructive) { model.store.delete(occ, scope: .all) }
+            }
+        } message: {
+            Text(t.recurrence.isRepeating ? "It repeats. Reflections you wrote are kept either way." : "Reflections you wrote are kept.")
         }
     }
 }
@@ -108,15 +122,27 @@ struct Ring: View {
     let total: Int
     var size: CGFloat = 64
     var line: CGFloat = 8
+    /// Show what's left: starts full, empties as things get checked off.
+    var showsLeft = false
     var body: some View {
-        let frac = total == 0 ? 0 : Double(done) / Double(total)
+        let left = max(0, total - done)
+        let frac = total == 0 ? 0 : Double(showsLeft ? left : done) / Double(total)
         ZStack {
             Circle().stroke(Color.primary.opacity(0.08), lineWidth: line)
             Circle().trim(from: 0, to: frac)
                 .stroke(AngularGradient(colors: [.orange, .pink, .purple], center: .center), style: StrokeStyle(lineWidth: line, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.spring(duration: 0.6), value: frac)
-            Text("\(done)/\(total)").font(.system(size: size * 0.24, weight: .bold).monospacedDigit())
+            if showsLeft && total > 0 && left == 0 {
+                Image(systemName: "checkmark").font(.system(size: size * 0.34, weight: .bold)).foregroundStyle(.green)
+            } else if showsLeft && total > 0 {
+                VStack(spacing: -2) {
+                    Text("\(left)").font(.system(size: size * 0.3, weight: .bold).monospacedDigit())
+                    Text("left").font(.system(size: size * 0.13, weight: .medium)).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("\(done)/\(total)").font(.system(size: size * 0.24, weight: .bold).monospacedDigit())
+            }
         }
         .frame(width: size, height: size)
     }

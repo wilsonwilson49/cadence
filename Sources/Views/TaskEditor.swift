@@ -348,13 +348,23 @@ struct TaskEditor: View {
                     }
                 }
             } else {
-                Button(task.isEvent ? "Delete event" : "Delete task", role: .destructive) {
+                if task.recurrence.isRepeating, let next = store.task(task.id)?.nextOccurrence(onOrAfter: Date()) {
+                    Button("Only the next one (\(next.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())))") {
+                        if let t = store.task(task.id) { store.delete(Occurrence(task: t, day: next), scope: .one) }
+                        model.editingTask = nil
+                    }
+                    Button("Stop it from now on (keep the past)") {
+                        if let t = store.task(task.id) { store.delete(Occurrence(task: t, day: next), scope: .fromHere) }
+                        model.editingTask = nil
+                    }
+                }
+                Button(task.recurrence.isRepeating ? "Delete all of them" : task.isEvent ? "Delete event" : "Delete task", role: .destructive) {
                     store.delete(taskID: task.id)
                     model.editingTask = nil
                 }
             }
         } message: {
-            Text(isGoogleSynced ? "This event is synced with Google Calendar." : task.isEvent ? "This can't be undone." : "Reflections you've written for it are kept.")
+            Text(isGoogleSynced ? "This event is synced with Google Calendar." : task.recurrence.isRepeating ? "It repeats. To delete one particular day, you can also right-click it on your list or calendar." : task.isEvent ? "This can't be undone." : "Reflections you've written for it are kept.")
         }
         .onAppear {
             // New events sync with Google Calendar by default when it's connected.

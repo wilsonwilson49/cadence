@@ -62,7 +62,9 @@ struct TodayScreen: View {
                             Text(status(all, proj)).font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Ring(done: all.filter(\.isDone).count + proj.filter { $0.item?.isDone == true }.count, total: all.count + proj.count)
+                        Ring(done: all.filter(\.isDone).count + proj.filter { $0.item?.isDone == true }.count, total: all.count + proj.count,
+                             showsLeft: store.settings.ringShowsLeft)
+                            .onTapGesture { store.settings.ringShowsLeft.toggle() }
                     }
                     .padding(.vertical, 4)
                     HStack {
@@ -600,6 +602,17 @@ struct SettingsScreen: View {
     @EnvironmentObject private var model: MobileModel
     var body: some View {
         Form {
+            Section {
+                Picker("Ring shows", selection: $store.settings.ringShowsLeft) {
+                    Text("What's left").tag(true); Text("What's done").tag(false)
+                }
+                .pickerStyle(.segmented)
+                Picker("Until-done & project tasks count when", selection: $store.settings.projectTodayDays) {
+                    ForEach(mobileProjectTodayChoices, id: \.0) { Text($0.1).tag($0.0) }
+                }
+            } header: { Text("Today's progress ring") } footer: {
+                Text("What's left starts full and empties as you check things off; what's done fills up. Tap the ring on Today to switch.")
+            }
             Section {
                 Toggle("Morning check-in notification (8:30)", isOn: $store.settings.checkInOnLaunch)
                 Picker("Remind me about tasks without a time at", selection: $store.settings.untimedReminderMinutes) {

@@ -46,7 +46,7 @@ struct CheckInView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                ProgressRing(done: done, total: items.count, size: 54, lineWidth: 6)
+                ProgressRing(done: done, total: items.count, size: 54, lineWidth: 6, showsLeft: store.settings.ringShowsLeft)
             }
             .padding(.top, 20)
 
