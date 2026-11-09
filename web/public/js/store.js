@@ -28,6 +28,9 @@ class Store {
   focus = new Map();       // focus sessions
   screen = new Map();      // daily screen-time summaries ("yyyy-MM-dd|DEVICE")
   projects = new Map();    // projects with nested subtasks and deadlines
+  courses = new Map();     // study courses (periods, phase, mistakes, flashcards)
+  studyLogs = new Map();   // finished study sessions
+  notes = new Map();       // Notes tool
   settings = structuredClone(M.DEFAULT_SETTINGS);
   stamps = new Map();      // "kind|id" -> updatedAt (ms) of our copy
   pending = new Map();     // "kind|id" -> change waiting to be pushed
@@ -107,6 +110,7 @@ class Store {
   #resetData() {
     this.tasks = new Map(); this.reflections = new Map(); this.stamps = new Map(); this.pending = new Map();
     this.focus = new Map(); this.screen = new Map(); this.projects = new Map();
+    this.courses = new Map(); this.studyLogs = new Map(); this.notes = new Map();
     this.settings = structuredClone(M.DEFAULT_SETTINGS); this.cursor = 0;
     this.google = { configured: false, connected: false, email: null, calendars: [], events: new Map(), months: new Set(), loading: new Set() };
   }
@@ -123,6 +127,9 @@ class Store {
       this.focus = new Map((c.focus || []).map(f => [f.id, f]));
       this.screen = new Map((c.screen || []).map(d => [d.id, d]));
       this.projects = new Map((c.projects || []).map(p => [p.id, p]));
+      this.courses = new Map((c.courses || []).map(x => [x.id, x]));
+      this.studyLogs = new Map((c.studyLogs || []).map(x => [x.id, x]));
+      this.notes = new Map((c.notes || []).map(x => [x.id, x]));
       this.settings = { ...structuredClone(M.DEFAULT_SETTINGS), ...c.settings };
       this.stamps = new Map(c.stamps);
       this.pending = new Map(c.pending);
@@ -136,6 +143,7 @@ class Store {
       localStorage.setItem(this.#cacheKey(), JSON.stringify({
         tasks: [...this.tasks.values()], reflections: [...this.reflections.values()], settings: this.settings,
         focus: [...this.focus.values()], screen: [...this.screen.values()], projects: [...this.projects.values()],
+        courses: [...this.courses.values()], studyLogs: [...this.studyLogs.values()], notes: [...this.notes.values()],
         stamps: [...this.stamps], pending: [...this.pending], cursor: this.cursor,
       }));
     } catch { /* storage full or blocked */ }
@@ -201,6 +209,9 @@ class Store {
         if (c.deleted) this.tasks.delete(id); else this.tasks.set(id, { ...c.data, id });
       } else if (c.kind === 'reflection') {
         if (c.deleted) this.reflections.delete(id); else this.reflections.set(id, { ...c.data, id });
+      } else if (c.kind === 'course' || c.kind === 'study' || c.kind === 'note') {
+        const map = c.kind === 'course' ? this.courses : c.kind === 'study' ? this.studyLogs : this.notes;
+        if (c.deleted) map.delete(id); else map.set(id, { ...c.data, id });
       } else if (c.kind === 'project') {
         if (c.deleted) this.projects.delete(id); else this.projects.set(id, { ...c.data, id });
       } else if (c.kind === 'focus' || c.kind === 'screen') {
@@ -211,6 +222,30 @@ class Store {
       }
     }
     return applied;
+  }
+
+  // ---------- study and notes ----------
+  #put(kind, map, rec) { const next = { ...rec, updatedAt: M.iso(new Date()) }; map.set(next.id, next); this.#queue(kind, next.id, next); return next; }
+  upsertCourse(c) { return this.#put('course', this.courses, c); }
+  editCourse(id, fn) { const cur = this.courses.get(id); if (!cur) return; const copy = structuredClone(cur); this.upsertCourse(fn(copy) || copy); }
+  deleteCourse(id) { this.courses.delete(id); this.#queue('course', id, null, true); }
+  get activeCourses() { return [...this.courses.values()].filter(c => !c.archived).sort((a, b) => a.title.localeCompare(b.title)); }
+  saveStudyLog(l) { return this.#put('study', this.studyLogs, l); }
+  deleteStudyLog(id) { this.studyLogs.delete(id); this.#queue('study', id, null, true); }
+  get sortedStudyLogs() { return [...this.studyLogs.values()].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))); }
+  studyMinutes(day) { return [...this.studyLogs.values()].filter(l => M.sameDay(new Date(l.startedAt), day)).reduce((n, l) => n + (l.minutes || 0), 0); }
+  get studyStreak() {
+    const days = new Set([...this.studyLogs.values()].filter(l => l.minutes > 0).map(l => M.dateKey(new Date(l.startedAt))));
+    let d = M.startOfDay(new Date()), n = 0;
+    if (!days.has(M.dateKey(d))) d = M.addDays(d, -1);
+    while (days.has(M.dateKey(d))) { n++; d = M.addDays(d, -1); }
+    return n;
+  }
+  get dueCardCount() { return this.activeCourses.reduce((n, c) => n + M.dueCards(c).length, 0); }
+  upsertNote(n) { return this.#put('note', this.notes, n); }
+  deleteNote(id) { this.notes.delete(id); this.#queue('note', id, null, true); }
+  get sortedNotes() {
+    return [...this.notes.values()].sort((a, b) => (Boolean(b.pinned) - Boolean(a.pinned)) || String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
   }
 
   // ---------- projects ----------

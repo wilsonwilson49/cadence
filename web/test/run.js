@@ -1,5 +1,5 @@
 // Mirrors the Mac app's recurrence checks so both platforms agree.
-import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems, toggleStep, stepsDoneFor, makeOccurrence, countsToday, untilDoneDeadline, deleteOccurrence } from '../public/js/model.js';
+import { occurs, countWords, rrule, newTask, parseKey, iso, startOfDay, recurrenceSummary, openRanges, isBusy, dayAt, addDays, dateKey, nextOccurrence, planSummary, cycleStatus, isHabit, habitStats, focusPoints, focusLevel, taskFromGoogleTask, stableUUID, isUntilDone, calendarKeyOf, heldOver, focusLengths, clampFocus, fmtFocusLength, newProject, newProjectItem, projectRows, projectProgress, updateItem, setItemDone, indentItem, outdentItem, insertItem, findItem, itemDone, projectDeadlines, deadlineStatus, projectMapLayout, projectTodayItems, toggleStep, stepsDoneFor, makeOccurrence, countsToday, untilDoneDeadline, deleteOccurrence, newRun, timedState, reviewCard, newCard, runLog, nextPeriod, repeatCycle, periodMsLeft, newCourse, courseRules, togglePause, runElapsed } from '../public/js/model.js';
 let fail = 0;
 const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
 const d = parseKey;
@@ -166,6 +166,30 @@ check(fmtFocusLength(45) === '45 min' && fmtFocusLength(90) === '1h 30m' && fmtF
   const hw = task('2026-12-03', { frequency: 'weekly', weekdays: [5] }); hw.mode = 'untilDone';
   const gone = deleteOccurrence(hw, d('2026-12-10'), 'one');
   check(!occurs(gone, d('2026-12-11')) && !occurs(gone, d('2026-12-10')) && occurs(gone, d('2026-12-17')), 'delete repeat: until-done round');
+}
+// Study: timed rounds, class periods, pauses, logs, flashcard spacing.
+{
+  const t0 = 1_000_000_000_000, min = 60_000;
+  const r = newRun('timed', null, 'Math'); r.startedAt = t0; r.studyMinutes = 25; r.breakMinutes = 5; r.rounds = 3;
+  const at = m => timedState(r, t0 + m * min);
+  check(at(10).round === 1 && !at(10).onBreak && at(26).onBreak && at(31).round === 2 && !at(31).onBreak && at(85).finished, 'study: timed rounds and breaks');
+  check(runLog(r, t0 + 31 * min).completed === 1 && runLog(r, t0 + 85 * min).completed === 3, 'study: rounds finished in the log');
+  const p = newRun('timed', null, 'x'); p.startedAt = t0; togglePause(p, t0 + 10 * min); togglePause(p, t0 + 20 * min);
+  check(runElapsed(p, t0 + 30 * min) === 20 * min, 'study: pauses left out');
+  const c = newCourse({ title: 'Chem', phase: 'learning' });
+  const d = newRun('dynamic', c, 'Chem'); d.startedAt = t0;
+  check(d.periods.length === 5 && periodMsLeft(d, t0 + 10 * min) === 20 * min, 'study: class period clock');
+  nextPeriod(d, t0 + 30 * min);
+  check(d.index === 1 && periodMsLeft(d, t0 + 35 * min) === 5 * min, 'study: next period starts its own clock');
+  for (let i = 0; i < 4; i++) nextPeriod(d, t0 + 60 * min);
+  check(d.wrapUp && runLog(d, t0 + 60 * min).completed === 5, 'study: wrap up after the quiz');
+  repeatCycle(d, 'understanding', t0 + 61 * min);
+  check(d.cycle === 2 && d.index === 0 && d.phase === 'understanding' && !d.wrapUp, 'study: repeat and move on a phase');
+  check(courseRules(c, 'testing').homework === 'textbook' && courseRules(c, 'learning').quiz === 'closed', 'study: phase note rules');
+  let k = newCard('q', 'a'); const today = new Date(2026, 10, 8);
+  k = reviewCard(k, 'good', today); const k1 = k.intervalDays; k = reviewCard(k, 'good', today); const k2 = k.intervalDays; k = reviewCard(k, 'good', today);
+  check(k1 === 1 && k2 === 3 && k.intervalDays === 8 && k.due === '2026-11-16', 'flashcards: good spaces out 1, 3, 8 days');
+  check(reviewCard(k, 'again', today).intervalDays === 0 && reviewCard(k, 'again', today).due === '2026-11-08', 'flashcards: again comes back today');
 }
 // Google Tasks become until-done tasks with a stable ID (same on the Mac).
 const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });

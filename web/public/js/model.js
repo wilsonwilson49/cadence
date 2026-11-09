@@ -794,3 +794,110 @@ export function projectMapLayout(p, collapsed = new Set()) {
   root.item = null;
   return { nodes, edges, rows: Math.max(1, next), depth: Math.max(0, ...nodes.map(n => n.depth)) };
 }
+
+// ---------- Study ----------
+// Three ways to run a session (timed rounds, a class-period cycle, or away from the computer), plus courses,
+// flashcards and notes. Same shapes and rules as Sources/Model/Study.swift. Courses, logs and notes sync
+// (kinds 'course', 'study', 'note'); a running session stays in this browser.
+
+export const STUDY_MODES = {
+  timed: { title: 'Timed', icon: 'timer', blurb: 'Study and break on a clock, for as many rounds as you like.' },
+  dynamic: { title: 'Class period', icon: 'study', blurb: 'Go through a class period: lecture, questions, homework, office hours, quiz. Then repeat the phase or move on.' },
+  offline: { title: 'No computer', icon: 'book', blurb: 'Put the computer away and study on paper. Cadence keeps time and notes if you come back to the screen.' },
+};
+export const PHASES = ['reading', 'learning', 'understanding', 'testing'];
+export const PHASE_INFO = {
+  reading: { title: 'Reading', blurb: 'The chapter seems like a pile of words and you don’t understand it yet.', rules: { homework: 'open', quiz: 'open' } },
+  learning: { title: 'Learning', blurb: 'You’re beginning to understand.', rules: { homework: 'open', quiz: 'closed' } },
+  understanding: { title: 'Understanding', blurb: 'You understand it; now make it stick.', rules: { homework: 'open', quiz: 'closed' } },
+  testing: { title: 'Testing', blurb: 'Test yourself the way the real test will.', rules: { homework: 'textbook', quiz: 'closed' } },
+};
+export const NOTE_RULES = { open: 'Open note', textbook: 'Textbook only', closed: 'Closed note' };
+export const PERIOD_KINDS = {
+  lecture: { title: 'Lecture', minutes: 30, blurb: 'The whole chapter, just an info dump. Go slowly so you pick up a lot; take what you can and leave the rest for later. Memorization can wait.' },
+  questions: { title: 'Any questions?', minutes: 10, blurb: 'Your chance to begin understanding. Ask AI, ask a partner, look things up.' },
+  homework: { title: 'Homework', minutes: 30, blurb: 'Solve as many problems as you can. Ask AI, check the back of the textbook.' },
+  officeHours: { title: 'Office hours', minutes: 15, blurb: 'Ask about the problems you got stuck on: a friend who’s studying it, AI, a teacher. Learn as much as you can.' },
+  quiz: { title: 'Quiz', minutes: 15, blurb: 'Try to retain as much as you can. Write down what you got wrong; you’ll start there next session.' },
+  custom: { title: 'Your own period', minutes: 15, blurb: '' },
+};
+export const nextPhase = p => PHASES[PHASES.indexOf(p) + 1] || null;
+export const newPeriod = (kind, o = {}) => ({ id: uuid(), kind, title: PERIOD_KINDS[kind].title, minutes: PERIOD_KINDS[kind].minutes, enabled: true, tasks: [], blurb: PERIOD_KINDS[kind].blurb, ...o });
+export const classPeriod = () => ['lecture', 'questions', 'homework', 'officeHours', 'quiz'].map(k => newPeriod(k));
+export const newCourse = (o = {}) => ({ id: uuid(), title: 'New course', color: 'blue', chapter: '', phase: 'reading', taskBased: false, periods: classPeriod(), rules: {},
+  mistakes: [], cards: [], createdAt: iso(new Date()), ...o });
+export const courseRules = (c, phase) => (c?.rules || {})[phase] || PHASE_INFO[phase].rules;
+/** Which note rule applies in a period (lecture and questions are always open). */
+export const periodRule = (kind, rules) => (kind === 'homework' || kind === 'officeHours' ? rules.homework : kind === 'quiz' ? rules.quiz : null);
+export const openMistakes = c => (c.mistakes || []).filter(m => !m.resolvedAt);
+export const activePeriods = c => (c.periods || []).filter(p => p.enabled !== false);
+export const cardDue = (card, today = new Date()) => card.due <= dateKey(today);
+export const dueCards = (c, today = new Date()) => (c.cards || []).filter(k => cardDue(k, today));
+export const newCard = (front, back) => ({ id: uuid(), front, back, due: dateKey(new Date()), intervalDays: 0, ease: 2.5, reps: 0, createdAt: iso(new Date()) });
+
+/** After a review. Again: back in the pile today. Hard / Good / Easy: further out each time. Same as Flashcard.review. */
+export function reviewCard(card, grade, today = new Date()) {
+  const c = { ...card };
+  const i = c.intervalDays || 0, e = c.ease || 2.5;
+  if (grade === 'again') { c.intervalDays = 0; c.ease = Math.max(1.3, e - 0.2); c.reps = 0; }
+  else if (grade === 'hard') { c.intervalDays = Math.max(1, Math.round(i * 1.2)); c.ease = Math.max(1.3, e - 0.15); c.reps = (c.reps || 0) + 1; }
+  else if (grade === 'good') { c.intervalDays = i === 0 ? 1 : i === 1 ? 3 : Math.round(i * e); c.reps = (c.reps || 0) + 1; }
+  else { c.intervalDays = Math.max(4, Math.round(Math.max(1, i) * e * 1.3)); c.ease = e + 0.15; c.reps = (c.reps || 0) + 1; }
+  c.due = dateKey(addDays(startOfDay(today), c.intervalDays));
+  return c;
+}
+
+/** A running session (kept in this browser). Times are milliseconds. */
+export function newRun(mode, course, title) {
+  const now = Date.now();
+  return {
+    mode, courseId: course?.id ?? null, title: title || course?.title || STUDY_MODES[mode].title, startedAt: now, pausedAt: null, pausedMs: 0,
+    studyMinutes: 25, breakMinutes: 5, rounds: 4,
+    taskBased: Boolean(course?.taskBased), periods: structuredClone(course && activePeriods(course).length ? activePeriods(course) : classPeriod()),
+    index: 0, periodStart: 0, checked: [], phase: course?.phase || 'reading', cycle: 1, wrapUp: false,
+    plannedMinutes: 60, screenMs: 0, mistakes: [],
+  };
+}
+export const runElapsed = (r, now = Date.now()) => Math.max(0, (r.pausedAt ?? now) - r.startedAt - r.pausedMs);
+export function togglePause(r, now = Date.now()) {
+  if (r.pausedAt) { r.pausedMs += now - r.pausedAt; r.pausedAt = null; } else r.pausedAt = now;
+}
+export function timedState(r, now = Date.now()) {
+  const s = Math.max(1, r.studyMinutes) * 60_000, b = Math.max(0, r.breakMinutes) * 60_000;
+  let t = runElapsed(r, now);
+  for (let n = 1; n <= Math.max(1, r.rounds); n++) {
+    if (t < s) return { round: n, onBreak: false, msLeft: s - t, finished: false };
+    t -= s;
+    if (n === r.rounds) break;
+    if (t < b) return { round: n, onBreak: true, msLeft: b - t, finished: false };
+    t -= b;
+  }
+  return { round: r.rounds, onBreak: false, msLeft: 0, finished: true };
+}
+export const runPeriod = r => r.periods[r.index] || null;
+export const periodMsLeft = (r, now = Date.now()) => { const p = runPeriod(r); return p ? p.minutes * 60_000 - (runElapsed(r, now) - r.periodStart) : 0; };
+export const isChecked = (r, p, i) => r.checked.includes(`${p.id}|${i}`);
+export const periodTasksDone = (r, p) => p.tasks.length > 0 && p.tasks.every((_, i) => isChecked(r, p, i));
+export function nextPeriod(r, now = Date.now()) {
+  if (r.index + 1 < r.periods.length) { r.index++; r.periodStart = runElapsed(r, now); } else r.wrapUp = true;
+}
+export function repeatCycle(r, phase, now = Date.now()) {
+  Object.assign(r, { phase, index: 0, cycle: r.cycle + 1, checked: [], wrapUp: false, periodStart: runElapsed(r, now) });
+}
+export const offlineMsLeft = (r, now = Date.now()) => (r.plannedMinutes > 0 ? r.plannedMinutes * 60_000 - runElapsed(r, now) : null);
+
+/** The log saved when a session ends. Same as StudyRun.log() on the Mac. */
+export function runLog(r, now = Date.now()) {
+  const l = { id: uuid(), mode: r.mode, courseID: r.courseId, title: r.title, startedAt: iso(new Date(r.startedAt)), endedAt: iso(new Date(now)),
+    minutes: Math.round(runElapsed(r, now) / 60_000), completed: 0, screenSeconds: 0, note: '' };
+  if (r.mode === 'timed') { const st = timedState(r, now); l.completed = st.finished ? r.rounds : st.round - (st.onBreak ? 0 : 1); }
+  if (r.mode === 'dynamic') { l.phase = r.phase; l.completed = (r.cycle - 1) * r.periods.length + (r.wrapUp ? r.periods.length : r.index); }
+  if (r.mode === 'offline') l.screenSeconds = Math.round(r.screenMs / 1000);
+  if (r.mistakes.length) l.note = `Got wrong: ${r.mistakes.join('; ')}`;
+  return l;
+}
+export const fmtStudyClock = ms => {
+  const s = Math.round(Math.abs(ms) / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
+  return `${ms < 0 ? '+' : ''}${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${x}`;
+};
+export const noteTitle = n => (n.title || '').trim() || (n.body || '').split('\n')[0].trim().slice(0, 60) || 'Untitled';

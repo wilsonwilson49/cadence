@@ -15,8 +15,10 @@ const HOUR = 48;
 const SCREENS = [
   ['home', 'Home', 'house', ''],
   ['today', 'Today', 'sun', 'Plan'], ['week', 'Week', 'week', 'Plan'], ['month', 'Month', 'month', 'Plan'],
-  ['todo', 'To-Do List', 'list', 'Plan'], ['projects', 'Projects', 'layers', 'Plan'], ['habits', 'Habits', 'habit', 'Grow'], ['reflections', 'Reflections', 'quote', 'Grow'],
+  ['todo', 'To-Do List', 'list', 'Plan'], ['projects', 'Projects', 'layers', 'Plan'],
+  ['study', 'Study', 'study', 'Study'], ['flashcards', 'Flashcards', 'cards', 'Study'], ['habits', 'Habits', 'habit', 'Grow'], ['reflections', 'Reflections', 'quote', 'Grow'],
   ['focus', 'Focus', 'target', 'Focus'], ['screentime', 'Screen Time', 'monitor', 'Focus'],
+  ['notes', 'Notes', 'note', 'Tools'],
   ['booking', 'Booking', 'people', 'Connect'], ['settings', 'Settings', 'gear', ''],
 ];
 
@@ -121,14 +123,24 @@ function render() {
   if (ui.modal && ['checkin', 'detail'].includes(ui.modal.type) && !ui.modal.reflecting) renderModal();
 }
 
+// Sidebar sections fold (click the heading) and can be hidden (Settings › Sidebar). Both stay on this device.
+const NAV_SECTIONS = [...new Set(SCREENS.map(s => s[3]).filter(Boolean))];
 function sidebar() {
   let lastSection = null;
+  const folded = new Set(store.device('navFolded', [])), hidden = new Set(store.device('navHidden', []));
   const items = SCREENS.map(([id, label, icon, section]) => {
+    if (section && hidden.has(section) && ui.route !== id) return '';
     let head = '';
-    if (section !== lastSection) { head = section ? `<div class="nav-section">${section}</div>` : id === 'home' ? '' : '<div class="nav-section"></div>'; lastSection = section; }
+    if (section !== lastSection) {
+      head = section ? `<button class="nav-section fold ${folded.has(section) ? 'folded' : ''}" data-act="nav-fold" data-sec="${section}" title="Fold or unfold · hide sections in Settings">${section}<span class="chev">${folded.has(section) ? '▸' : '▾'}</span></button>`
+        : id === 'home' ? '' : '<div class="nav-section"></div>';
+      lastSection = section;
+    }
+    if (section && folded.has(section) && ui.route !== id) return head;
     const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
       : id === 'habits' ? (store.countedToday(store.tasksOn(new Date())).filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task) && !o.resolved).length || '')
-      : id === 'focus' && focus.running ? fmtClock(focusLeft()) : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
+      : id === 'focus' && focus.running ? fmtClock(focusLeft()) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
+      : id === 'flashcards' ? (store.dueCardCount || '') : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
     return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
   }).join('');
   return `<nav class="sidebar">
@@ -151,6 +163,9 @@ function view() {
     case 'month': return monthView();
     case 'todo': return todoView();
     case 'projects': return projectsView();
+    case 'study': return studyView();
+    case 'flashcards': return flashcardsView();
+    case 'notes': return notesView();
     case 'reflections': return reflectionsView();
     case 'habits': return habitsView();
     case 'focus': return focusView();
@@ -1161,6 +1176,10 @@ function settingsView() {
         || '<div class="srow muted">No presets. Make one from the New Task window.</div>'}
     </div></div>
 
+    <div><h3>Sidebar</h3><div class="card">
+      ${NAV_SECTIONS.map(sec => `<div class="srow"><label class="check"><input type="checkbox" data-act-change="nav-hide" value="${sec}" ${store.device('navHidden', []).includes(sec) ? '' : 'checked'}>${sec}</label>
+        <span class="small muted">${SCREENS.filter(x => x[3] === sec).map(x => x[1]).join(', ')}</span></div>`).join('')}
+      <div class="srow small muted">Hidden sections are only hidden in this browser. Click a section’s heading in the sidebar to fold it.</div></div></div>
     <div><h3>Today’s progress ring</h3><div class="card">
       <div class="srow"><div>The ring shows<div class="small muted">What’s left starts full and empties as you check things off; what’s done fills up. Click the ring on Today to switch quickly. Syncs to your Mac.</div></div>
         <div class="seg"><button class="${s.ringShowsLeft ?? true ? 'on' : ''}" data-act="ring-mode-set" data-v="1">What’s left</button><button class="${s.ringShowsLeft ?? true ? '' : 'on'}" data-act="ring-mode-set" data-v="0">What’s done</button></div></div>
@@ -1242,7 +1261,7 @@ function renderModal() {
       <button class="btn" data-act="google-hide">Hide in Cadence</button>
       <button class="btn primary" style="background:var(--red)" data-act="google-delete" ${m.working ? 'disabled' : ''}>${m.working ? 'Deleting…' : 'Delete from Google too'}</button></div></div>`;
   else if (m.type === 'confirm') html = `<div class="dialog sm"><div class="body"><h2>${esc(m.title)}</h2><div class="muted">${esc(m.text)}</div></div>
-    <div class="foot"><span class="grow"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-yes">${esc(m.yes)}</button></div></div>`;
+    <div class="foot">${m.alt ? `<button class="btn danger" data-act="confirm-alt">${esc(m.alt)}</button>` : ''}<span class="grow"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-yes">${esc(m.yes)}</button></div></div>`;
   root.innerHTML = `<div class="overlay ${ui.modalFresh ? 'opening' : ''}" data-act="overlay">${html}</div>`;
   ui.modalFresh = false;
   animateRings();
@@ -2216,7 +2235,417 @@ function projectUpcomingSection() {
 
 const projectEdit = (el, fn) => store.editProject(el.dataset.project || ui.projectId, fn);
 
+
+// ---------- Study ----------
+// A session runs in this browser (saved so it survives a reload). Courses, logs and flashcards sync.
+const STUDY_KEY = 'cadence:studyRun';
+let studyRun = (() => { try { return JSON.parse(localStorage.getItem(STUDY_KEY) || 'null'); } catch { return null; } })();
+const saveRun = () => { try { studyRun ? localStorage.setItem(STUDY_KEY, JSON.stringify(studyRun)) : localStorage.removeItem(STUDY_KEY); } catch { /* storage blocked */ } };
+const studyNotified = new Set();
+let lastActivity = Date.now(), lastScreenNudge = 0;
+for (const ev of ['mousemove', 'keydown', 'pointerdown', 'wheel']) addEventListener(ev, () => { lastActivity = Date.now(); }, { passive: true, capture: true });
+
+/** What the clock shows: time left in the round / period / session, or time so far. */
+function studyClockMs(r, now = Date.now()) {
+  if (r.mode === 'timed') return M.timedState(r, now).msLeft;
+  if (r.mode === 'dynamic') return r.taskBased || r.wrapUp ? M.runElapsed(r, now) : M.periodMsLeft(r, now);
+  return M.offlineMsLeft(r, now) ?? M.runElapsed(r, now);
+}
+
+function studyNotify(title, body) {
+  reminders.deliver({ kind: 'nudge', title, body, tint: '#5e5ce6' }, ['notification', 'banner', 'sound']);
+}
+
+function startStudy(r) { studyRun = r; studyNotified.clear(); ui.studyLast = null; saveRun(); render(); studyTick(); }
+
+function finishStudy() {
+  const r = studyRun;
+  if (!r) return;
+  const log = M.runLog(r);
+  if (log.minutes > 0 || log.completed > 0) store.saveStudyLog(log);
+  if (r.mode === 'dynamic' && r.courseId) store.editCourse(r.courseId, c => { c.phase = r.phase; });
+  studyRun = null; saveRun();
+  ui.studyLast = log;
+  render();
+}
+
+function updateRun(fn) { if (!studyRun) return; fn(studyRun); saveRun(); render(); }
+
+let studyTimer = null;
+function studyTick() {
+  clearInterval(studyTimer);
+  if (!studyRun) return;
+  studyTimer = setInterval(() => {
+    const r = studyRun;
+    if (!r) { clearInterval(studyTimer); return; }
+    const now = Date.now();
+    if (!r.pausedAt) {
+      if (r.mode === 'timed') {
+        const st = M.timedState(r, now);
+        if (st.finished) { studyNotify('Study session done', `${r.rounds} round${r.rounds === 1 ? '' : 's'} of ${r.title}. Nice work.`); finishStudy(); return; }
+        const key = `${st.round}|${st.onBreak}`;
+        if (!studyNotified.has(key)) {
+          studyNotified.add(key);
+          if (!(st.round === 1 && !st.onBreak)) {
+            if (st.onBreak) studyNotify(`Break: ${r.breakMinutes} min`, `Round ${st.round} of ${r.rounds} done. Stand up, stretch, look away from the screen.`);
+            else studyNotify(`Round ${st.round} of ${r.rounds}`, `Back to ${r.title}.`);
+            render();
+          }
+        }
+      } else if (r.mode === 'dynamic' && !r.taskBased && !r.wrapUp && M.periodMsLeft(r, now) <= 0 && !studyNotified.has(`p${r.cycle}|${r.index}`)) {
+        studyNotified.add(`p${r.cycle}|${r.index}`);
+        const next = r.periods[r.index + 1]?.title || 'wrap up';
+        studyNotify(`Time's up: ${M.runPeriod(r).title}`, `Next: ${next}. Move on when you're ready.`);
+      } else if (r.mode === 'offline') {
+        // Using this page during a no-computer session is noted, with a reminder every couple of minutes.
+        if (document.visibilityState === 'visible' && now - lastActivity < 2000) {
+          r.screenMs += 1000;
+          if (r.screenMs >= 20_000 && now - lastScreenNudge > 120_000) { lastScreenNudge = now; studyNotify('No-computer session', `You're on the computer. Back to ${r.title} on paper?`); }
+          if (r.screenMs % 15_000 === 0) saveRun();
+        }
+        const left = M.offlineMsLeft(r, now);
+        if (left != null && left <= 0 && !studyNotified.has('offline-done')) {
+          studyNotified.add('offline-done');
+          studyNotify("Time's up", `${r.plannedMinutes} min of ${r.title} away from the screen. End the session in Cadence to log it.`);
+        }
+      }
+    }
+    const ms = studyClockMs(r, now);
+    for (const el of document.querySelectorAll('[data-study-clock]')) el.textContent = M.fmtStudyClock(ms);
+    for (const el of document.querySelectorAll('[data-study-elapsed]')) el.textContent = M.fmtStudyClock(M.runElapsed(r, now));
+    for (const el of document.querySelectorAll('[data-study-ring]')) {
+      const total = Number(el.dataset.total) || 1;
+      el.style.strokeDashoffset = String(2 * Math.PI * 90 * (1 - Math.max(0, Math.min(1, ms / total))));
+    }
+    for (const el of document.querySelectorAll('[data-study-screen]')) el.textContent = M.fmtStudyClock(r.screenMs);
+    const badge = document.querySelector('.nav-item[href="/app/study"] .badge');
+    if (badge) badge.textContent = M.fmtStudyClock(ms);
+  }, 1000);
+}
+if (studyRun) setTimeout(studyTick, 0);
+
+const ruleChip = (label, rule) => `<span class="rule-chip ${rule}">${ic(rule === 'closed' ? 'lock' : 'book')} ${label}: ${M.NOTE_RULES[rule]}</span>`;
+function phaseBanner(course, phase = course.phase) {
+  const r = M.courseRules(course, phase), info = M.PHASE_INFO[phase];
+  return `<div class="phase-banner"><span class="phase-tag" style="background:${color(course.color)}">${info.title}</span><span class="small muted grow">${esc(info.blurb)}</span>
+    ${ruleChip('Homework', r.homework)}${ruleChip('Quiz', r.quiz)}</div>`;
+}
+function bigClock(ms, total, caption, tint = 'var(--accent)') {
+  const c = 2 * Math.PI * 90, f = Math.max(0, Math.min(1, ms / Math.max(1, total)));
+  return `<div class="big-clock"><svg width="200" height="200" viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" fill="none" stroke="var(--line-strong)" stroke-width="12"/>
+    <circle cx="100" cy="100" r="90" fill="none" stroke="${tint}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${c}" style="stroke-dashoffset:${c * (1 - f)};transition:stroke-dashoffset 1s linear"
+      transform="rotate(-90 100 100)" data-study-ring data-total="${total}"/></svg>
+    <div class="big-clock-text"><b data-study-clock class="${ms < 0 ? 'orange' : ''}">${M.fmtStudyClock(ms)}</b><span class="small muted">${caption}</span></div></div>`;
+}
+function mistakeList(course, title = 'What you got wrong') {
+  const list = M.openMistakes(course);
+  if (!list.length) return '';
+  return `<div class="mistakes"><div class="orange" style="font-weight:650">${ic('refresh')} ${title}</div>
+    ${list.map(m => `<div class="row"><button class="checkbtn" data-act="mistake-done" data-course="${esc(course.id)}" data-id="${esc(m.id)}" title="Got it now">${ic('circle')}</button>
+      <span class="grow">${esc(m.text)}</span><span class="tiny muted">${M.fmtDay(new Date(m.addedAt), { month: 'short', day: 'numeric' })}</span></div>`).join('')}</div>`;
+}
+
+function studyView() {
+  const tab = store.device('studyTab', 'session');
+  const tabs = [['session', 'Session'], ['courses', 'Courses'], ['history', 'History']];
+  const body = tab === 'courses' ? coursesPanel() : tab === 'history' ? studyHistory() : studyRun ? runningStudy() : studySetup();
+  return `<div class="header"><div class="grow"><h1>Study</h1><div class="sub">Timed rounds, a class-period cycle, or time away from the screen.</div></div>
+      <div class="seg">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="study-tab" data-tab="${k}">${l}</button>`).join('')}</div></div>
+    <div class="page stack" style="max-width:1000px">${body}</div>`;
+}
+
+function studyStats() {
+  const today = store.studyMinutes(new Date()), week = [...Array(7)].reduce((n, _, i) => n + store.studyMinutes(M.addDays(new Date(), -i)), 0);
+  const tile = (v, l, i, hue, href) => `<${href ? `a href="${href}"` : 'div'} class="stat" style="background:${tint(hue, .1)};${href ? 'text-decoration:none;color:inherit' : ''}"><span style="color:${hue}">${ic(i)}</span><div><b>${v}</b><span class="small muted">${l}</span></div></${href ? 'a' : 'div'}>`;
+  return `<div class="stats4">${tile(M.fmtDuration(today * 60), 'studied today', 'clock', '#5e5ce6')}${tile(M.fmtDuration(week * 60), 'in the last 7 days', 'week', '#0a84ff')}
+    ${tile(store.studyStreak, 'day streak', 'flame', '#ff9f0a')}${tile(store.dueCardCount, 'flashcards due', 'cards', '#ff375f', '/app/flashcards')}</div>`;
+}
+
+function studySetup() {
+  const d = store.device('studySetup', {}), mode = d.mode || 'dynamic', courses = store.activeCourses;
+  const course = d.course ? store.courses.get(d.course) : null;
+  const opt = (k, v) => (d[k] ?? v);
+  const last = ui.studyLast;
+  let options = '';
+  if (mode === 'timed') {
+    const s = opt('studyMinutes', 25), b = opt('breakMinutes', 5), r = opt('rounds', 4);
+    options = `<div class="row" style="flex-wrap:wrap">${[[25, 5, 4], [50, 10, 3], [90, 15, 2]].map(([x, y, z]) => `<button class="btn sm ${s === x && b === y && r === z ? 'primary' : ''}" data-act="study-preset" data-s="${x}" data-b="${y}" data-r="${z}">${x}/${y} × ${z}</button>`).join('')}</div>
+      <div class="row" style="flex-wrap:wrap;gap:14px"><label class="row small">Study <input class="input sm" type="number" min="5" max="240" value="${s}" data-study-opt="studyMinutes" style="width:70px"> min</label>
+        <label class="row small">Break <input class="input sm" type="number" min="0" max="60" value="${b}" data-study-opt="breakMinutes" style="width:70px"> min</label>
+        <label class="row small">Rounds <input class="input sm" type="number" min="1" max="12" value="${r}" data-study-opt="rounds" style="width:60px"></label></div>
+      <div class="small muted">About ${M.fmtDuration((s * r + b * Math.max(0, r - 1)) * 60)} in all. You’ll get a notification at every switch.</div>`;
+  } else if (mode === 'dynamic') {
+    const periods = course ? M.activePeriods(course) : M.classPeriod(), taskBased = opt('taskBased', course?.taskBased ?? false);
+    options = `${course ? phaseBanner(course) : '<div class="small muted">No course: you’ll use the standard class period. Make a course to program your own periods, tasks and phase.</div>'}
+      ${course && M.openMistakes(course).length ? `<div class="orange small">${ic('refresh')} You’ll start with ${M.openMistakes(course).length} thing(s) you got wrong last time.</div>` : ''}
+      <div class="row small">Each period ends <div class="seg"><button class="${taskBased ? '' : 'on'}" data-act="study-taskbased" data-v="0">When its time is up</button><button class="${taskBased ? 'on' : ''}" data-act="study-taskbased" data-v="1">When its tasks are done</button></div></div>
+      <div class="period-strip">${periods.map(p => `<span class="period-pill"><b>${esc(p.title)}</b><span class="tiny muted">${taskBased ? `${p.tasks.length} task${p.tasks.length === 1 ? '' : 's'}` : `${p.minutes} min`}</span></span>`).join(`<span class="muted">›</span>`)}</div>`;
+  } else {
+    const pm = opt('plannedMinutes', 60);
+    options = `<label class="row small">How long <select class="input sm" style="width:auto" data-study-opt="plannedMinutes">${[30, 45, 60, 90, 120, 180, 0].map(m => `<option value="${m}" ${m === pm ? 'selected' : ''}>${m ? M.fmtDuration(m * 60) : 'Until I stop'}</option>`).join('')}</select></label>
+      <div class="small muted">Close the laptop or walk away from it. If you use this page during the session, Cadence notes it and reminds you.</div>`;
+  }
+  return `${last ? `<div class="callout" style="background:${tint('#30d158', .12)}"><span class="big green">${ic('check')}</span><div class="grow"><b>Logged ${M.fmtDuration(last.minutes * 60)} of ${esc(last.title)}</b>
+      <div class="small muted">${M.STUDY_MODES[last.mode].title}${last.mode === 'offline' ? (last.screenSeconds > 30 ? ` · screen used ${M.fmtDuration(last.screenSeconds)}` : ' · screen-free') : ''}${last.phase ? ` · ${M.PHASE_INFO[last.phase].title} phase` : ''}</div></div>
+      <button class="btn ghost sm icon" data-act="study-dismiss">${ic('x')}</button></div>` : ''}
+    <div class="mode-cards">${Object.entries(M.STUDY_MODES).map(([k, m]) => `<button class="mode-card ${mode === k ? 'on' : ''}" data-act="study-mode" data-mode="${k}">
+      <b>${ic(m.icon)} ${m.title}</b><span class="small muted">${m.blurb}</span></button>`).join('')}</div>
+    <div class="card pad stack" style="gap:12px">
+      <div class="row"><label class="row small">Course <select class="input sm" style="width:auto" data-study-opt="course"><option value="">No course</option>
+        ${courses.map(c => `<option value="${c.id}" ${c.id === d.course ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></label>
+        <button class="btn sm" data-act="course-new">${ic('plus')} New course</button></div>
+      <input class="input" id="studyTitle" placeholder="${course ? `What you’re studying (default: ${esc(course.chapter || course.title)})` : 'What you’re studying, e.g. Ch. 4 problems'}">
+      ${options}
+      <div class="row"><span class="grow"></span><button class="btn primary" data-act="study-start">${ic('play')} Start ${M.STUDY_MODES[mode].title.toLowerCase()} session</button></div>
+    </div>
+    ${studyStats()}`;
+}
+
+function runningStudy() {
+  const r = studyRun, now = Date.now(), course = r.courseId ? store.courses.get(r.courseId) : null;
+  let body = '';
+  if (r.mode === 'timed') {
+    const st = M.timedState(r, now), total = (st.onBreak ? r.breakMinutes : r.studyMinutes) * 60_000;
+    body = `<div class="card pad row" style="gap:30px">${bigClock(st.msLeft, total, st.onBreak ? 'break' : 'studying', st.onBreak ? 'var(--green)' : 'var(--accent)')}
+      <div class="stack" style="gap:10px"><h2 style="margin:0">${st.onBreak ? 'Break' : `Round ${st.round} of ${r.rounds}`}</h2>
+        <div class="muted">${st.onBreak ? 'Stand up, stretch, drink some water, look away from the screen.' : `Just ${esc(r.title)}. Phone away.`}</div>
+        <div class="row" style="gap:5px">${[...Array(r.rounds)].map((_, i) => `<span class="round-pip ${i + 1 < st.round || (i + 1 === st.round && st.onBreak) ? 'done' : i + 1 === st.round ? 'now' : ''}"></span>`).join('')}</div>
+        <div class="small muted">${r.studyMinutes} min study · ${r.breakMinutes} min break</div></div></div>`;
+  } else if (r.mode === 'offline') {
+    const left = M.offlineMsLeft(r, now);
+    body = `<div class="card pad row" style="gap:30px">${bigClock(left ?? M.runElapsed(r, now), left == null ? 1 : r.plannedMinutes * 60_000, left == null ? 'away' : left < 0 ? 'over' : 'left', 'var(--teal, #30b0c7)')}
+      <div class="stack" style="gap:10px"><h2 style="margin:0">Away from the screen</h2>
+        <div class="muted">Close the laptop or walk away. Paper, textbook, whiteboard. Come back and end the session when you’re done.</div>
+        <div class="${r.screenMs < 10_000 ? 'green' : 'orange'}">${ic(r.screenMs < 10_000 ? 'check' : 'monitor')} Screen used: <span data-study-screen>${M.fmtStudyClock(r.screenMs)}</span></div></div></div>`;
+  } else {
+    const strip = `<div class="period-strip"><span class="small muted">Cycle ${r.cycle}</span>${r.periods.map((p, i) => `<button class="period-pill ${i === r.index && !r.wrapUp ? 'now' : i < r.index || r.wrapUp ? 'done' : ''}" data-act="period-go" data-i="${i}">${i < r.index || r.wrapUp ? ic('check') + ' ' : ''}${esc(p.title)}</button>`).join('')}</div>`;
+    if (r.wrapUp) {
+      const next = M.nextPhase(r.phase);
+      body = `${course ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px"><h2 style="margin:0">${ic('check')} Cycle ${r.cycle} done</h2>
+        <div class="muted">Repeat, and move on to the next phase if it seems good.</div>
+        <div class="row" style="flex-wrap:wrap"><button class="btn" data-act="cycle-repeat" data-phase="${r.phase}">${ic('refresh')} Repeat ${M.PHASE_INFO[r.phase].title.toLowerCase()}</button>
+          ${next ? `<button class="btn primary" data-act="cycle-repeat" data-phase="${next}">Move on to ${M.PHASE_INFO[next].title.toLowerCase()}</button>` : ''}<span class="grow"></span>
+          <button class="btn" data-act="study-finish">Finish and log</button></div>
+        ${course ? `<div class="row"><input class="input grow" id="nextChapter" placeholder="Done with ${esc(course.chapter || 'this chapter')}? Next chapter"><button class="btn" data-act="cycle-chapter">Start it in the reading phase</button></div>` : ''}</div>`;
+    } else {
+      const p = M.runPeriod(r), left = M.periodMsLeft(r, now);
+      const rule = M.periodRule(p.kind, course ? M.courseRules(course, r.phase) : M.PHASE_INFO[r.phase].rules);
+      const next = r.periods[r.index + 1]?.title || 'Wrap up';
+      body = `${course ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px">
+        <div class="row" style="align-items:flex-start;gap:24px">${r.taskBased ? '' : bigClock(left, p.minutes * 60_000, left < 0 ? 'over' : 'left')}
+          <div class="stack grow" style="gap:8px"><div class="row"><h2 style="margin:0">${esc(p.title)}</h2>${rule ? ruleChip('Notes', rule) : ''}</div>
+            ${p.blurb ? `<div class="muted">${esc(p.blurb)}</div>` : ''}
+            ${p.tasks.length ? `<div class="stack" style="gap:4px">${p.tasks.map((t, i) => `<label class="check"><input type="checkbox" data-act-change="period-task" data-i="${i}" ${M.isChecked(r, p, i) ? 'checked' : ''}><span class="${M.isChecked(r, p, i) ? 'muted' : ''}">${esc(t)}</span></label>`).join('')}</div>`
+              : r.taskBased ? '<div class="small muted">No tasks programmed for this period. Add them under Courses, or move on when you’re done.</div>' : ''}</div></div>
+        ${r.index === 0 && course ? mistakeList(course, 'Start here: what you got wrong last time') : ''}
+        ${p.kind === 'quiz' || p.kind === 'officeHours' ? `<form class="row" data-form="mistake"><input class="input grow" id="mistakeText" placeholder="${p.kind === 'quiz' ? 'Something you got wrong (you’ll start there next time)' : 'Something to come back to'}">
+            <label class="check small"><input type="checkbox" id="mistakeCard" ${course ? '' : 'disabled'}>Also make a flashcard</label><button class="btn">Add</button></form>
+          ${r.mistakes.length ? `<div class="small muted">This session: ${r.mistakes.map(esc).join(' · ')}</div>` : ''}` : ''}
+        <div class="row">${r.taskBased ? '' : '<button class="btn sm" data-act="period-more">+5 min</button>'}<span class="grow"></span>
+          <button class="btn ${r.taskBased && p.tasks.length && !M.periodTasksDone(r, p) ? '' : 'primary'}" data-act="period-next">Next: ${esc(next)} ${ic('right')}</button></div></div>`;
+    }
+  }
+  return `<div class="row"><div class="grow"><div class="small muted">${ic(M.STUDY_MODES[r.mode].icon)} ${M.STUDY_MODES[r.mode].title}</div><h2 style="margin:2px 0 0">${esc(r.title)}</h2></div>
+      <span class="small muted"><span data-study-elapsed>${M.fmtStudyClock(M.runElapsed(r, now))}</span> so far</span>
+      <button class="btn" data-act="study-pause">${ic(r.pausedAt ? 'play' : 'pause')} ${r.pausedAt ? 'Resume' : 'Pause'}</button>
+      <button class="btn" data-act="study-end">End…</button></div>
+    ${body}${r.pausedAt ? `<div class="orange">${ic('pause')} Paused. The clock picks up where it left off.</div>` : ''}`;
+}
+
+function studyHistory() {
+  const logs = store.sortedStudyLogs, days = [...Array(14)].map((_, i) => M.addDays(M.startOfDay(new Date()), i - 13));
+  const mins = days.map(d => store.studyMinutes(d)), top = Math.max(30, ...mins);
+  return `${studyStats()}
+    <div class="card pad"><div class="study-bars">${days.map((d, i) => `<div class="sb"><span class="tiny muted">${mins[i] || ''}</span><i style="height:${Math.max(2, mins[i] / top * 90)}px;${M.isToday(d) ? 'background:var(--accent)' : ''}"></i><span class="tiny muted">${M.WEEKDAY_LETTER[d.getDay()]}</span></div>`).join('')}</div></div>
+    <div><div class="section-title">${ic('list')}Sessions <span class="count">${logs.length}</span></div>
+      <div class="card">${logs.length ? logs.slice(0, 60).map(l => { const c = l.courseID && store.courses.get(l.courseID);
+        return `<div class="crow"><span style="color:${c ? color(c.color) : 'var(--muted)'}">${ic(M.STUDY_MODES[l.mode]?.icon || 'study')}</span>
+        <div class="grow" style="min-width:0"><div class="title ellipsis">${esc(l.title)}</div><div class="meta"><span>${M.fmtDay(new Date(l.startedAt), { weekday: 'short', month: 'short', day: 'numeric' })} ${M.fmtTime(new Date(l.startedAt))}</span>
+          <span>${M.STUDY_MODES[l.mode]?.title || ''}</span>${l.phase ? `<span>${M.PHASE_INFO[l.phase].title} phase</span>` : ''}${l.note ? `<span class="ellipsis">${esc(l.note)}</span>` : ''}</div></div>
+        <b class="mono">${M.fmtDuration(l.minutes * 60)}</b><button class="btn ghost sm icon" data-act="studylog-delete" data-id="${esc(l.id)}" title="Delete">${ic('trash')}</button></div>`; }).join('')
+        : '<div class="crow muted">Nothing yet. Start a session under Session.</div>'}</div></div>`;
+}
+
+function coursesPanel() {
+  const courses = store.activeCourses;
+  let sel = store.device('studyCourseEdit', '');
+  if (!store.courses.get(sel) && courses[0]) sel = courses[0].id;
+  const c = store.courses.get(sel);
+  return `<div class="courses"><div class="course-list">${courses.map(x => `<button class="course-item ${x.id === sel ? 'on' : ''}" data-act="course-pick" data-id="${x.id}" style="--pc:${color(x.color)}">
+      <span class="pbar"></span><span class="grow" style="min-width:0"><b class="ellipsis">${esc(x.title)}</b><span class="tiny muted ellipsis">${M.PHASE_INFO[x.phase].title}${x.chapter ? ` · ${esc(x.chapter)}` : ''}</span></span></button>`).join('')}
+      <button class="btn sm" data-act="course-new">${ic('plus')} New course</button>
+      ${courses.length ? '' : '<div class="small muted">A course is a subject you study: Chemistry, CS, History. Each one gets its own class period, tasks and phase.</div>'}</div>
+    <div class="grow stack" style="gap:14px;min-width:0">${c ? courseEditor(c) : '<div class="muted">Pick a course to program it.</div>'}</div></div>`;
+}
+
+function courseEditor(c) {
+  const cid = esc(c.id);
+  const field = (k, v, ph, cls = 'input') => `<input class="${cls}" id="cf-${k}-${cid}" value="${esc(v)}" placeholder="${ph}" data-course-field="${k}" data-course="${cid}" autocomplete="off">`;
+  const rulesTable = M.PHASES.map(p => { const r = M.courseRules(c, p);
+    const sel = key => `<select class="input sm" data-course-rule="${p}|${key}" data-course="${cid}">${Object.entries(M.NOTE_RULES).map(([k, l]) => `<option value="${k}" ${r[key] === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    return `<tr class="${p === c.phase ? 'on' : ''}"><td><b>${M.PHASE_INFO[p].title}</b><div class="tiny muted">${esc(M.PHASE_INFO[p].blurb)}</div></td><td>${sel('homework')}</td><td>${sel('quiz')}</td></tr>`; }).join('');
+  const periods = c.periods.map((p, i) => `<div class="period-edit ${p.enabled === false ? 'off' : ''}">
+      <div class="row"><input type="checkbox" data-act-change="period-enable" data-course="${cid}" data-i="${i}" ${p.enabled === false ? '' : 'checked'}>
+        <input class="ptext top" id="pt-${esc(p.id)}" value="${esc(p.title)}" data-period-field="title" data-course="${cid}" data-i="${i}">
+        ${c.taskBased ? '' : `<input class="input sm" type="number" min="1" max="240" value="${p.minutes}" data-period-field="minutes" data-course="${cid}" data-i="${i}" style="width:64px"><span class="small muted">min</span>`}
+        <button class="btn ghost sm icon" data-act="period-move" data-course="${cid}" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>↑</button>
+        <button class="btn ghost sm icon" data-act="period-move" data-course="${cid}" data-i="${i}" data-d="1" ${i < c.periods.length - 1 ? '' : 'disabled'}>↓</button>
+        <button class="btn ghost sm icon danger" data-act="period-remove" data-course="${cid}" data-i="${i}">${ic('x')}</button></div>
+      <input class="ptext small muted" id="pb-${esc(p.id)}" value="${esc(p.blurb)}" placeholder="What to do in this period" data-period-field="blurb" data-course="${cid}" data-i="${i}">
+      ${p.tasks.map((t, ti) => `<div class="row small"><span class="muted">☐</span><span class="grow">${esc(t)}</span><button class="btn ghost sm icon" data-act="period-task-remove" data-course="${cid}" data-i="${i}" data-t="${ti}">${ic('x')}</button></div>`).join('')}
+      <form class="row small" data-form="period-task" data-course="${cid}" data-i="${i}"><span class="muted">+</span><input class="ptext" id="ptask-${esc(p.id)}" placeholder="Add a task for this period"></form></div>`).join('');
+  return `<div class="row"><input class="ptitle-input" id="cf-title-${cid}" value="${esc(c.title)}" data-course-field="title" data-course="${cid}" placeholder="Course name" autocomplete="off">
+      <span class="pswatches">${Object.keys(M.COLORS).map(x => `<button class="pswatch ${c.color === x ? 'on' : ''}" style="background:${M.COLORS[x]}" data-act="course-color" data-color="${x}" data-course="${cid}"></button>`).join('')}</span>
+      <button class="btn ghost sm icon danger" data-act="course-delete" data-course="${cid}" title="Delete course">${ic('trash')}</button></div>
+    ${field('chapter', c.chapter, 'What you’re on now (e.g. Ch. 4: Stoichiometry)')}
+    <div class="card pad stack" style="gap:10px"><div class="section-title" style="margin:0">${ic('study')} Phase</div>
+      <div class="seg">${M.PHASES.map(p => `<button class="${c.phase === p ? 'on' : ''}" data-act="course-phase" data-course="${cid}" data-phase="${p}">${M.PHASE_INFO[p].title}</button>`).join('')}</div>
+      <div class="small muted">These overlap a lot with the class periods, so it’s guidance: some ideas to try while studying.</div>
+      <table class="rules"><tr><th>Phase</th><th>Homework</th><th>Quiz</th></tr>${rulesTable}</table></div>
+    <div class="card pad stack" style="gap:10px"><div class="row"><div class="section-title grow" style="margin:0">${ic('study')} Class period</div>
+        <div class="seg"><button class="${c.taskBased ? '' : 'on'}" data-act="course-taskbased" data-course="${cid}" data-v="0">Timed</button><button class="${c.taskBased ? 'on' : ''}" data-act="course-taskbased" data-course="${cid}" data-v="1">By tasks</button></div></div>
+      <div class="small muted">${c.taskBased ? 'Each period ends when you’ve ticked off its tasks.' : `Each period ends when its time is up (${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * 60)} per cycle). Tasks are a checklist along the way.`}</div>
+      ${periods}
+      <div class="row"><select class="input sm" style="width:auto" data-act-change="period-add" data-course="${cid}"><option value="">+ Add a period…</option>${Object.entries(M.PERIOD_KINDS).map(([k, v]) => `<option value="${k}">${v.title}</option>`).join('')}</select>
+        <span class="grow"></span><button class="btn sm" data-act="period-reset" data-course="${cid}">Reset to the class period</button></div></div>
+    ${mistakeList(c)}
+    <div class="small muted">${ic('cards')} ${c.cards.length} flashcard${c.cards.length === 1 ? '' : 's'} · ${M.dueCards(c).length} due · <a href="/app/flashcards">Flashcards</a></div>`;
+}
+
+// ---------- Flashcards ----------
+function flashcardsView() {
+  const courses = store.activeCourses, sel = store.device('cardsCourse', ''), course = sel ? store.courses.get(sel) : null;
+  const scope = course ? [course] : courses;
+  const due = scope.reduce((n, c) => n + M.dueCards(c).length, 0);
+  let body;
+  if (!courses.length) body = '<div class="card pad muted">Flashcards belong to a course. Make one under Study › Courses first.</div>';
+  else if (ui.review) body = reviewView();
+  else {
+    const addTo = course || store.courses.get(store.device('cardsAddTo', '')) || courses[0], q = (ui.cardSearch || '').toLowerCase();
+    body = `<div class="due-hero"><div><div class="due-num">${due}</div><div class="muted">${due === 1 ? 'card due today' : 'cards due today'}</div></div><span class="grow"></span>
+        <button class="btn primary" data-act="review-start" ${due ? '' : 'disabled'}>${ic('play')} Review</button></div>
+      <form class="card pad stack" style="gap:8px" data-form="card-add"><div class="row"><b>New card</b>${course ? `<span class="muted">for ${esc(course.title)}</span>` : `<span class="small muted">for</span><select class="input sm" style="width:auto" data-act-change="cards-addto">${courses.map(c => `<option value="${c.id}" ${c.id === addTo.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select>`}</div>
+        <input class="input" id="cardFront" placeholder="Front (question)" autocomplete="off"><input class="input" id="cardBack" placeholder="Back (answer)" autocomplete="off">
+        <input type="hidden" id="cardCourse" value="${addTo.id}"><div class="row"><span class="grow"></span><button class="btn">Add card</button></div></form>
+      <input class="input" id="cardSearch" style="max-width:300px" placeholder="Search cards" value="${esc(ui.cardSearch || '')}" data-bind="cardSearch">
+      ${scope.map(c => { const cards = c.cards.filter(k => !q || k.front.toLowerCase().includes(q) || k.back.toLowerCase().includes(q));
+        return cards.length ? `<div><div class="section-title">${ic('cards')}${esc(c.title)} <span class="count">${cards.length}</span></div><div class="card">${cards.map(k => {
+          const days = Math.round((M.parseKey(k.due) - M.startOfDay(new Date())) / 86_400_000);
+          return `<div class="card-row"><input class="ptext" id="cfr-${esc(k.id)}" value="${esc(k.front)}" data-card-field="front" data-course="${c.id}" data-card="${esc(k.id)}">
+            <input class="ptext muted" id="cba-${esc(k.id)}" value="${esc(k.back)}" placeholder="(answer)" data-card-field="back" data-course="${c.id}" data-card="${esc(k.id)}">
+            <span class="tiny mono ${days <= 0 ? 'pink' : 'muted'}">${days <= 0 ? 'due' : `in ${days}d`}</span>
+            <button class="btn ghost sm icon" data-act="card-delete" data-course="${c.id}" data-card="${esc(k.id)}">${ic('trash')}</button></div>`; }).join('')}</div></div>` : ''; }).join('')}`;
+  }
+  return `<div class="header"><div class="grow"><h1>Flashcards</h1><div class="sub">Spaced repetition: what you know comes back less often, what you miss comes back soon.</div></div>
+      <select class="input" style="width:auto" data-act-change="cards-course"><option value="">All courses</option>${courses.map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></div>
+    <div class="page stack" style="max-width:900px">${body}</div>`;
+}
+
+function reviewView() {
+  const rv = ui.review, [cid, kid] = rv.queue[0] || [], c = cid && store.courses.get(cid), card = c?.cards.find(k => k.id === kid);
+  const head = `<div class="row"><span class="muted grow">${rv.reviewed} reviewed · ${rv.queue.length} left</span><button class="btn" data-act="review-stop">Stop</button></div>`;
+  if (!card) return `${head}<div class="card pad stack" style="align-items:center;gap:8px"><span class="big green">${ic('check')}</span><b>${rv.reviewed ? `All done: ${rv.reviewed} reviewed.` : 'Nothing due.'}</b><button class="btn" data-act="review-stop">Back to cards</button></div>`;
+  return `${head}<div class="flashcard"><div class="small" style="color:${color(c.color)};font-weight:650">${esc(c.title)}</div><div class="fc-front">${esc(card.front)}</div>
+      ${rv.shown ? `<hr><div class="fc-back ${card.back ? '' : 'muted'}">${esc(card.back || '(no answer written)')}</div>` : ''}</div>
+    ${rv.shown ? `<div class="grades">${[['again', 'Again', 'red'], ['hard', 'Hard', 'orange'], ['good', 'Good', 'green'], ['easy', 'Easy', 'blue']].map(([g, l, h], i) => `<button class="btn grade ${h}" data-act="review-grade" data-g="${g}">${l}<span class="tiny">${i + 1}</span></button>`).join('')}</div>
+      <div class="small muted">Keys 1–4 also work.</div>` : `<button class="btn primary" style="width:100%" data-act="review-show">Show answer <span class="tiny">space</span></button>`}`;
+}
+
+// ---------- Notes ----------
+function notesView() {
+  const q = (ui.noteSearch || '').toLowerCase();
+  const notes = store.sortedNotes.filter(n => !q || (n.title || '').toLowerCase().includes(q) || (n.body || '').toLowerCase().includes(q));
+  let sel = ui.noteSel;
+  if (!store.notes.get(sel)) sel = ui.noteSel = notes[0]?.id || null;
+  const n = sel && store.notes.get(sel);
+  return `<div class="header"><div class="grow"><h1>Notes</h1><div class="sub">Quick notes that sync to your Mac and iPhone.</div></div>
+      <button class="btn primary" data-act="note-new">${ic('plus')} New note</button></div>
+    <div class="page notes-page"><div class="note-list"><input class="input" id="noteSearch" placeholder="Search" value="${esc(ui.noteSearch || '')}" data-bind="noteSearch">
+        ${notes.map(x => `<button class="note-item ${x.id === sel ? 'on' : ''}" data-act="note-pick" data-id="${x.id}"><b class="ellipsis">${x.pinned ? ic('pin') + ' ' : ''}${esc(M.noteTitle(x))}</b>
+          <span class="tiny muted ellipsis">${M.fmtDay(new Date(x.updatedAt || x.createdAt), { month: 'short', day: 'numeric' })} ${esc((x.body || '').replace(/\n/g, ' ').slice(0, 60))}</span></button>`).join('')
+          || '<div class="small muted" style="padding:8px">No notes yet.</div>'}</div>
+      <div class="note-edit">${n ? `<div class="row"><input class="ptitle-input" id="noteTitle-${n.id}" placeholder="Title" value="${esc(n.title)}" data-note-field="title" data-id="${n.id}">
+          <button class="btn ghost sm" data-act="note-pin" data-id="${n.id}">${ic('pin')} ${n.pinned ? 'Unpin' : 'Pin'}</button>
+          <button class="btn ghost sm icon danger" data-act="note-delete" data-id="${n.id}" title="Delete">${ic('trash')}</button></div>
+        <textarea class="note-body" id="noteBody-${n.id}" data-note-field="body" data-id="${n.id}" placeholder="Write anything…">${esc(n.body)}</textarea>`
+        : '<div class="muted" style="padding:40px;text-align:center">Pick a note, or make a new one.</div>'}</div></div>`;
+}
+
 const actions = {
+  'nav-fold': el => { const f = new Set(store.device('navFolded', [])); f.has(el.dataset.sec) ? f.delete(el.dataset.sec) : f.add(el.dataset.sec); store.setDevice('navFolded', [...f]); render(); },
+  'study-tab': el => { store.setDevice('studyTab', el.dataset.tab); render(); },
+  'study-mode': el => { store.setDevice('studySetup', { ...store.device('studySetup', {}), mode: el.dataset.mode }); render(); },
+  'study-preset': el => { store.setDevice('studySetup', { ...store.device('studySetup', {}), studyMinutes: +el.dataset.s, breakMinutes: +el.dataset.b, rounds: +el.dataset.r }); render(); },
+  'study-taskbased': el => { store.setDevice('studySetup', { ...store.device('studySetup', {}), taskBased: el.dataset.v === '1' }); render(); },
+  'study-dismiss': () => { ui.studyLast = null; render(); },
+  'study-start': () => {
+    const d = store.device('studySetup', {}), mode = d.mode || 'dynamic', course = d.course ? store.courses.get(d.course) : null;
+    const typed = ($('#studyTitle')?.value || '').trim();
+    const r = M.newRun(mode, mode === 'timed' && !course ? null : course, typed || (course ? (course.chapter ? `${course.title}: ${course.chapter}` : course.title) : ''));
+    if (mode === 'timed' && course) r.courseId = course.id;
+    Object.assign(r, { studyMinutes: d.studyMinutes ?? 25, breakMinutes: d.breakMinutes ?? 5, rounds: d.rounds ?? 4, plannedMinutes: d.plannedMinutes ?? 60 });
+    if (d.taskBased != null) r.taskBased = d.taskBased;
+    startStudy(r);
+  },
+  'study-pause': () => updateRun(r => M.togglePause(r)),
+  'study-end': () => {
+    const r = studyRun;
+    openModal({ type: 'confirm', title: 'End this session?', text: `Ending logs ${M.fmtDuration(M.runElapsed(r) / 1000)} under History.`, yes: 'End and log', fn: finishStudy,
+      alt: 'Discard it', altFn: () => { studyRun = null; saveRun(); render(); } });
+  },
+  'study-finish': () => finishStudy(),
+  'period-go': el => updateRun(r => { r.index = Number(el.dataset.i); r.wrapUp = false; r.periodStart = M.runElapsed(r); }),
+  'period-next': () => updateRun(r => M.nextPeriod(r)),
+  'period-more': () => updateRun(r => { r.periodStart += 300_000; }),
+  'cycle-repeat': el => updateRun(r => M.repeatCycle(r, el.dataset.phase)),
+  'cycle-chapter': () => {
+    const t = ($('#nextChapter')?.value || '').trim(), r = studyRun;
+    if (r?.courseId) store.editCourse(r.courseId, c => { if (t) c.chapter = t; c.phase = 'reading'; });
+    updateRun(x => { M.repeatCycle(x, 'reading'); if (t) x.title = `${store.courses.get(x.courseId)?.title || ''}: ${t}`; });
+  },
+  'mistake-done': el => store.editCourse(el.dataset.course, c => { const m = c.mistakes.find(x => x.id === el.dataset.id); if (m) m.resolvedAt = M.iso(new Date()); }),
+  'studylog-delete': el => store.deleteStudyLog(el.dataset.id),
+  'course-new': () => {
+    const colors = Object.keys(M.COLORS).filter(c => c !== 'gray');
+    const c = store.upsertCourse(M.newCourse({ color: colors[Math.floor(Math.random() * colors.length)] }));
+    store.setDevice('studyCourseEdit', c.id); store.setDevice('studyTab', 'courses');
+    store.setDevice('studySetup', { ...store.device('studySetup', {}), course: c.id });
+    render(); setTimeout(() => { const i = document.getElementById(`cf-title-${c.id}`); i?.focus(); i?.select(); }, 0);
+  },
+  'course-pick': el => { store.setDevice('studyCourseEdit', el.dataset.id); render(); },
+  'course-color': el => store.editCourse(el.dataset.course, c => { c.color = el.dataset.color; }),
+  'course-phase': el => store.editCourse(el.dataset.course, c => { c.phase = el.dataset.phase; }),
+  'course-taskbased': el => store.editCourse(el.dataset.course, c => { c.taskBased = el.dataset.v === '1'; }),
+  'course-delete': el => {
+    const c = store.courses.get(el.dataset.course);
+    if (!c || !confirm(`Delete ${c.title} and its ${c.cards.length} flashcard(s)? Your study history is kept.`)) return;
+    store.deleteCourse(c.id);
+    toast(`Deleted ${c.title}`, { icon: 'trash', undo: () => store.upsertCourse(c) });
+  },
+  'period-move': el => store.editCourse(el.dataset.course, c => { const i = +el.dataset.i, j = i + +el.dataset.d; [c.periods[i], c.periods[j]] = [c.periods[j], c.periods[i]]; }),
+  'period-remove': el => store.editCourse(el.dataset.course, c => { c.periods.splice(+el.dataset.i, 1); }),
+  'period-reset': el => store.editCourse(el.dataset.course, c => { c.periods = M.classPeriod(); }),
+  'period-task-remove': el => store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i].tasks.splice(+el.dataset.t, 1); }),
+  'review-start': () => {
+    const sel = store.device('cardsCourse', ''), scope = sel ? [store.courses.get(sel)].filter(Boolean) : store.activeCourses;
+    const queue = scope.flatMap(c => M.dueCards(c).map(k => [c.id, k.id])).sort(() => Math.random() - 0.5);
+    ui.review = { queue, shown: false, reviewed: 0 }; render();
+  },
+  'review-stop': () => { ui.review = null; render(); },
+  'review-show': () => { if (ui.review) { ui.review.shown = true; render(); } },
+  'review-grade': el => {
+    const rv = ui.review, [cid, kid] = rv?.queue[0] || [];
+    if (!cid) return;
+    store.editCourse(cid, c => { const i = c.cards.findIndex(k => k.id === kid); if (i >= 0) c.cards[i] = M.reviewCard(c.cards[i], el.dataset.g); });
+    rv.queue.shift(); rv.reviewed++; rv.shown = false;
+    if (el.dataset.g === 'again') rv.queue.push([cid, kid]);
+    render();
+  },
+  'card-delete': el => store.editCourse(el.dataset.course, c => { c.cards = c.cards.filter(k => k.id !== el.dataset.card); }),
+  'note-new': () => { const n = store.upsertNote({ id: M.uuid(), title: '', body: '', createdAt: M.iso(new Date()) }); ui.noteSel = n.id; ui.noteSearch = ''; render(); setTimeout(() => document.getElementById(`noteTitle-${n.id}`)?.focus(), 0); },
+  'note-pick': el => { ui.noteSel = el.dataset.id; render(); },
+  'note-pin': el => { const n = store.notes.get(el.dataset.id); if (n) store.upsertNote({ ...n, pinned: !n.pinned }); },
+  'note-delete': el => { const n = store.notes.get(el.dataset.id); if (!n) return; store.deleteNote(n.id); ui.noteSel = null; toast('Note deleted', { icon: 'trash', undo: () => store.upsertNote(n) }); },
   'project-new': () => {
     const colors = Object.keys(M.COLORS).filter(c => c !== 'gray');
     const p = M.newProject({ color: colors[Math.floor(Math.random() * colors.length)] });
@@ -2451,6 +2880,7 @@ const actions = {
     toast(`Deleted “${t.title}”`, { icon: 'trash', undo: () => { store.restoreTask(copy); toast('Task restored', { icon: 'check' }); } });
   },
   'confirm-yes': () => { const fn = ui.modal.fn; closeModal(); fn(); },
+  'confirm-alt': () => { const fn = ui.modal.altFn; closeModal(); fn?.(); },
   close: el => { const then = el.dataset.then; closeModal(); if (then) navigate(then); },
   overlay: (el, e) => { if (e.target === el && ui.modal?.type !== 'editor') closeModal(); },
   'checkin-back': () => { ui.modal.reflecting = null; renderModal(); },
@@ -2611,6 +3041,12 @@ document.addEventListener('input', e => {
     $('#reflSubmit').disabled = n < min;
     return;
   }
+  if (el.dataset.courseField) { store.editCourse(el.dataset.course, c => { c[el.dataset.courseField] = el.value; }); return; }
+  if (el.dataset.periodField && el.dataset.periodField !== 'minutes') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i][el.dataset.periodField] = el.value; }); return; }
+  if (el.dataset.cardField) { store.editCourse(el.dataset.course, c => { const k = c.cards.find(x => x.id === el.dataset.card); if (k) k[el.dataset.cardField] = el.value; }); return; }
+  if (el.dataset.noteField) { const n = store.notes.get(el.dataset.id); if (n) store.upsertNote({ ...n, [el.dataset.noteField]: el.value }); return; }
+  if (el.dataset.bind === 'cardSearch') { ui.cardSearch = el.value; render(); return; }
+  if (el.dataset.bind === 'noteSearch') { ui.noteSearch = el.value; render(); return; }
   if (el.dataset.pfield === 'title') { projectEdit(el, p => { p.title = el.value; }); return; }
   if (el.dataset.pfield === 'item-title') { projectEdit(el, p => M.updateItem(p, el.dataset.item, i => { i.title = el.value; })); return; }
   const bind = el.dataset.bind;
@@ -2630,6 +3066,18 @@ function setProjectDate(el, value) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.studyOpt) {
+    const k = el.dataset.studyOpt, v = k === 'course' ? el.value : Math.max(0, Number(el.value) || 0);
+    store.setDevice('studySetup', { ...store.device('studySetup', {}), [k]: v, ...(k === 'course' ? { taskBased: undefined } : {}) }); render(); return;
+  }
+  if (el.dataset.periodField === 'minutes') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i].minutes = Math.min(240, Math.max(1, Number(el.value) || 1)); }); return; }
+  if (el.dataset.courseRule) { const [phase, key] = el.dataset.courseRule.split('|'); store.editCourse(el.dataset.course, c => { c.rules = { ...(c.rules || {}), [phase]: { ...M.courseRules(c, phase), [key]: el.value } }; }); return; }
+  if (el.dataset.actChange === 'period-enable') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i].enabled = el.checked; }); return; }
+  if (el.dataset.actChange === 'period-add') { if (el.value) store.editCourse(el.dataset.course, c => { c.periods.push(M.newPeriod(el.value)); }); return; }
+  if (el.dataset.actChange === 'period-task') { updateRun(r => M.isChecked(r, M.runPeriod(r), +el.dataset.i) ? r.checked = r.checked.filter(k => k !== `${M.runPeriod(r).id}|${el.dataset.i}`) : r.checked.push(`${M.runPeriod(r).id}|${el.dataset.i}`)); return; }
+  if (el.dataset.actChange === 'cards-course') { store.setDevice('cardsCourse', el.value); ui.review = null; render(); return; }
+  if (el.dataset.actChange === 'cards-addto') { store.setDevice('cardsAddTo', el.value); render(); return; }
+  if (el.dataset.actChange === 'nav-hide') { const h = new Set(store.device('navHidden', [])); el.checked ? h.delete(el.value) : h.add(el.value); store.setDevice('navHidden', [...h]); render(); return; }
   if (el.dataset.bind === 'projectTodayDays') { store.updateSettings({ projectTodayDays: Number(el.value) }); return; }
   if (el.dataset.bind === 'todoRange') { ui.todo.range = Number(el.value); render(); return; }
   if (el.dataset.bind === 'todoCompleted') { ui.todo.showCompleted = el.checked; render(); return; }
@@ -2688,6 +3136,27 @@ document.addEventListener('submit', async e => {
   const form = e.target;
   e.preventDefault();
   const kind = form.dataset.form;
+  if (kind === 'mistake') {
+    const t = ($('#mistakeText')?.value || '').trim(), r = studyRun;
+    if (t && r) {
+      if (r.courseId) store.editCourse(r.courseId, c => { c.mistakes.push({ id: M.uuid(), text: t, addedAt: M.iso(new Date()) }); if ($('#mistakeCard')?.checked) c.cards.push(M.newCard(t, '')); });
+      updateRun(x => { x.mistakes.push(t); });
+      setTimeout(() => $('#mistakeText')?.focus(), 0);
+    }
+    return;
+  }
+  if (kind === 'period-task') {
+    const input = form.querySelector('input'), t = input.value.trim();
+    if (t) store.editCourse(form.dataset.course, c => { c.periods[+form.dataset.i].tasks.push(t); });
+    const id = input.id; setTimeout(() => document.getElementById(id)?.focus(), 0);
+    return;
+  }
+  if (kind === 'card-add') {
+    const f = ($('#cardFront')?.value || '').trim(), b = ($('#cardBack')?.value || '').trim(), cid = $('#cardCourse')?.value;
+    if (f && cid) store.editCourse(cid, c => { c.cards.push(M.newCard(f, b)); });
+    setTimeout(() => $('#cardFront')?.focus(), 0);
+    return;
+  }
   if (kind === 'project-add') {
     const input = form.querySelector('input'), title = input.value.trim();
     if (title) store.editProject(form.dataset.project, p => M.insertItem(p, M.newProjectItem({ title })));
@@ -2787,8 +3256,21 @@ document.addEventListener('submit', async e => {
   }
 });
 
-const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', projects: 'P', habits: 'A', reflections: 'R', focus: 'F', screentime: 'U', booking: 'B', settings: ',' };
+const SHORTCUT_FOR = { home: 'H', today: 'T', week: 'W', month: 'M', todo: 'L', projects: 'P', study: 'Y', flashcards: 'K', notes: 'O', habits: 'A', reflections: 'R', focus: 'F', screentime: 'U', booking: 'B', settings: ',' };
 document.addEventListener('keydown', e => {
+  // Notes: Return or Tab in the title goes to the body.
+  if (e.target.dataset?.noteField === 'title' && (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey))) {
+    e.preventDefault();
+    const b = document.getElementById(`noteBody-${e.target.dataset.id}`);
+    if (b) { b.focus(); b.setSelectionRange(0, 0); }
+    return;
+  }
+  // Flashcard review: space shows the answer, 1-4 grade it.
+  if (ui.route === 'flashcards' && ui.review && !e.target.closest?.('input, textarea, select') && !ui.modal) {
+    if (e.key === ' ' && !ui.review.shown) { e.preventDefault(); actions['review-show'](); return; }
+    const g = { 1: 'again', 2: 'hard', 3: 'good', 4: 'easy' }[e.key];
+    if (g && ui.review.shown) { e.preventDefault(); actions['review-grade']({ dataset: { g } }); return; }
+  }
   // Habit editor: Return in the "add a step" box adds the step instead of saving the habit.
   if (e.target.dataset?.edit === 'step-new' && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); actions['step-add'](e.target); return; }
   // Project outline: Return adds the next subtask, Tab / Shift-Tab move a row in or out a level.
