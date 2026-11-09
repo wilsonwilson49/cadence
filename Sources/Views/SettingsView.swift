@@ -24,6 +24,7 @@ struct SettingsView: View {
             syncSection
             notificationsSection
             ringSection
+            sidebarSection
             nudgeSection
             checkInSection
             reflectionSection
@@ -122,6 +123,26 @@ struct SettingsView: View {
             }
         } header: {
             Text("Notifications")
+        }
+    }
+
+    @AppStorage("sidebarHidden") private var sidebarHidden = ""
+    private var sidebarSection: some View {
+        Section {
+            ForEach(SidebarGroup.all) { g in
+                Toggle(isOn: Binding(get: { !sidebarHidden.split(separator: ",").map(String.init).contains(g.name) }, set: { show in
+                    var h = Set(sidebarHidden.split(separator: ",").map(String.init))
+                    if show { h.remove(g.name) } else { h.insert(g.name) }
+                    sidebarHidden = h.sorted().joined(separator: ",")
+                })) {
+                    Text(g.name)
+                    Text(g.screens.map(\.title).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Text("Hidden sections are only hidden on this Mac. Click a section's heading in the sidebar to fold it.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Sidebar")
         }
     }
 

@@ -11,6 +11,9 @@ final class Store: ObservableObject {
     @Published var focusSessions: [FocusSession] = [] { didSet { scheduleSave() } }
     @Published var screenDays: [ScreenDay] = [] { didSet { scheduleSave() } }
     @Published var projects: [Project] = [] { didSet { stampProjects(oldValue); scheduleSave() } }
+    @Published var courses: [Course] = [] { didSet { stamp(\.courses, oldValue, kind: "course"); scheduleSave() } }
+    @Published var studyLogs: [StudyLog] = [] { didSet { stamp(\.studyLogs, oldValue, kind: "study"); scheduleSave() } }
+    @Published var notes: [Note] = [] { didSet { stamp(\.notes, oldValue, kind: "note"); scheduleSave() } }
 
     /// Deleted records ("task|<id>" / "reflection|<id>") → when, so deletions sync too.
     private(set) var tombstones: [String: Date] = [:]
@@ -31,6 +34,9 @@ final class Store: ObservableObject {
         var focusSessions: [FocusSession]?
         var screenDays: [ScreenDay]?
         var projects: [Project]?
+        var courses: [Course]?
+        var studyLogs: [StudyLog]?
+        var notes: [Note]?
     }
 
     init(directory: URL) {
@@ -55,6 +61,9 @@ final class Store: ObservableObject {
             focusSessions = snap.focusSessions ?? []
             screenDays = snap.screenDays ?? []
             projects = snap.projects ?? []
+            courses = snap.courses ?? []
+            studyLogs = snap.studyLogs ?? []
+            notes = snap.notes ?? []
             settingsUpdatedAt = snap.settingsUpdatedAt
             isLoading = false
         } catch {
@@ -84,7 +93,8 @@ final class Store: ObservableObject {
         do {
             let data = try encoder.encode(Snapshot(tasks: tasks, reflections: reflections, settings: settings,
                                                    tombstones: tombstones, settingsUpdatedAt: settingsUpdatedAt,
-                                                   focusSessions: focusSessions, screenDays: screenDays, projects: projects))
+                                                   focusSessions: focusSessions, screenDays: screenDays, projects: projects,
+                                                   courses: courses, studyLogs: studyLogs, notes: notes))
             try data.write(to: fileURL, options: .atomic)
         } catch {
             NSLog("Cadence: save failed: %@", "\(error)")
@@ -155,6 +165,49 @@ final class Store: ObservableObject {
         if changed { stamping = true; projects = updated; stamping = false }
     }
 
+    /// Same as stampProjects, for any synced record list (courses, study logs, notes).
+    private func stamp<T: SyncedRecord>(_ path: ReferenceWritableKeyPath<Store, [T]>, _ old: [T], kind: String) {
+        guard !isLoading, !applyingRemote, !stamping else { return }
+        let current = self[keyPath: path]
+        let oldByID = Dictionary(old.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let now = Date()
+        var updated = current
+        var changed = false
+        for i in updated.indices {
+            if let o = oldByID[updated[i].id] {
+                var a = o, b = updated[i]
+                a.updatedAt = nil; b.updatedAt = nil
+                if a == b { continue }
+            }
+            updated[i].updatedAt = now
+            changed = true
+        }
+        let ids = Set(current.map(\.id))
+        for o in old where !ids.contains(o.id) { tombstones["\(kind)|\(o.id.uuidString)"] = now }
+        if changed { stamping = true; self[keyPath: path] = updated; stamping = false }
+    }
+
+    private func pending<T: SyncedRecord>(_ list: [T], kind: String, since: Date?, _ newer: (Date) -> Bool, into out: inout [SyncChange]) {
+        for r in list where since == nil || (r.updatedAt.map(newer) ?? false) {
+            out.append(SyncChange(kind: kind, id: r.id.uuidString, updatedAt: r.updatedAt ?? r.stampFallback, deleted: false, data: Self.jsonObject(r)))
+        }
+    }
+
+    private func merge<T: SyncedRecord>(_ list: inout [T], _ c: SyncChange) {
+        guard let id = UUID(uuidString: c.id) else { return }
+        let i = list.firstIndex { $0.id == id }
+        if let i, (list[i].updatedAt ?? list[i].stampFallback) > c.updatedAt { return }
+        if c.deleted {
+            if let i { list.remove(at: i) }
+            tombstones["\(c.kind)|\(c.id.uppercased())"] = nil
+            return
+        }
+        guard let obj = c.data, let data = try? JSONSerialization.data(withJSONObject: obj),
+              var r = try? Self.syncDecoder.decode(T.self, from: data) else { return }
+        r.updatedAt = c.updatedAt
+        if let i { list[i] = r } else { list.append(r) }
+    }
+
     private func stampSettings(_ old: AppSettings) {
         guard !isLoading, !applyingRemote else { return }
         if SyncedSettings(old) != SyncedSettings(settings) { settingsUpdatedAt = Date() }
@@ -210,6 +263,9 @@ final class Store: ObservableObject {
         for p in projects where since == nil || (p.updatedAt.map(newer) ?? false) {
             out.append(SyncChange(kind: "project", id: p.id.uuidString, updatedAt: p.updatedAt ?? p.createdAt, deleted: false, data: Self.jsonObject(p)))
         }
+        pending(courses, kind: "course", since: since, newer, into: &out)
+        pending(studyLogs, kind: "study", since: since, newer, into: &out)
+        pending(notes, kind: "note", since: since, newer, into: &out)
         for (key, when) in tombstones where newer(when) {
             let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
             if parts.count == 2 { out.append(SyncChange(kind: parts[0], id: parts[1], updatedAt: when, deleted: true, data: nil)) }
@@ -232,6 +288,7 @@ final class Store: ObservableObject {
         var newReflections = reflections
         var newSettings = settings
         var newProjects = projects
+        var newCourses = courses, newLogs = studyLogs, newNotes = notes
         for c in changes {
             switch c.kind {
             case "task":
@@ -294,12 +351,18 @@ final class Store: ObservableObject {
                       var p = try? Self.syncDecoder.decode(Project.self, from: data) else { continue }
                 p.updatedAt = c.updatedAt
                 if let i { newProjects[i] = p } else { newProjects.append(p) }
+            case "course": merge(&newCourses, c)
+            case "study": merge(&newLogs, c)
+            case "note": merge(&newNotes, c)
             default:
                 continue
             }
         }
         tasks = newTasks
         projects = newProjects
+        courses = newCourses
+        studyLogs = newLogs
+        notes = newNotes
         reflections = newReflections.sorted { $0.createdAt > $1.createdAt }
         settings = newSettings
     }
@@ -311,6 +374,39 @@ final class Store: ObservableObject {
     // MARK: Projects
 
     func project(_ id: UUID) -> Project? { projects.first { $0.id == id } }
+
+    // MARK: Study and notes
+
+    func course(_ id: UUID?) -> Course? { id.flatMap { i in courses.first { $0.id == i } } }
+    var activeCourses: [Course] { courses.filter { $0.archived != true }.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending } }
+    func upsert(_ c: Course) { if let i = courses.firstIndex(where: { $0.id == c.id }) { courses[i] = c } else { courses.append(c) } }
+    func editCourse(_ id: UUID, _ change: (inout Course) -> Void) {
+        guard let i = courses.firstIndex(where: { $0.id == id }) else { return }
+        var c = courses[i]; change(&c); courses[i] = c
+    }
+    func deleteCourse(_ id: UUID) { courses.removeAll { $0.id == id } }
+    func saveStudyLog(_ l: StudyLog) { if let i = studyLogs.firstIndex(where: { $0.id == l.id }) { studyLogs[i] = l } else { studyLogs.append(l) } }
+    var sortedStudyLogs: [StudyLog] { studyLogs.sorted { $0.startedAt > $1.startedAt } }
+    /// Minutes studied on a day (all modes).
+    func studyMinutes(on day: Date) -> Int { studyLogs.filter { $0.startedAt.isSameDay(day) }.reduce(0) { $0 + $1.minutes } }
+    /// Days in a row with some study, counting back from today (or yesterday, if nothing yet today).
+    var studyStreak: Int {
+        let days = Set(studyLogs.filter { $0.minutes > 0 }.map { DateKey.string($0.startedAt) })
+        var d = Date().startOfDay
+        if !days.contains(DateKey.string(d)) { d = d.adding(days: -1) }
+        var n = 0
+        while days.contains(DateKey.string(d)) { n += 1; d = d.adding(days: -1) }
+        return n
+    }
+    var dueCardCount: Int { activeCourses.reduce(0) { $0 + $1.dueCards().count } }
+    func upsert(_ n: Note) { if let i = notes.firstIndex(where: { $0.id == n.id }) { notes[i] = n } else { notes.append(n) } }
+    func deleteNote(_ id: UUID) { notes.removeAll { $0.id == id } }
+    var sortedNotes: [Note] {
+        notes.sorted { a, b in
+            if (a.pinned == true) != (b.pinned == true) { return a.pinned == true }
+            return (a.updatedAt ?? a.createdAt) > (b.updatedAt ?? b.createdAt)
+        }
+    }
     func upsert(_ p: Project) {
         if let i = projects.firstIndex(where: { $0.id == p.id }) { projects[i] = p } else { projects.append(p) }
     }

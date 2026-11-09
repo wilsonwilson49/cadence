@@ -21,6 +21,21 @@ enum DebugDriver {
                 model.store.tasks[i].steps = ["Put the phone in another room", "Read 20 pages", "Write down one idea"].map { HabitStep(title: $0) }
             }
         }
+        if LaunchOptions.has("-demo") && model.store.courses.isEmpty { model.store.courses = Course.demo() }
+        if LaunchOptions.has("-demo") && model.store.notes.isEmpty {
+            var n = Note(title: "Chem test topics", body: "Moles and molar mass\nLimiting reagent\nPercent yield\n\nAsk Ms. Park about #14")
+            n.pinned = true
+            model.store.notes = [n, Note(title: "Ideas", body: "Cadence: study timer in the menu bar")]
+        }
+        // -study <timed|dynamic|offline>: opens Study with a session running (class period: on the first demo course).
+        if let m = LaunchOptions.value("-study"), let mode = StudyMode(rawValue: m) {
+            model.screen = .study
+            let course = model.store.activeCourses.first { $0.title == "Chemistry" } ?? model.store.activeCourses.first
+            var r = StudyRun.make(mode, course: mode == .timed ? nil : course, title: mode == .timed ? "AMC 10 practice" : "")
+            r.startedAt = Date().addingTimeInterval(-500)
+            if mode == .offline { r.screenSeconds = 42 }
+            model.study.start(r)
+        }
         if LaunchOptions.has("-demo") && model.store.projects.isEmpty {
             model.store.projects = [Project.demo(), Project(title: "Plan the family trip", color: .teal,
                                                              due: DateKey.string(Date().adding(days: 40)),
@@ -118,6 +133,7 @@ enum DebugDriver {
                     .environmentObject(model).environmentObject(model.store).environmentObject(model.google)
                     .environmentObject(model.engine).environmentObject(model.sync).environmentObject(model.calendly)
                     .environmentObject(model.importer).environmentObject(model.focus).environmentObject(model.screenTime)
+                    .environmentObject(model.study)
                     .background(Color(nsColor: .windowBackgroundColor))
                     .environment(\.colorScheme, .dark)
                 let r = ImageRenderer(content: view)
@@ -286,7 +302,7 @@ enum DebugDriver {
         let host = NSHostingController(rootView: MenuBarView()
             .environmentObject(model).environmentObject(model.store).environmentObject(model.google)
             .environmentObject(model.engine).environmentObject(model.sync).environmentObject(model.calendly)
-            .environmentObject(model.importer).environmentObject(model.focus).environmentObject(model.screenTime))
+            .environmentObject(model.importer).environmentObject(model.focus).environmentObject(model.screenTime).environmentObject(model.study))
         host.sizingOptions = .preferredContentSize
         let w = NSPanel(contentViewController: host)
         w.styleMask = [.titled, .nonactivatingPanel]

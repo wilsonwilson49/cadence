@@ -18,8 +18,9 @@ struct CadenceApp: App {
                 .environmentObject(AppModel.shared.importer)
                 .environmentObject(AppModel.shared.focus)
                 .environmentObject(AppModel.shared.screenTime)
+                .environmentObject(AppModel.shared.study)
         } label: {
-            MenuBarLabel(store: store, focus: AppModel.shared.focus)
+            MenuBarLabel(store: store, focus: AppModel.shared.focus, study: AppModel.shared.study)
         }
         .menuBarExtraStyle(.window)
     }
@@ -58,14 +59,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// The number a running study session shows: time left in the round / period / session, or time so far.
+@MainActor func studyClock(_ r: StudyRun, now: Date = Date()) -> Int {
+    switch r.mode {
+    case .timed: return r.timedState(now).secondsLeft
+    case .dynamic: return r.taskBased || r.wrapUp ? Int(r.elapsed(now)) : r.periodSecondsLeft(now)
+    case .offline: return r.offlineSecondsLeft(now) ?? Int(r.elapsed(now))
+    }
+}
+
 /// Menu bar: the focus countdown while a session runs, otherwise what's left today.
 private struct MenuBarLabel: View {
     @ObservedObject var store: Store
     @ObservedObject var focus: FocusEngine
+    @ObservedObject var study: StudyEngine
     var body: some View {
         if focus.running {
             Image(systemName: "scope")
             Text(focus.clock).monospacedDigit()
+        } else if let r = study.run, !r.paused {
+            Image(systemName: r.mode.symbol)
+            Text(clockString(studyClock(r))).monospacedDigit()
         } else {
             let remaining = store.remainingToday
             Image(systemName: remaining > 0 ? "checklist.unchecked" : "checklist.checked")

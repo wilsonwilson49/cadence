@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home, today, week, month, todo, projects, habits, reflections, focus, screentime, booking, settings
+    case home, today, week, month, todo, projects, study, flashcards, notes, habits, reflections, focus, screentime, booking, settings
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -13,6 +13,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .month: return "Month"
         case .todo: return "To-Do List"
         case .projects: return "Projects"
+        case .study: return "Study"
+        case .flashcards: return "Flashcards"
+        case .notes: return "Notes"
         case .reflections: return "Reflections"
         case .habits: return "Habits"
         case .focus: return "Focus"
@@ -29,6 +32,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .month: return "calendar"
         case .todo: return "checklist"
         case .projects: return "square.stack.3d.up"
+        case .study: return "graduationcap"
+        case .flashcards: return "rectangle.on.rectangle.angled"
+        case .notes: return "note.text"
         case .reflections: return "text.quote"
         case .habits: return "arrow.triangle.2.circlepath.circle"
         case .focus: return "scope"
@@ -54,6 +60,7 @@ final class AppModel: ObservableObject {
     private(set) lazy var engine = ReminderEngine(model: self)
     private(set) lazy var screenTime = ScreenTimeTracker(model: self)
     private(set) lazy var focus = FocusEngine(model: self)
+    private(set) lazy var study = StudyEngine(model: self)
 
     @Published var screen: Screen = .home
     @Published var reflectionTarget: Occurrence?
@@ -85,6 +92,7 @@ final class AppModel: ObservableObject {
         google.restore()
         engine.start()
         screenTime.start()
+        _ = study   // resumes a study session that was running when Cadence quit
         LoginItem.applyDefault()
         sync.start()
         calendly.restore()
@@ -223,7 +231,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
         return view.environmentObject(m).environmentObject(m.store).environmentObject(m.google)
             .environmentObject(m.engine).environmentObject(m.sync)
             .environmentObject(m.calendly).environmentObject(m.importer)
-            .environmentObject(m.focus).environmentObject(m.screenTime)
+            .environmentObject(m.focus).environmentObject(m.screenTime).environmentObject(m.study)
     }
 
     // MARK: Running in the background

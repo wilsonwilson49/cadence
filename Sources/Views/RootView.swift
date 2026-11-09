@@ -28,23 +28,16 @@ struct RootView: View {
                     Section {
                         row(.home)
                     }
-                    Section("Plan") {
-                        row(.today, badge: store.remainingToday)
-                        row(.week)
-                        row(.month)
-                        row(.todo)
-                        row(.projects, badge: store.projectToday().filter { $0.item?.isDone == false }.count)
-                    }
-                    Section("Grow") {
-                        row(.habits, badge: store.countedToday().filter { $0.isHabit && !$0.isUntilDone && !$0.isResolved }.count)
-                        row(.reflections, badge: store.reflections.count)
-                    }
-                    Section("Focus") {
-                        row(.focus)
-                        row(.screentime)
-                    }
-                    Section("Connect") {
-                        row(.booking)
+                    ForEach(SidebarGroup.all.filter { !hidden.contains($0.name) }) { g in
+                        Section(isExpanded: expandedBinding(g.name)) {
+                            ForEach(g.screens, id: \.self) { s in row(s, badge: badge(s)) }
+                        } header: {
+                            Text(g.name)
+                                .contextMenu {
+                                    Button("Hide \(g.name)") { setHidden(g.name, true) }
+                                    Button("Show hidden sections") { hiddenRaw = "" }.disabled(hidden.isEmpty)
+                                }
+                        }
                     }
                     Section {
                         row(.settings)
@@ -87,6 +80,35 @@ struct RootView: View {
         }
     }
 
+    // Sidebar sections: click a heading to fold it; right-click to hide it (Settings › Sidebar brings it back).
+    @AppStorage("sidebarCollapsed") private var collapsedRaw = ""
+    @AppStorage("sidebarHidden") private var hiddenRaw = ""
+    private var collapsed: Set<String> { Set(collapsedRaw.split(separator: ",").map(String.init)) }
+    private var hidden: Set<String> { Set(hiddenRaw.split(separator: ",").map(String.init)) }
+    private func expandedBinding(_ name: String) -> Binding<Bool> {
+        Binding(get: { !collapsed.contains(name) }, set: { open in
+            var c = collapsed
+            if open { c.remove(name) } else { c.insert(name) }
+            collapsedRaw = c.sorted().joined(separator: ",")
+        })
+    }
+    private func setHidden(_ name: String, _ on: Bool) {
+        var h = hidden
+        if on { h.insert(name) } else { h.remove(name) }
+        hiddenRaw = h.sorted().joined(separator: ",")
+    }
+
+    private func badge(_ s: Screen) -> Int {
+        switch s {
+        case .today: return store.remainingToday
+        case .projects: return store.projectToday().filter { $0.item?.isDone == false }.count
+        case .habits: return store.countedToday().filter { $0.isHabit && !$0.isUntilDone && !$0.isResolved }.count
+        case .reflections: return store.reflections.count
+        case .flashcards: return store.dueCardCount
+        default: return 0
+        }
+    }
+
     private func row(_ s: Screen, badge: Int = 0) -> some View {
         Label(s.title, systemImage: s.symbol)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,6 +127,9 @@ struct RootView: View {
         case .month: MonthView()
         case .todo: TodoView()
         case .projects: ProjectsView()
+        case .study: StudyView()
+        case .flashcards: FlashcardsView()
+        case .notes: NotesView()
         case .reflections: ReflectionsView()
         case .habits: HabitsView()
         case .focus: FocusView()
@@ -113,4 +138,19 @@ struct RootView: View {
         case .settings: SettingsView()
         }
     }
+}
+
+/// The sidebar's sections. Each can be folded (click its heading) or hidden (right-click, or Settings › Sidebar).
+struct SidebarGroup: Identifiable {
+    let name: String
+    let screens: [Screen]
+    var id: String { name }
+    static let all: [SidebarGroup] = [
+        SidebarGroup(name: "Plan", screens: [.today, .week, .month, .todo, .projects]),
+        SidebarGroup(name: "Study", screens: [.study, .flashcards]),
+        SidebarGroup(name: "Grow", screens: [.habits, .reflections]),
+        SidebarGroup(name: "Focus", screens: [.focus, .screentime]),
+        SidebarGroup(name: "Tools", screens: [.notes]),
+        SidebarGroup(name: "Connect", screens: [.booking]),
+    ]
 }
