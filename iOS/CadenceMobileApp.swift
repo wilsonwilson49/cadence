@@ -15,6 +15,7 @@ struct CadenceMobileApp: App {
                 .environmentObject(model.store)
                 .environmentObject(model.sync)
                 .environmentObject(model.focus)
+                .environmentObject(model.study)
                 .tint(.pink)
         }
         .onChange(of: phase) { _, p in model.scenePhaseChanged(p) }
@@ -35,6 +36,7 @@ final class MobileModel: ObservableObject {
     let store: Store
     let sync: SyncService
     let focus: MobileFocus
+    let study: MobileStudy
 
     @Published var tab = 0
     @Published var reflecting: ReflectTarget?
@@ -48,6 +50,7 @@ final class MobileModel: ObservableObject {
         store = Store(directory: LaunchOptions.dataDirectory)
         sync = SyncService(store: store)
         focus = MobileFocus(store: store)
+        study = MobileStudy(store: store)
         focus.model = nil
     }
 
@@ -67,6 +70,8 @@ final class MobileModel: ObservableObject {
             store.tasks[i].steps = ["Put the phone in another room", "Read 20 pages", "Write down one idea"].map { HabitStep(title: $0) }
         }
         if LaunchOptions.has("-demo") && store.projects.isEmpty { store.projects = [Project.demo()] }
+        if LaunchOptions.has("-demo") && store.courses.isEmpty { store.courses = Course.demo() }
+        if LaunchOptions.has("-demo") && store.notes.isEmpty { store.notes = [Note(title: "Chem test topics", body: "Moles and molar mass\nLimiting reagent\nPercent yield")] }
         if let t = LaunchOptions.value("-tab").flatMap(Int.init) { tab = t }
         if let what = LaunchOptions.value("-open") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
@@ -94,6 +99,7 @@ final class MobileModel: ObservableObject {
     }
 
     func scenePhaseChanged(_ p: ScenePhase) {
+        study.active = p == .active
         switch p {
         case .active:
             start()
@@ -207,6 +213,7 @@ final class MobileModel: ObservableObject {
         }
         // The app icon shows how many items are left today.
         center.setBadgeCount(store.remainingToday)
+        study.reschedule()   // the line at the top cleared the study session's notifications too
     }
 }
 
