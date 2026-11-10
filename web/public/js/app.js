@@ -2294,8 +2294,16 @@ function studyTick() {
         }
       } else if (r.mode === 'dynamic' && !r.taskBased && !r.wrapUp && M.periodMsLeft(r, now) <= 0 && !studyNotified.has(`p${r.cycle}|${r.index}`)) {
         studyNotified.add(`p${r.cycle}|${r.index}`);
-        const next = r.periods[r.index + 1]?.title || 'wrap up';
-        studyNotify(`Time's up: ${M.runPeriod(r).title}`, `Next: ${next}. Move on when you're ready.`);
+        const last = r.index + 1 >= r.periods.length && r.cycle >= (r.repeats || 1);
+        if (r.autoAdvance) {
+          if (last) { studyNotify('Session done', `${r.title}: all intervals finished. Nice work.`); finishStudy(); return; }
+          updateRun(x => M.nextPeriod(x, now));
+          const n = M.runPeriod(studyRun);
+          studyNotify(`${n.title}: ${n.minutes} min`, n.kind === 'breakTime' ? 'Break time. Look away from the screen.' : `Back to ${r.title}.`);
+        } else {
+          const next = last ? 'wrap up' : (r.periods[r.index + 1] || r.periods[0]).title;
+          studyNotify(`Time's up: ${M.runPeriod(r).title}`, `Next: ${next}. Move on when you're ready.`);
+        }
       } else if (r.mode === 'offline') {
         // Using this page during a no-computer session is noted, with a reminder every couple of minutes.
         if (document.visibilityState === 'visible' && now - lastActivity < 2000) {
@@ -2347,9 +2355,9 @@ function mistakeList(course, title = 'What you got wrong') {
 
 function studyView() {
   const tab = store.device('studyTab', 'session');
-  const tabs = [['session', 'Session'], ['courses', 'Courses'], ['history', 'History']];
+  const tabs = [['session', 'Session'], ['courses', 'Presets'], ['history', 'History']];
   const body = tab === 'courses' ? coursesPanel() : tab === 'history' ? studyHistory() : studyRun ? runningStudy() : studySetup();
-  return `<div class="header"><div class="grow"><h1>Study</h1><div class="sub">Timed rounds, a class-period cycle, or time away from the screen.</div></div>
+  return `<div class="header"><div class="grow"><h1>Study</h1><div class="sub">Interval presets (the class period, 25 on / 5 off, your own) or time away from the screen.</div></div>
       <div class="seg">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="study-tab" data-tab="${k}">${l}</button>`).join('')}</div></div>
     <div class="page stack" style="max-width:1000px">${body}</div>`;
 }
@@ -2361,42 +2369,51 @@ function studyStats() {
     ${tile(store.studyStreak, 'day streak', 'flame', '#ff9f0a')}${tile(store.dueCardCount, 'flashcards due', 'cards', '#ff375f', '/app/flashcards')}</div>`;
 }
 
+/** This session's copy of the chosen preset (saved one, or a built-in "tpl:<name>"): change any length before starting. */
+function studyDraft() {
+  const key = store.device('studyPreset', 'tpl:classPeriod');
+  if (ui.studyDraft?.key !== key) {
+    const saved = store.courses.get(key);
+    ui.studyDraft = { key, course: saved ? structuredClone(saved) : M.templateCourse(key.replace('tpl:', '')) };
+  }
+  return ui.studyDraft;
+}
+
 function studySetup() {
-  const d = store.device('studySetup', {}), mode = d.mode || 'dynamic', courses = store.activeCourses;
-  const course = d.course ? store.courses.get(d.course) : null;
-  const opt = (k, v) => (d[k] ?? v);
+  const d = store.device('studySetup', {}), mode = M.STARTABLE_MODES.includes(d.mode) ? d.mode : 'dynamic', courses = store.activeCourses;
+  const draft = studyDraft(), c = draft.course, saved = store.courses.get(draft.key);
   const last = ui.studyLast;
-  let options = '';
-  if (mode === 'timed') {
-    const s = opt('studyMinutes', 25), b = opt('breakMinutes', 5), r = opt('rounds', 4);
-    options = `<div class="row" style="flex-wrap:wrap">${[[25, 5, 4], [50, 10, 3], [90, 15, 2]].map(([x, y, z]) => `<button class="btn sm ${s === x && b === y && r === z ? 'primary' : ''}" data-act="study-preset" data-s="${x}" data-b="${y}" data-r="${z}">${x}/${y} × ${z}</button>`).join('')}</div>
-      <div class="row" style="flex-wrap:wrap;gap:14px"><label class="row small">Study <input class="input sm" type="number" min="5" max="240" value="${s}" data-study-opt="studyMinutes" style="width:70px"> min</label>
-        <label class="row small">Break <input class="input sm" type="number" min="0" max="60" value="${b}" data-study-opt="breakMinutes" style="width:70px"> min</label>
-        <label class="row small">Rounds <input class="input sm" type="number" min="1" max="12" value="${r}" data-study-opt="rounds" style="width:60px"></label></div>
-      <div class="small muted">About ${M.fmtDuration((s * r + b * Math.max(0, r - 1)) * 60)} in all. You’ll get a notification at every switch.</div>`;
-  } else if (mode === 'dynamic') {
-    const periods = course ? M.activePeriods(course) : M.classPeriod(), taskBased = opt('taskBased', course?.taskBased ?? false);
-    options = `${course ? phaseBanner(course) : '<div class="small muted">No course: you’ll use the standard class period. Make a course to program your own periods, tasks and phase.</div>'}
-      ${course && M.openMistakes(course).length ? `<div class="orange small">${ic('refresh')} You’ll start with ${M.openMistakes(course).length} thing(s) you got wrong last time.</div>` : ''}
-      <div class="row small">Each period ends <div class="seg"><button class="${taskBased ? '' : 'on'}" data-act="study-taskbased" data-v="0">When its time is up</button><button class="${taskBased ? 'on' : ''}" data-act="study-taskbased" data-v="1">When its tasks are done</button></div></div>
-      <div class="period-strip">${periods.map(p => `<span class="period-pill"><b>${esc(p.title)}</b><span class="tiny muted">${taskBased ? `${p.tasks.length} task${p.tasks.length === 1 ? '' : 's'}` : `${p.minutes} min`}</span></span>`).join(`<span class="muted">›</span>`)}</div>`;
-  } else {
-    const pm = opt('plannedMinutes', 60);
+  const minutesInput = (value, attrs, max = 480) => `<span class="min-field"><input class="input sm" type="number" min="1" max="${max}" value="${value}" ${attrs}>
+    <select class="input sm" ${attrs.replace('data-draft', 'data-draft-pick')}><option value="">min</option>${[5, 10, 15, 20, 25, 30, 45, 50, 60, 90, 120].map(m => `<option value="${m}">${m} min</option>`).join('')}</select></span>`;
+  let options;
+  if (mode === 'offline') {
+    const pm = d.plannedMinutes ?? 60;
     options = `<label class="row small">How long <select class="input sm" style="width:auto" data-study-opt="plannedMinutes">${[30, 45, 60, 90, 120, 180, 0].map(m => `<option value="${m}" ${m === pm ? 'selected' : ''}>${m ? M.fmtDuration(m * 60) : 'Until I stop'}</option>`).join('')}</select></label>
       <div class="small muted">Close the laptop or walk away from it. If you use this page during the session, Cadence notes it and reminds you.</div>`;
+  } else {
+    const changed = saved && JSON.stringify([saved.periods, saved.repeats, saved.autoAdvance, saved.taskBased]) !== JSON.stringify([c.periods, c.repeats, c.autoAdvance, c.taskBased]);
+    options = `${c.showPhase !== false && saved ? phaseBanner(saved) : ''}
+      ${c.showPhase !== false && saved && M.openMistakes(saved).length ? `<div class="orange small">${ic('refresh')} You’ll start with ${M.openMistakes(saved).length} thing(s) you got wrong last time.</div>` : ''}
+      <div class="row small">Each interval ends <div class="seg"><button class="${c.taskBased ? '' : 'on'}" data-act="draft-taskbased" data-v="0">When its time is up</button><button class="${c.taskBased ? 'on' : ''}" data-act="draft-taskbased" data-v="1">When its tasks are done</button></div></div>
+      <div class="period-strip">${c.periods.map((p, i) => p.enabled === false ? '' : `<span class="period-pill ${p.kind === 'breakTime' ? 'brk' : ''}"><b>${esc(p.title)}</b>${c.taskBased ? `<span class="tiny muted">${p.tasks.length} task${p.tasks.length === 1 ? '' : 's'}</span>` : minutesInput(p.minutes, `data-draft="minutes" data-i="${i}"`)}</span>`).join('<span class="muted">›</span>')}</div>
+      <div class="row small" style="gap:14px">Repeat <input class="input sm" type="number" min="1" max="20" value="${c.repeats || 1}" data-draft="repeats" style="width:60px">×
+        <label class="check"><input type="checkbox" data-draft="autoAdvance" ${c.autoAdvance ? 'checked' : ''}>Move on to the next interval by itself</label></div>
+      <div class="row small"><span class="muted grow">${c.taskBased ? 'Tick off each interval’s tasks, then move on.' : `About ${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * (c.repeats || 1) * 60)} in all. Change any length; it’s just for this session unless you save it.`}</span>
+        ${saved ? (changed ? `<button class="btn sm" data-act="draft-save">Save to ${esc(saved.title)}</button>` : '') : '<button class="btn sm" data-act="draft-save">Save as my preset</button>'}</div>`;
   }
   return `${last ? `<div class="callout" style="background:${tint('#30d158', .12)}"><span class="big green">${ic('check')}</span><div class="grow"><b>Logged ${M.fmtDuration(last.minutes * 60)} of ${esc(last.title)}</b>
       <div class="small muted">${M.STUDY_MODES[last.mode].title}${last.mode === 'offline' ? (last.screenSeconds > 30 ? ` · screen used ${M.fmtDuration(last.screenSeconds)}` : ' · screen-free') : ''}${last.phase ? ` · ${M.PHASE_INFO[last.phase].title} phase` : ''}</div></div>
       <button class="btn ghost sm icon" data-act="study-dismiss">${ic('x')}</button></div>` : ''}
-    <div class="mode-cards">${Object.entries(M.STUDY_MODES).map(([k, m]) => `<button class="mode-card ${mode === k ? 'on' : ''}" data-act="study-mode" data-mode="${k}">
-      <b>${ic(m.icon)} ${m.title}</b><span class="small muted">${m.blurb}</span></button>`).join('')}</div>
+    <div class="mode-cards two">${M.STARTABLE_MODES.map(k => { const m = M.STUDY_MODES[k]; return `<button class="mode-card ${mode === k ? 'on' : ''}" data-act="study-mode" data-mode="${k}">
+      <b>${ic(m.icon)} ${m.title}</b><span class="small muted">${m.blurb}</span></button>`; }).join('')}</div>
     <div class="card pad stack" style="gap:12px">
-      <div class="row"><label class="row small">Course <select class="input sm" style="width:auto" data-study-opt="course"><option value="">No course</option>
-        ${courses.map(c => `<option value="${c.id}" ${c.id === d.course ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></label>
-        <button class="btn sm" data-act="course-new">${ic('plus')} New course</button></div>
-      <input class="input" id="studyTitle" placeholder="${course ? `What you’re studying (default: ${esc(course.chapter || course.title)})` : 'What you’re studying, e.g. Ch. 4 problems'}">
+      <div class="row"><label class="row small">Preset <select class="input sm" style="width:auto" data-study-opt="preset">
+        ${courses.length ? `<optgroup label="Your presets">${courses.map(x => `<option value="${x.id}" ${x.id === draft.key ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</optgroup>` : ''}
+        <optgroup label="Built in">${Object.entries(M.TEMPLATES).filter(([k]) => k !== 'blank').map(([k, l]) => `<option value="tpl:${k}" ${draft.key === `tpl:${k}` ? 'selected' : ''}>${l}</option>`).join('')}</optgroup></select></label>
+        <button class="btn sm" data-act="course-new">${ic('plus')} New preset</button></div>
+      <input class="input" id="studyTitle" placeholder="${saved ? `What you’re studying (default: ${esc(saved.chapter || saved.title)})` : 'What you’re studying, e.g. Ch. 4 problems'}">
       ${options}
-      <div class="row"><span class="grow"></span><button class="btn primary" data-act="study-start">${ic('play')} Start ${M.STUDY_MODES[mode].title.toLowerCase()} session</button></div>
+      <div class="row"><span class="grow"></span><button class="btn primary" data-act="study-start">${ic('play')} Start ${mode === 'offline' ? 'no-computer' : 'interval'} session</button></div>
     </div>
     ${studyStats()}`;
 }
@@ -2421,17 +2438,18 @@ function runningStudy() {
     const strip = `<div class="period-strip"><span class="small muted">Cycle ${r.cycle}</span>${r.periods.map((p, i) => `<button class="period-pill ${i === r.index && !r.wrapUp ? 'now' : i < r.index || r.wrapUp ? 'done' : ''}" data-act="period-go" data-i="${i}">${i < r.index || r.wrapUp ? ic('check') + ' ' : ''}${esc(p.title)}</button>`).join('')}</div>`;
     if (r.wrapUp) {
       const next = M.nextPhase(r.phase);
-      body = `${course ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px"><h2 style="margin:0">${ic('check')} Cycle ${r.cycle} done</h2>
-        <div class="muted">Repeat, and move on to the next phase if it seems good.</div>
-        <div class="row" style="flex-wrap:wrap"><button class="btn" data-act="cycle-repeat" data-phase="${r.phase}">${ic('refresh')} Repeat ${M.PHASE_INFO[r.phase].title.toLowerCase()}</button>
-          ${next ? `<button class="btn primary" data-act="cycle-repeat" data-phase="${next}">Move on to ${M.PHASE_INFO[next].title.toLowerCase()}</button>` : ''}<span class="grow"></span>
+      const ph = r.showPhase !== false;
+      body = `${course && ph ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px"><h2 style="margin:0">${ic('check')} ${ph ? `Cycle ${r.cycle} done` : 'All intervals done'}</h2>
+        <div class="muted">${ph ? 'Repeat, and move on to the next phase if it seems good.' : 'Go again, or finish and log it.'}</div>
+        <div class="row" style="flex-wrap:wrap"><button class="btn" data-act="cycle-repeat" data-phase="${r.phase}">${ic('refresh')} ${ph ? `Repeat ${M.PHASE_INFO[r.phase].title.toLowerCase()}` : 'Go again'}</button>
+          ${next && ph ? `<button class="btn primary" data-act="cycle-repeat" data-phase="${next}">Move on to ${M.PHASE_INFO[next].title.toLowerCase()}</button>` : ''}<span class="grow"></span>
           <button class="btn" data-act="study-finish">Finish and log</button></div>
-        ${course ? `<div class="row"><input class="input grow" id="nextChapter" placeholder="Done with ${esc(course.chapter || 'this chapter')}? Next chapter"><button class="btn" data-act="cycle-chapter">Start it in the reading phase</button></div>` : ''}</div>`;
+        ${course && ph ? `<div class="row"><input class="input grow" id="nextChapter" placeholder="Done with ${esc(course.chapter || 'this chapter')}? Next chapter"><button class="btn" data-act="cycle-chapter">Start it in the reading phase</button></div>` : ''}</div>`;
     } else {
       const p = M.runPeriod(r), left = M.periodMsLeft(r, now);
       const rule = M.periodRule(p.kind, course ? M.courseRules(course, r.phase) : M.PHASE_INFO[r.phase].rules);
       const next = r.periods[r.index + 1]?.title || 'Wrap up';
-      body = `${course ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px">
+      body = `${course && r.showPhase !== false ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px">
         <div class="row" style="align-items:flex-start;gap:24px">${r.taskBased ? '' : bigClock(left, p.minutes * 60_000, left < 0 ? 'over' : 'left')}
           <div class="stack grow" style="gap:8px"><div class="row"><h2 style="margin:0">${esc(p.title)}</h2>${rule ? ruleChip('Notes', rule) : ''}</div>
             ${p.blurb ? `<div class="muted">${esc(p.blurb)}</div>` : ''}
@@ -2441,7 +2459,7 @@ function runningStudy() {
         ${p.kind === 'quiz' || p.kind === 'officeHours' ? `<form class="row" data-form="mistake"><input class="input grow" id="mistakeText" placeholder="${p.kind === 'quiz' ? 'Something you got wrong (you’ll start there next time)' : 'Something to come back to'}">
             <label class="check small"><input type="checkbox" id="mistakeCard" ${course ? '' : 'disabled'}>Also make a flashcard</label><button class="btn">Add</button></form>
           ${r.mistakes.length ? `<div class="small muted">This session: ${r.mistakes.map(esc).join(' · ')}</div>` : ''}` : ''}
-        <div class="row">${r.taskBased ? '' : '<button class="btn sm" data-act="period-more">+5 min</button>'}<span class="grow"></span>
+        <div class="row">${r.taskBased ? '' : `<span class="row small">Length <button class="btn sm" data-act="period-less">−5</button><input class="input sm" type="number" min="1" max="480" value="${p.minutes}" data-run-minutes="1" style="width:64px"> min<button class="btn sm" data-act="period-more5">+5</button></span>`}<span class="grow"></span>
           <button class="btn ${r.taskBased && p.tasks.length && !M.periodTasksDone(r, p) ? '' : 'primary'}" data-act="period-next">Next: ${esc(next)} ${ic('right')}</button></div></div>`;
     }
   }
@@ -2473,9 +2491,9 @@ function coursesPanel() {
   const c = store.courses.get(sel);
   return `<div class="courses"><div class="course-list">${courses.map(x => `<button class="course-item ${x.id === sel ? 'on' : ''}" data-act="course-pick" data-id="${x.id}" style="--pc:${color(x.color)}">
       <span class="pbar"></span><span class="grow" style="min-width:0"><b class="ellipsis">${esc(x.title)}</b><span class="tiny muted ellipsis">${M.PHASE_INFO[x.phase].title}${x.chapter ? ` · ${esc(x.chapter)}` : ''}</span></span></button>`).join('')}
-      <button class="btn sm" data-act="course-new">${ic('plus')} New course</button>
-      ${courses.length ? '' : '<div class="small muted">A course is a subject you study: Chemistry, CS, History. Each one gets its own class period, tasks and phase.</div>'}</div>
-    <div class="grow stack" style="gap:14px;min-width:0">${c ? courseEditor(c) : '<div class="muted">Pick a course to program it.</div>'}</div></div>`;
+      <select class="input sm" data-act-change="preset-new"><option value="">+ New preset…</option>${Object.entries(M.TEMPLATES).map(([k, l]) => `<option value="${k}">${k === 'blank' ? 'Blank' : `From ${l}`}</option>`).join('')}</select>
+      ${courses.length ? '' : '<div class="small muted">A preset is a set of intervals you study with: the class period, 25 on / 5 off, or your own. Make one per subject if you like (Chemistry, CS), each with its own lengths, tasks and phase.</div>'}</div>
+    <div class="grow stack" style="gap:14px;min-width:0">${c ? courseEditor(c) : '<div class="muted">Pick a preset to change it.</div>'}</div></div>`;
 }
 
 function courseEditor(c) {
@@ -2494,20 +2512,23 @@ function courseEditor(c) {
       <input class="ptext small muted" id="pb-${esc(p.id)}" value="${esc(p.blurb)}" placeholder="What to do in this period" data-period-field="blurb" data-course="${cid}" data-i="${i}">
       ${p.tasks.map((t, ti) => `<div class="row small"><span class="muted">☐</span><span class="grow">${esc(t)}</span><button class="btn ghost sm icon" data-act="period-task-remove" data-course="${cid}" data-i="${i}" data-t="${ti}">${ic('x')}</button></div>`).join('')}
       <form class="row small" data-form="period-task" data-course="${cid}" data-i="${i}"><span class="muted">+</span><input class="ptext" id="ptask-${esc(p.id)}" placeholder="Add a task for this period"></form></div>`).join('');
-  return `<div class="row"><input class="ptitle-input" id="cf-title-${cid}" value="${esc(c.title)}" data-course-field="title" data-course="${cid}" placeholder="Course name" autocomplete="off">
+  return `<div class="row"><input class="ptitle-input" id="cf-title-${cid}" value="${esc(c.title)}" data-course-field="title" data-course="${cid}" placeholder="Preset name" autocomplete="off">
       <span class="pswatches">${Object.keys(M.COLORS).map(x => `<button class="pswatch ${c.color === x ? 'on' : ''}" style="background:${M.COLORS[x]}" data-act="course-color" data-color="${x}" data-course="${cid}"></button>`).join('')}</span>
       <button class="btn ghost sm icon danger" data-act="course-delete" data-course="${cid}" title="Delete course">${ic('trash')}</button></div>
     ${field('chapter', c.chapter, 'What you’re on now (e.g. Ch. 4: Stoichiometry)')}
-    <div class="card pad stack" style="gap:10px"><div class="section-title" style="margin:0">${ic('study')} Phase</div>
+    <label class="check"><input type="checkbox" data-act-change="course-showphase" data-course="${cid}" ${c.showPhase !== false ? 'checked' : ''}>Use the phase, note rules and “what you got wrong” (the class-period way of studying)</label>
+    ${c.showPhase === false ? '' : `<div class="card pad stack" style="gap:10px"><div class="section-title" style="margin:0">${ic('study')} Phase</div>
       <div class="seg">${M.PHASES.map(p => `<button class="${c.phase === p ? 'on' : ''}" data-act="course-phase" data-course="${cid}" data-phase="${p}">${M.PHASE_INFO[p].title}</button>`).join('')}</div>
       <div class="small muted">These overlap a lot with the class periods, so it’s guidance: some ideas to try while studying.</div>
-      <table class="rules"><tr><th>Phase</th><th>Homework</th><th>Quiz</th></tr>${rulesTable}</table></div>
-    <div class="card pad stack" style="gap:10px"><div class="row"><div class="section-title grow" style="margin:0">${ic('study')} Class period</div>
+      <table class="rules"><tr><th>Phase</th><th>Homework</th><th>Quiz</th></tr>${rulesTable}</table></div>`}
+    <div class="card pad stack" style="gap:10px"><div class="row"><div class="section-title grow" style="margin:0">${ic('timer')} Intervals</div>
         <div class="seg"><button class="${c.taskBased ? '' : 'on'}" data-act="course-taskbased" data-course="${cid}" data-v="0">Timed</button><button class="${c.taskBased ? 'on' : ''}" data-act="course-taskbased" data-course="${cid}" data-v="1">By tasks</button></div></div>
-      <div class="small muted">${c.taskBased ? 'Each period ends when you’ve ticked off its tasks.' : `Each period ends when its time is up (${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * 60)} per cycle). Tasks are a checklist along the way.`}</div>
+      <div class="small muted">${c.taskBased ? 'Each period ends when you’ve ticked off its tasks.' : `Each interval ends when its time is up (${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * 60)} per round). Tasks are a checklist along the way.`}</div>
+      <div class="row small" style="gap:14px">Repeat <input class="input sm" type="number" min="1" max="20" value="${c.repeats || 1}" data-course-num="repeats" data-course="${cid}" style="width:60px">×
+        <label class="check"><input type="checkbox" data-act-change="course-auto" data-course="${cid}" ${c.autoAdvance ? 'checked' : ''}>Move on by itself when time’s up</label></div>
       ${periods}
-      <div class="row"><select class="input sm" style="width:auto" data-act-change="period-add" data-course="${cid}"><option value="">+ Add a period…</option>${Object.entries(M.PERIOD_KINDS).map(([k, v]) => `<option value="${k}">${v.title}</option>`).join('')}</select>
-        <span class="grow"></span><button class="btn sm" data-act="period-reset" data-course="${cid}">Reset to the class period</button></div></div>
+      <div class="row"><select class="input sm" style="width:auto" data-act-change="period-add" data-course="${cid}"><option value="">+ Add an interval…</option>${Object.entries(M.PERIOD_KINDS).map(([k, v]) => `<option value="${k}">${v.title}</option>`).join('')}</select>
+        <span class="grow"></span><select class="input sm" style="width:auto" data-act-change="preset-replace" data-course="${cid}"><option value="">Replace with…</option>${Object.entries(M.TEMPLATES).filter(([k]) => k !== 'blank').map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div></div>
     ${mistakeList(c)}
     <div class="small muted">${ic('cards')} ${c.cards.length} flashcard${c.cards.length === 1 ? '' : 's'} · ${M.dueCards(c).length} due · <a href="/app/flashcards">Flashcards</a></div>`;
 }
@@ -2518,7 +2539,7 @@ function flashcardsView() {
   const scope = course ? [course] : courses;
   const due = scope.reduce((n, c) => n + M.dueCards(c).length, 0);
   let body;
-  if (!courses.length) body = '<div class="card pad muted">Flashcards belong to a course. Make one under Study › Courses first.</div>';
+  if (!courses.length) body = '<div class="card pad muted">Flashcards belong to a preset (one per subject works well). Make one under Study › Presets first.</div>';
   else if (ui.review) body = reviewView();
   else {
     const addTo = course || store.courses.get(store.device('cardsAddTo', '')) || courses[0], q = (ui.cardSearch || '').toLowerCase();
@@ -2579,14 +2600,25 @@ const actions = {
   'study-taskbased': el => { store.setDevice('studySetup', { ...store.device('studySetup', {}), taskBased: el.dataset.v === '1' }); render(); },
   'study-dismiss': () => { ui.studyLast = null; render(); },
   'study-start': () => {
-    const d = store.device('studySetup', {}), mode = d.mode || 'dynamic', course = d.course ? store.courses.get(d.course) : null;
-    const typed = ($('#studyTitle')?.value || '').trim();
-    const r = M.newRun(mode, mode === 'timed' && !course ? null : course, typed || (course ? (course.chapter ? `${course.title}: ${course.chapter}` : course.title) : ''));
-    if (mode === 'timed' && course) r.courseId = course.id;
-    Object.assign(r, { studyMinutes: d.studyMinutes ?? 25, breakMinutes: d.breakMinutes ?? 5, rounds: d.rounds ?? 4, plannedMinutes: d.plannedMinutes ?? 60 });
-    if (d.taskBased != null) r.taskBased = d.taskBased;
+    const d = store.device('studySetup', {}), mode = M.STARTABLE_MODES.includes(d.mode) ? d.mode : 'dynamic';
+    const draft = studyDraft(), saved = store.courses.get(draft.key), typed = ($('#studyTitle')?.value || '').trim();
+    const r = M.newRun(mode, draft.course, typed || (saved ? (saved.chapter ? `${saved.title}: ${saved.chapter}` : saved.title) : draft.course.title));
+    r.courseId = saved?.id ?? null;
+    r.plannedMinutes = d.plannedMinutes ?? 60;
     startStudy(r);
   },
+  'draft-taskbased': el => { studyDraft().course.taskBased = el.dataset.v === '1'; render(); },
+  'draft-save': () => {
+    const draft = studyDraft(), saved = store.courses.get(draft.key), c = draft.course;
+    if (saved) store.editCourse(saved.id, x => { Object.assign(x, { periods: c.periods, repeats: c.repeats, autoAdvance: c.autoAdvance, taskBased: c.taskBased }); });
+    else {
+      const copy = store.upsertCourse({ ...structuredClone(c), id: M.uuid(), periods: c.periods.map(p => ({ ...p, id: M.uuid() })) });
+      store.setDevice('studyPreset', copy.id); ui.studyDraft = null;
+    }
+    toast('Preset saved', { icon: 'check' }); render();
+  },
+  'period-less': () => updateRun(r => M.setMinutes(r, M.runPeriod(r).minutes - 5)),
+  'period-more5': () => updateRun(r => M.setMinutes(r, M.runPeriod(r).minutes + 5)),
   'study-pause': () => updateRun(r => M.togglePause(r)),
   'study-end': () => {
     const r = studyRun;
@@ -2607,9 +2639,9 @@ const actions = {
   'studylog-delete': el => store.deleteStudyLog(el.dataset.id),
   'course-new': () => {
     const colors = Object.keys(M.COLORS).filter(c => c !== 'gray');
-    const c = store.upsertCourse(M.newCourse({ color: colors[Math.floor(Math.random() * colors.length)] }));
+    const c = store.upsertCourse({ ...M.templateCourse('blank'), color: colors[Math.floor(Math.random() * colors.length)] });
     store.setDevice('studyCourseEdit', c.id); store.setDevice('studyTab', 'courses');
-    store.setDevice('studySetup', { ...store.device('studySetup', {}), course: c.id });
+    store.setDevice('studyPreset', c.id); ui.studyDraft = null;
     render(); setTimeout(() => { const i = document.getElementById(`cf-title-${c.id}`); i?.focus(); i?.select(); }, 0);
   },
   'course-pick': el => { store.setDevice('studyCourseEdit', el.dataset.id); render(); },
@@ -3066,12 +3098,27 @@ function setProjectDate(el, value) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.studyOpt === 'preset') { store.setDevice('studyPreset', el.value); ui.studyDraft = null; render(); return; }
+  if (el.dataset.draft || el.dataset.draftPick) {
+    const c = studyDraft().course, k = el.dataset.draft || el.dataset.draftPick;
+    if (el.dataset.draftPick && !el.value) return;
+    if (k === 'minutes') c.periods[+el.dataset.i].minutes = Math.min(480, Math.max(1, Number(el.value) || 1));
+    else if (k === 'repeats') c.repeats = Math.min(20, Math.max(1, Number(el.value) || 1));
+    else if (k === 'autoAdvance') c.autoAdvance = el.checked;
+    render(); return;
+  }
+  if (el.dataset.runMinutes) { updateRun(r => M.setMinutes(r, el.value)); return; }
   if (el.dataset.studyOpt) {
     const k = el.dataset.studyOpt, v = k === 'course' ? el.value : Math.max(0, Number(el.value) || 0);
     store.setDevice('studySetup', { ...store.device('studySetup', {}), [k]: v, ...(k === 'course' ? { taskBased: undefined } : {}) }); render(); return;
   }
   if (el.dataset.periodField === 'minutes') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i].minutes = Math.min(240, Math.max(1, Number(el.value) || 1)); }); return; }
   if (el.dataset.courseRule) { const [phase, key] = el.dataset.courseRule.split('|'); store.editCourse(el.dataset.course, c => { c.rules = { ...(c.rules || {}), [phase]: { ...M.courseRules(c, phase), [key]: el.value } }; }); return; }
+  if (el.dataset.actChange === 'preset-new') { if (!el.value) return; const c = store.upsertCourse(M.templateCourse(el.value)); store.setDevice('studyCourseEdit', c.id); render(); return; }
+  if (el.dataset.actChange === 'preset-replace') { if (!el.value) return; const t = M.templateCourse(el.value); store.editCourse(el.dataset.course, c => { Object.assign(c, { periods: t.periods, repeats: t.repeats, autoAdvance: t.autoAdvance, showPhase: t.showPhase }); }); return; }
+  if (el.dataset.actChange === 'course-showphase') { store.editCourse(el.dataset.course, c => { c.showPhase = el.checked; }); return; }
+  if (el.dataset.actChange === 'course-auto') { store.editCourse(el.dataset.course, c => { c.autoAdvance = el.checked; }); return; }
+  if (el.dataset.courseNum) { store.editCourse(el.dataset.course, c => { c[el.dataset.courseNum] = Math.min(20, Math.max(1, Number(el.value) || 1)); }); return; }
   if (el.dataset.actChange === 'period-enable') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i].enabled = el.checked; }); return; }
   if (el.dataset.actChange === 'period-add') { if (el.value) store.editCourse(el.dataset.course, c => { c.periods.push(M.newPeriod(el.value)); }); return; }
   if (el.dataset.actChange === 'period-task') { updateRun(r => M.isChecked(r, M.runPeriod(r), +el.dataset.i) ? r.checked = r.checked.filter(k => k !== `${M.runPeriod(r).id}|${el.dataset.i}`) : r.checked.push(`${M.runPeriod(r).id}|${el.dataset.i}`)); return; }

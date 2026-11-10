@@ -802,7 +802,7 @@ export function projectMapLayout(p, collapsed = new Set()) {
 
 export const STUDY_MODES = {
   timed: { title: 'Timed', icon: 'timer', blurb: 'Study and break on a clock, for as many rounds as you like.' },
-  dynamic: { title: 'Class period', icon: 'study', blurb: 'Go through a class period: lecture, questions, homework, office hours, quiz. Then repeat the phase or move on.' },
+  dynamic: { title: 'Intervals', icon: 'study', blurb: 'Run a preset of intervals: the class period, 25 on / 5 off, or your own. Every length is adjustable.' },
   offline: { title: 'No computer', icon: 'book', blurb: 'Put the computer away and study on paper. Cadence keeps time and notes if you come back to the screen.' },
 };
 export const PHASES = ['reading', 'learning', 'understanding', 'testing'];
@@ -820,12 +820,25 @@ export const PERIOD_KINDS = {
   officeHours: { title: 'Office hours', minutes: 15, blurb: 'Ask about the problems you got stuck on: a friend who’s studying it, AI, a teacher. Learn as much as you can.' },
   quiz: { title: 'Quiz', minutes: 15, blurb: 'Try to retain as much as you can. Write down what you got wrong; you’ll start there next session.' },
   custom: { title: 'Your own period', minutes: 15, blurb: '' },
+  study: { title: 'Study', minutes: 25, blurb: '' },
+  breakTime: { title: 'Break', minutes: 5, blurb: 'Stand up, stretch, drink some water, look away from the screen.' },
 };
+export const STARTABLE_MODES = ['dynamic', 'offline'];
+/** Built-in presets to start from. Same as Course.Template on the Mac. */
+export const TEMPLATES = { classPeriod: 'Class period', pomodoro: '25 on / 5 off × 4', long: '50 on / 10 off × 3', deep: '90 on / 15 off × 2', blank: 'Blank' };
+export function templateCourse(t) {
+  const onOff = (on, off, n) => newCourse({ title: `${on} / ${off}`, color: 'teal', periods: [newPeriod('study', { minutes: on }), newPeriod('breakTime', { minutes: off })], repeats: n, autoAdvance: true, showPhase: false });
+  if (t === 'pomodoro') return onOff(25, 5, 4);
+  if (t === 'long') return onOff(50, 10, 3);
+  if (t === 'deep') return onOff(90, 15, 2);
+  if (t === 'blank') return newCourse({ title: 'New preset', periods: [newPeriod('study')], showPhase: false, autoAdvance: true });
+  return newCourse({ title: 'Class period', color: 'purple' });
+}
 export const nextPhase = p => PHASES[PHASES.indexOf(p) + 1] || null;
 export const newPeriod = (kind, o = {}) => ({ id: uuid(), kind, title: PERIOD_KINDS[kind].title, minutes: PERIOD_KINDS[kind].minutes, enabled: true, tasks: [], blurb: PERIOD_KINDS[kind].blurb, ...o });
 export const classPeriod = () => ['lecture', 'questions', 'homework', 'officeHours', 'quiz'].map(k => newPeriod(k));
-export const newCourse = (o = {}) => ({ id: uuid(), title: 'New course', color: 'blue', chapter: '', phase: 'reading', taskBased: false, periods: classPeriod(), rules: {},
-  mistakes: [], cards: [], createdAt: iso(new Date()), ...o });
+export const newCourse = (o = {}) => ({ id: uuid(), title: 'New preset', color: 'blue', chapter: '', phase: 'reading', taskBased: false, periods: classPeriod(), rules: {},
+  mistakes: [], cards: [], repeats: 1, autoAdvance: false, showPhase: true, createdAt: iso(new Date()), ...o });
 export const courseRules = (c, phase) => (c?.rules || {})[phase] || PHASE_INFO[phase].rules;
 /** Which note rule applies in a period (lecture and questions are always open). */
 export const periodRule = (kind, rules) => (kind === 'homework' || kind === 'officeHours' ? rules.homework : kind === 'quiz' ? rules.quiz : null);
@@ -855,6 +868,7 @@ export function newRun(mode, course, title) {
     studyMinutes: 25, breakMinutes: 5, rounds: 4,
     taskBased: Boolean(course?.taskBased), periods: structuredClone(course && activePeriods(course).length ? activePeriods(course) : classPeriod()),
     index: 0, periodStart: 0, checked: [], phase: course?.phase || 'reading', cycle: 1, wrapUp: false,
+    repeats: course?.repeats || 1, autoAdvance: Boolean(course?.autoAdvance), showPhase: course ? course.showPhase !== false : true,
     plannedMinutes: 60, screenMs: 0, mistakes: [],
   };
 }
@@ -879,8 +893,12 @@ export const periodMsLeft = (r, now = Date.now()) => { const p = runPeriod(r); r
 export const isChecked = (r, p, i) => r.checked.includes(`${p.id}|${i}`);
 export const periodTasksDone = (r, p) => p.tasks.length > 0 && p.tasks.every((_, i) => isChecked(r, p, i));
 export function nextPeriod(r, now = Date.now()) {
-  if (r.index + 1 < r.periods.length) { r.index++; r.periodStart = runElapsed(r, now); } else r.wrapUp = true;
+  if (r.index + 1 < r.periods.length) { r.index++; r.periodStart = runElapsed(r, now); }
+  else if (r.cycle < (r.repeats || 1)) repeatCycle(r, r.phase, now);
+  else r.wrapUp = true;
 }
+/** Change the current interval's length (it keeps the time already spent). */
+export function setMinutes(r, m) { const p = r.periods[r.index]; if (p) p.minutes = Math.min(480, Math.max(1, Math.round(Number(m) || 1))); }
 export function repeatCycle(r, phase, now = Date.now()) {
   Object.assign(r, { phase, index: 0, cycle: r.cycle + 1, checked: [], wrapUp: false, periodStart: runElapsed(r, now) });
 }

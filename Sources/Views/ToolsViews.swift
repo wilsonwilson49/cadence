@@ -27,7 +27,7 @@ struct FlashcardsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if courses.isEmpty {
-                        Card { Text("Flashcards belong to a course. Make one under Study › Courses first.").foregroundStyle(.secondary) }
+                        Card { Text("Flashcards belong to a preset (one per subject works well). Make one under Study › Presets first.").foregroundStyle(.secondary) }
                     } else if reviewing {
                         CardReview(courseIDs: course.map { [$0.id] } ?? courses.map(\.id)) { reviewing = false }
                     } else {

@@ -14,12 +14,14 @@ import Foundation
 enum StudyMode: String, Codable, CaseIterable, Identifiable {
     case timed, dynamic, offline
     var id: String { rawValue }
-    var title: String { self == .timed ? "Timed" : self == .dynamic ? "Class period" : "No computer" }
+    var title: String { self == .timed ? "Timed" : self == .dynamic ? "Intervals" : "No computer" }
+    /// The modes you can start (timed sessions are now just an interval preset; old logs keep the name).
+    static let startable: [StudyMode] = [.dynamic, .offline]
     var symbol: String { self == .timed ? "timer" : self == .dynamic ? "graduationcap" : "book.closed" }
     var blurb: String {
         switch self {
         case .timed: return "Study and break on a clock, for as many rounds as you like."
-        case .dynamic: return "Go through a class period: lecture, questions, homework, office hours, quiz. Then repeat the phase or move on."
+        case .dynamic: return "Run a preset of intervals: the class period, 25 on / 5 off, or your own. Every length is adjustable."
         case .offline: return "Put the computer away and study on paper. Cadence keeps time and notes if you come back to the screen."
         }
     }
@@ -65,7 +67,7 @@ struct PhaseRules: Codable, Hashable {
 }
 
 enum PeriodKind: String, Codable, CaseIterable, Identifiable {
-    case lecture, questions, homework, officeHours, quiz, custom
+    case lecture, questions, homework, officeHours, quiz, custom, study, breakTime
     var id: String { rawValue }
     var defaultTitle: String {
         switch self {
@@ -75,6 +77,8 @@ enum PeriodKind: String, Codable, CaseIterable, Identifiable {
         case .officeHours: return "Office hours"
         case .quiz: return "Quiz"
         case .custom: return "Your own period"
+        case .study: return "Study"
+        case .breakTime: return "Break"
         }
     }
     var defaultBlurb: String {
@@ -84,7 +88,8 @@ enum PeriodKind: String, Codable, CaseIterable, Identifiable {
         case .homework: return "Solve as many problems as you can. Ask AI, check the back of the textbook."
         case .officeHours: return "Ask about the problems you got stuck on: a friend who's studying it, AI, a teacher. Learn as much as you can."
         case .quiz: return "Try to retain as much as you can. Write down what you got wrong; you'll start there next session."
-        case .custom: return ""
+        case .custom, .study: return ""
+        case .breakTime: return "Stand up, stretch, drink some water, look away from the screen."
         }
     }
     var symbol: String {
@@ -95,6 +100,8 @@ enum PeriodKind: String, Codable, CaseIterable, Identifiable {
         case .officeHours: return "person.2"
         case .quiz: return "checkmark.seal"
         case .custom: return "star"
+        case .study: return "book"
+        case .breakTime: return "cup.and.saucer"
         }
     }
     var defaultMinutes: Int {
@@ -105,6 +112,8 @@ enum PeriodKind: String, Codable, CaseIterable, Identifiable {
         case .officeHours: return 15
         case .quiz: return 15
         case .custom: return 15
+        case .study: return 25
+        case .breakTime: return 5
         }
     }
     /// Which note rule applies in this period (lecture and questions are always open).
@@ -209,6 +218,12 @@ struct Course: Codable, Identifiable, Equatable {
     var rules: [String: PhaseRules] = [:]
     var mistakes: [Mistake] = []
     var cards: [Flashcard] = []
+    /// How many times to run the intervals in a row.
+    var repeats = 1
+    /// Move to the next interval by itself when its time is up.
+    var autoAdvance = false
+    /// Show the phase, note rules and "what you got wrong" (the class-period way of studying).
+    var showPhase = true
     var createdAt = Date()
     var updatedAt: Date?
     var archived: Bool?
@@ -221,6 +236,7 @@ struct Course: Codable, Identifiable, Equatable {
         chapter = c.value(.chapter, ""); phase = c.value(.phase, StudyPhase.reading); taskBased = c.value(.taskBased, false)
         periods = c.value(.periods, StudyPeriod.classPeriod); rules = c.value(.rules, [:])
         mistakes = c.value(.mistakes, []); cards = c.value(.cards, [])
+        repeats = max(1, c.value(.repeats, 1)); autoAdvance = c.value(.autoAdvance, false); showPhase = c.value(.showPhase, true)
         createdAt = c.value(.createdAt, Date()); updatedAt = c.value(.updatedAt, nil as Date?); archived = c.value(.archived, nil as Bool?)
     }
 
@@ -229,6 +245,39 @@ struct Course: Codable, Identifiable, Equatable {
     func dueCards(today: Date = Date()) -> [Flashcard] { cards.filter { $0.isDue(today: today) } }
     var activePeriods: [StudyPeriod] { periods.filter(\.enabled) }
     var cycleMinutes: Int { activePeriods.reduce(0) { $0 + $1.minutes } }
+
+    /// Built-in presets to start from.
+    enum Template: String, CaseIterable, Identifiable {
+        case classPeriod, pomodoro, long, deep, blank
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .classPeriod: return "Class period"
+            case .pomodoro: return "25 on / 5 off × 4"
+            case .long: return "50 on / 10 off × 3"
+            case .deep: return "90 on / 15 off × 2"
+            case .blank: return "Blank"
+            }
+        }
+    }
+    static func template(_ t: Template) -> Course {
+        func onOff(_ on: Int, _ off: Int, _ n: Int) -> Course {
+            var c = Course(title: "\(on) / \(off)", color: .teal)
+            c.periods = [StudyPeriod(kind: .study, minutes: on), StudyPeriod(kind: .breakTime, minutes: off)]
+            c.repeats = n; c.autoAdvance = true; c.showPhase = false
+            return c
+        }
+        switch t {
+        case .classPeriod: var c = Course(title: "Class period", color: .purple); c.showPhase = true; return c
+        case .pomodoro: return onOff(25, 5, 4)
+        case .long: return onOff(50, 10, 3)
+        case .deep: return onOff(90, 15, 2)
+        case .blank:
+            var c = Course(title: "New preset", color: .blue)
+            c.periods = [StudyPeriod(kind: .study)]; c.showPhase = false; c.autoAdvance = true
+            return c
+        }
+    }
 
     static func demo() -> [Course] {
         var chem = Course(title: "Chemistry", color: .green)
@@ -333,6 +382,9 @@ struct StudyRun: Codable, Equatable {
     var phase: StudyPhase = .reading
     var cycle = 1
     var wrapUp = false
+    var repeats: Int?
+    var autoAdvance: Bool?
+    var showPhase: Bool?
     // No computer
     var plannedMinutes = 60
     var screenSeconds = 0
@@ -380,8 +432,12 @@ struct StudyRun: Codable, Equatable {
     }
     func periodTasksDone(_ p: StudyPeriod) -> Bool { !p.tasks.isEmpty && p.tasks.indices.allSatisfy { isChecked(p, $0) } }
     mutating func nextPeriod(_ now: Date = Date()) {
-        if index + 1 < periods.count { index += 1; periodStart = elapsed(now) } else { wrapUp = true }
+        if index + 1 < periods.count { index += 1; periodStart = elapsed(now) }
+        else if cycle < (repeats ?? 1) { repeatCycle(phase: phase, now) }
+        else { wrapUp = true }
     }
+    /// Change the current interval's length (it keeps the time already spent).
+    mutating func setMinutes(_ m: Int) { if periods.indices.contains(index) { periods[index].minutes = min(480, max(1, m)) } }
     /// After the quiz: go through the class period again (same phase or the next).
     mutating func repeatCycle(phase newPhase: StudyPhase, _ now: Date = Date()) {
         phase = newPhase; index = 0; cycle += 1; checked = []; wrapUp = false; periodStart = elapsed(now)
@@ -416,6 +472,7 @@ struct StudyRun: Codable, Equatable {
             r.periods = c.activePeriods.isEmpty ? StudyPeriod.classPeriod : c.activePeriods
             r.taskBased = c.taskBased
             r.phase = c.phase
+            r.repeats = c.repeats; r.autoAdvance = c.autoAdvance; r.showPhase = c.showPhase
         } else {
             r.periods = StudyPeriod.classPeriod
         }

@@ -813,3 +813,9 @@ table.rules tr.on td:first-child b { color: var(--accent); }
 .note-edit { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .note-body { flex: 1; width: 100%; border: 0; background: none; color: var(--text); font: inherit; font-size: 15px; line-height: 1.55; resize: none; outline: none; padding: 4px 0; }
 @media (max-width: 720px) { .notes-page { flex-direction: column; height: auto; } .note-list { width: 100%; max-height: 200px; } .note-body { min-height: 300px; } }
+.mode-cards.two { grid-template-columns: repeat(2, 1fr); }
+.min-field { display: inline-flex; align-items: center; gap: 2px; }
+.min-field input { width: 56px; }
+.min-field select { width: 22px; padding: 2px 0; }
+.period-pill.brk { background: color-mix(in srgb, var(--green) 10%, transparent); }
+.period-strip .period-pill { gap: 4px; }

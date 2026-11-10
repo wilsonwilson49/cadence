@@ -7,9 +7,9 @@ struct StudyView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "Study", subtitle: "Timed rounds, a class-period cycle, or time away from the screen.") {
+            ScreenHeader(title: "Study", subtitle: "Interval presets (the class period, 25 on / 5 off, your own) or time away from the screen.") {
                 Picker("", selection: $tab) {
-                    Text("Session").tag("session"); Text("Courses").tag("courses"); Text("History").tag("history")
+                    Text("Session").tag("session"); Text("Presets").tag("courses"); Text("History").tag("history")
                 }
                 .pickerStyle(.segmented).fixedSize()
             }
@@ -37,21 +37,24 @@ private struct StudySetup: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var study: StudyEngine
     @AppStorage("studyMode") private var mode: StudyMode = .dynamic
-    @AppStorage("studyCourse") private var courseKey = ""
-    @AppStorage("studyMinutes") private var studyMinutes = 25
-    @AppStorage("studyBreak") private var breakMinutes = 5
-    @AppStorage("studyRounds") private var rounds = 4
+    /// A saved preset's id, or "tpl:<template>" for a built-in one.
+    @AppStorage("studyPreset") private var presetKey = "tpl:classPeriod"
     @AppStorage("studyOffline") private var offlineMinutes = 60
     @State private var title = ""
-    @State private var taskBasedOverride: Bool?
+    /// This session's copy of the preset: change any length before you start.
+    @State private var draft = Course.template(.classPeriod)
 
-    private var course: Course? { UUID(uuidString: courseKey).flatMap(store.course) }
+    private var saved: Course? { UUID(uuidString: presetKey).flatMap(store.course) }
+    private func loadDraft() {
+        if let c = saved { draft = c }
+        else { draft = Course.template(Course.Template(rawValue: presetKey.replacingOccurrences(of: "tpl:", with: "")) ?? .classPeriod) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             if let last = study.lastLog { lastSummary(last) }
             HStack(spacing: 12) {
-                ForEach(StudyMode.allCases) { m in
+                ForEach(StudyMode.startable) { m in
                     Button { mode = m } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Label(m.title, systemImage: m.symbol).font(.headline)
@@ -59,7 +62,7 @@ private struct StudySetup: View {
                             Spacer(minLength: 0)
                         }
                         .padding(12)
-                        .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+                        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
                         .background(RoundedRectangle(cornerRadius: 12).fill(mode == m ? Color.accentColor.opacity(0.14) : Color(nsColor: .controlBackgroundColor)))
                         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(mode == m ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: mode == m ? 2 : 1))
                         .contentShape(Rectangle())
@@ -71,25 +74,25 @@ private struct StudySetup: View {
             Card {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Picker("Course", selection: $courseKey) {
-                            Text("No course").tag("")
-                            ForEach(store.activeCourses) { c in Text(c.title).tag(c.id.uuidString) }
+                        Picker("Preset", selection: $presetKey) {
+                            if !store.activeCourses.isEmpty {
+                                Section("Your presets") { ForEach(store.activeCourses) { c in Text(c.title).tag(c.id.uuidString) } }
+                            }
+                            Section("Built in") {
+                                ForEach(Course.Template.allCases.filter { $0 != .blank }) { t in Text(t.title).tag("tpl:\(t.rawValue)") }
+                            }
                         }
-                        .frame(maxWidth: 260)
-                        Button("New course…") { newCourse() }.controlSize(.small)
+                        .frame(maxWidth: 300)
+                        Button("New preset…") { newPreset() }.controlSize(.small)
                         Spacer()
                     }
-                    TextField(course.map { "What you're studying (default: \($0.chapter.isEmpty ? $0.title : $0.chapter))" } ?? "What you're studying, e.g. Ch. 4 problems",
+                    TextField(saved.map { "What you're studying (default: \($0.chapter.isEmpty ? $0.title : $0.chapter))" } ?? "What you're studying, e.g. Ch. 4 problems",
                               text: $title)
                         .textFieldStyle(.roundedBorder)
-                    switch mode {
-                    case .timed: timedOptions
-                    case .dynamic: dynamicOptions
-                    case .offline: offlineOptions
-                    }
+                    if mode == .offline { offlineOptions } else { intervalOptions }
                     HStack {
                         Spacer()
-                        Button { start() } label: { Label("Start \(mode.title.lowercased()) session", systemImage: "play.fill") }
+                        Button { start() } label: { Label("Start \(mode == .offline ? "no-computer" : "interval") session", systemImage: "play.fill") }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                             .keyboardShortcut(.defaultAction)
                     }
@@ -97,90 +100,98 @@ private struct StudySetup: View {
             }
             StudyStats()
         }
-        .onChange(of: courseKey) { _, _ in taskBasedOverride = nil }
-    }
-
-    private var timedOptions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                ForEach([(25, 5, 4), (50, 10, 3), (90, 15, 2)], id: \.0) { s, b, r in
-                    Button("\(s)/\(b) × \(r)") { studyMinutes = s; breakMinutes = b; rounds = r }
-                        .buttonStyle(.bordered).tint(studyMinutes == s && breakMinutes == b && rounds == r ? .accentColor : nil)
-                }
-            }
-            HStack(spacing: 18) {
-                Stepper("Study \(studyMinutes) min", value: $studyMinutes, in: 5...240, step: 5)
-                Stepper("Break \(breakMinutes) min", value: $breakMinutes, in: 0...60, step: 1)
-                Stepper("\(rounds) round\(rounds == 1 ? "" : "s")", value: $rounds, in: 1...12)
-            }
-            .fixedSize()
-            Text("About \(durationString(seconds: (studyMinutes * rounds + breakMinutes * max(0, rounds - 1)) * 60)) in all. You'll get a notification at every switch.")
-                .font(.caption).foregroundStyle(.secondary)
+        .onAppear {
+            if mode == .timed { mode = .dynamic; presetKey = "tpl:pomodoro" }
+            loadDraft()
         }
+        .onChange(of: presetKey) { _, _ in loadDraft() }
     }
 
-    @ViewBuilder private var dynamicOptions: some View {
-        let periods = course?.activePeriods ?? StudyPeriod.classPeriod
-        let taskBased = taskBasedOverride ?? course?.taskBased ?? false
+    @ViewBuilder private var intervalOptions: some View {
+        let ids = draft.periods.filter(\.enabled).map(\.id)
         VStack(alignment: .leading, spacing: 10) {
-            if let c = course {
+            if draft.showPhase, let c = saved {
                 PhaseBanner(course: c)
                 if !c.openMistakes.isEmpty {
                     Label("You'll start with \(c.openMistakes.count) thing\(c.openMistakes.count == 1 ? "" : "s") you got wrong last time.", systemImage: "arrow.uturn.backward.circle")
                         .font(.callout).foregroundStyle(.orange)
                 }
-            } else {
-                Text("No course: you'll use the standard class period. Make a course to program your own periods, tasks and phase.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
-            Picker("Each period ends", selection: Binding(get: { taskBased }, set: { taskBasedOverride = $0 })) {
+            Picker("Each interval ends", selection: $draft.taskBased) {
                 Text("When its time is up").tag(false)
                 Text("When its tasks are done").tag(true)
             }
             .pickerStyle(.segmented).fixedSize()
-            HStack(spacing: 6) {
-                ForEach(Array(periods.enumerated()), id: \.element.id) { i, p in
-                    if i > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary) }
-                    VStack(spacing: 2) {
-                        Label(p.title, systemImage: p.kind.symbol).font(.caption.weight(.semibold)).lineLimit(1)
-                        Text(taskBased ? "\(p.tasks.count) task\(p.tasks.count == 1 ? "" : "s")" : "\(p.minutes) min").font(.caption2).foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Array(ids.enumerated()), id: \.element) { n, id in
+                        if let i = draft.periods.firstIndex(where: { $0.id == id }) {
+                            if n > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary) }
+                            VStack(spacing: 4) {
+                                Label(draft.periods[i].title, systemImage: draft.periods[i].kind.symbol).font(.caption.weight(.semibold)).lineLimit(1)
+                                if draft.taskBased {
+                                    Text("\(draft.periods[i].tasks.count) task\(draft.periods[i].tasks.count == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary)
+                                } else {
+                                    MinutesField(value: $draft.periods[i].minutes)
+                                }
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(draft.periods[i].kind == .breakTime ? Color.green.opacity(0.08) : Color.primary.opacity(0.05)))
+                        }
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
                 }
             }
-            Text(taskBased ? "Tick off each period's tasks, then move on. Programmed per course under Courses."
-                 : "About \(durationString(seconds: periods.reduce(0) { $0 + $1.minutes } * 60)) for one cycle. Then repeat the phase or move on.")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                HStack(spacing: 4) { Text("Repeat"); MinutesField(value: $draft.repeats, range: 1...20, suffix: "×", choices: [1, 2, 3, 4, 6, 8]) }
+                Toggle("Move on to the next interval by itself", isOn: $draft.autoAdvance).toggleStyle(.checkbox)
+            }
+            HStack {
+                Text(draft.taskBased ? "Tick off each interval's tasks, then move on."
+                     : "About \(durationString(seconds: draft.cycleMinutes * draft.repeats * 60)) in all. Change any length; it's just for this session unless you save it.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if let c = saved {
+                    if c.periods != draft.periods || c.repeats != draft.repeats || c.autoAdvance != draft.autoAdvance || c.taskBased != draft.taskBased {
+                        Button("Save to \(c.title)") { store.editCourse(c.id) { $0.periods = draft.periods; $0.repeats = draft.repeats; $0.autoAdvance = draft.autoAdvance; $0.taskBased = draft.taskBased } }
+                            .controlSize(.small)
+                    }
+                } else {
+                    Button("Save as my preset") {
+                        var c = draft; c.id = UUID(); c.periods = c.periods.map { var p = $0; p.id = UUID(); return p }
+                        store.upsert(c); presetKey = c.id.uuidString
+                    }
+                    .controlSize(.small)
+                }
+            }
         }
     }
 
     private var offlineOptions: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("How long", selection: $offlineMinutes) {
-                ForEach([30, 45, 60, 90, 120, 180], id: \.self) { Text(durationString(seconds: $0 * 60)).tag($0) }
-                Text("Until I stop").tag(0)
+            HStack {
+                Text("How long")
+                MinutesField(value: $offlineMinutes, range: 0...600, choices: [30, 45, 60, 90, 120, 180])
+                Text(offlineMinutes == 0 ? "(0 = until I stop)" : "").font(.caption).foregroundStyle(.secondary)
             }
-            .fixedSize()
             Text("Close the laptop or walk away from it. If you use the computer during the session, Cadence notes it and reminds you.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    private func newCourse() {
-        let c = Course(title: "New course", color: TaskColor.allCases.randomElement() ?? .blue)
+    private func newPreset() {
+        let c = Course.template(.blank)
         store.upsert(c)
-        courseKey = c.id.uuidString
+        presetKey = c.id.uuidString
         UserDefaults.standard.set("courses", forKey: "studyTab")
         UserDefaults.standard.set(c.id.uuidString, forKey: "studyEditingCourse")
     }
 
     private func start() {
         let t = title.trimmingCharacters(in: .whitespaces)
-        var r = StudyRun.make(mode, course: course, title: t.isEmpty ? (course.map { $0.chapter.isEmpty ? $0.title : "\($0.title): \($0.chapter)" } ?? "") : t)
-        r.studyMinutes = studyMinutes; r.breakMinutes = breakMinutes; r.rounds = rounds
+        let base = saved
+        var r = StudyRun.make(mode, course: draft, title: t.isEmpty ? (base.map { $0.chapter.isEmpty ? $0.title : "\($0.title): \($0.chapter)" } ?? draft.title) : t)
+        r.courseID = base?.id
         r.plannedMinutes = offlineMinutes
-        if let o = taskBasedOverride { r.taskBased = o }
         study.start(r)
         title = ""
     }
@@ -367,7 +378,7 @@ private struct ClassPeriodRunView: View {
     var body: some View {
         let course = store.course(run.courseID)
         VStack(alignment: .leading, spacing: 14) {
-            if let c = course { PhaseBanner(course: c, phase: run.phase) }
+            if run.showPhase != false, let c = course { PhaseBanner(course: c, phase: run.phase) }
             // The cycle, with where you are.
             HStack(spacing: 6) {
                 Text("Cycle \(run.cycle)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -438,7 +449,12 @@ private struct ClassPeriodRunView: View {
                 }
                 HStack {
                     if !run.taskBased {
-                        Button("+5 min") { study.update { $0.periodStart += 300 } }
+                        HStack(spacing: 4) {
+                            Text("Length")
+                            Button("−5") { study.update { $0.setMinutes(p.minutes - 5) } }
+                            MinutesField(value: Binding(get: { p.minutes }, set: { v in study.update { $0.setMinutes(v) } }))
+                            Button("+5") { study.update { $0.setMinutes(p.minutes + 5) } }
+                        }
                     }
                     Spacer()
                     let next = run.periods.indices.contains(run.index + 1) ? run.periods[run.index + 1].title : "Wrap up"
@@ -461,13 +477,13 @@ private struct ClassPeriodRunView: View {
     @ViewBuilder private func wrapUp(_ course: Course?) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Cycle \(run.cycle) done", systemImage: "flag.checkered").font(.title2.bold())
-                Text("Repeat and move on to the next phase if it seems good.").foregroundStyle(.secondary)
+                Label(run.showPhase == false ? "All intervals done" : "Cycle \(run.cycle) done", systemImage: "flag.checkered").font(.title2.bold())
+                Text(run.showPhase == false ? "Go again, or finish and log it." : "Repeat and move on to the next phase if it seems good.").foregroundStyle(.secondary)
                 HStack(spacing: 10) {
                     Button { study.update { $0.repeatCycle(phase: run.phase) } } label: {
                         Label("Repeat \(run.phase.title.lowercased())", systemImage: "arrow.counterclockwise")
                     }
-                    if let next = run.phase.next {
+                    if run.showPhase != false, let next = run.phase.next {
                         Button { study.update { $0.repeatCycle(phase: next) } } label: {
                             Label("Move on to \(next.title.lowercased())", systemImage: "arrow.right.circle")
                         }
@@ -476,7 +492,7 @@ private struct ClassPeriodRunView: View {
                     Spacer()
                     Button("Finish and log") { study.finish() }
                 }
-                if let c = course {
+                if run.showPhase != false, let c = course {
                     Divider()
                     HStack {
                         TextField("Done with \(c.chapter.isEmpty ? "this chapter" : c.chapter)? Next chapter", text: $newChapter)
@@ -629,12 +645,15 @@ private struct CoursesPanel: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button { let c = Course(title: "New course", color: TaskColor.allCases.randomElement() ?? .blue); store.upsert(c); editingKey = c.id.uuidString } label: {
-                    Label("New course", systemImage: "plus")
-                }
+                Menu {
+                    ForEach(Course.Template.allCases) { t in
+                        Button(t == .blank ? "Blank" : "From \(t.title)") { let c = Course.template(t); store.upsert(c); editingKey = c.id.uuidString }
+                    }
+                } label: { Label("New preset", systemImage: "plus") }
+                .fixedSize()
                 .padding(.top, 4)
                 if courses.isEmpty {
-                    Text("A course is a subject you study: Chemistry, CS, History. Each one gets its own class period, tasks and phase.")
+                    Text("A preset is a set of intervals you study with: the class period, 25 on / 5 off, or your own. Make one per subject if you like (Chemistry, CS), each with its own lengths, tasks and phase.")
                         .font(.caption).foregroundStyle(.secondary).padding(.top, 6)
                 }
             }
@@ -642,7 +661,7 @@ private struct CoursesPanel: View {
             if let id = UUID(uuidString: editingKey), store.course(id) != nil {
                 CourseEditor(id: id).id(id)
             } else {
-                Text("Pick a course to program it.").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                Text("Pick a preset to change it.").foregroundStyle(.secondary).frame(maxWidth: .infinity)
             }
         }
         .onAppear {
@@ -663,7 +682,7 @@ private struct CourseEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                TextField("Course name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } }))
+                TextField("Preset name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } }))
                     .textFieldStyle(.plain).font(.title.bold())
                 Menu {
                     ForEach(TaskColor.allCases) { col in Button(col.rawValue.capitalized) { edit { $0.color = col } } }
@@ -675,6 +694,9 @@ private struct CourseEditor: View {
             TextField("What you're on now (e.g. Ch. 4: Stoichiometry)", text: Binding(get: { c.chapter }, set: { v in edit { $0.chapter = v } }))
                 .textFieldStyle(.roundedBorder)
 
+            Toggle("Use the phase, note rules and \"what you got wrong\" (the class-period way of studying)", isOn: Binding(get: { c.showPhase }, set: { v in edit { $0.showPhase = v } }))
+                .toggleStyle(.checkbox)
+            if c.showPhase {
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionTitle(text: "Phase", symbol: "chart.line.uptrend.xyaxis")
@@ -703,18 +725,23 @@ private struct CourseEditor: View {
                     }
                 }
             }
+            }
 
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        SectionTitle(text: "Class period", symbol: "graduationcap")
+                        SectionTitle(text: "Intervals", symbol: "timer")
                         Picker("", selection: Binding(get: { c.taskBased }, set: { v in edit { $0.taskBased = v } })) {
                             Text("Timed").tag(false); Text("By tasks").tag(true)
                         }
                         .pickerStyle(.segmented).fixedSize().labelsHidden()
                     }
-                    Text(c.taskBased ? "Each period ends when you've ticked off its tasks." : "Each period ends when its time is up (\(durationString(seconds: c.cycleMinutes * 60)) per cycle). Tasks are a checklist along the way.")
+                    Text(c.taskBased ? "Each interval ends when you've ticked off its tasks." : "Each interval ends when its time is up (\(durationString(seconds: c.cycleMinutes * 60)) per round). Tasks are a checklist along the way.")
                         .font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 14) {
+                        HStack(spacing: 4) { Text("Repeat"); MinutesField(value: Binding(get: { c.repeats }, set: { v in edit { $0.repeats = v } }), range: 1...20, suffix: "×", choices: [1, 2, 3, 4, 6, 8]) }
+                        Toggle("Move on by itself when time's up", isOn: Binding(get: { c.autoAdvance }, set: { v in edit { $0.autoAdvance = v } })).toggleStyle(.checkbox)
+                    }
                     ForEach(Array(c.periods.enumerated()), id: \.element.id) { i, p in
                         periodRow(i, p)
                         if i < c.periods.count - 1 { Divider() }
@@ -724,10 +751,15 @@ private struct CourseEditor: View {
                             ForEach(PeriodKind.allCases) { k in
                                 Button(k.defaultTitle) { edit { $0.periods.append(StudyPeriod(kind: k)) } }
                             }
-                        } label: { Label("Add a period", systemImage: "plus") }
+                        } label: { Label("Add an interval", systemImage: "plus") }
                         .fixedSize()
                         Spacer()
-                        Button("Reset to the class period") { edit { $0.periods = StudyPeriod.classPeriod } }.controlSize(.small)
+                        Menu("Replace with…") {
+                            ForEach(Course.Template.allCases.filter { $0 != .blank }) { t in
+                                Button(t.title) { let tpl = Course.template(t); edit { $0.periods = tpl.periods; $0.repeats = tpl.repeats; $0.autoAdvance = tpl.autoAdvance; $0.showPhase = tpl.showPhase } }
+                            }
+                        }
+                        .fixedSize().controlSize(.small)
                     }
                 }
             }
@@ -765,8 +797,7 @@ private struct CourseEditor: View {
                 Image(systemName: p.kind.symbol).foregroundStyle(.secondary).frame(width: 18)
                 TextField("Period name", text: bind(\.title)).textFieldStyle(.plain).font(.body.weight(.medium))
                 if !c.taskBased {
-                    Stepper("\(p.minutes) min", value: Binding(get: { p.minutes }, set: { v in edit { $0.periods[i].minutes = v } }), in: 1...240, step: 5)
-                        .fixedSize()
+                    MinutesField(value: Binding(get: { p.minutes }, set: { v in edit { $0.periods[i].minutes = v } }))
                 }
                 Button { edit { $0.periods.swapAt(i, i - 1) } } label: { Image(systemName: "arrow.up") }.buttonStyle(.borderless).disabled(i == 0)
                 Button { edit { $0.periods.swapAt(i, i + 1) } } label: { Image(systemName: "arrow.down") }.buttonStyle(.borderless).disabled(i == c.periods.count - 1)
@@ -799,5 +830,24 @@ private struct CourseEditor: View {
             .padding(.leading, 52)
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// A number you can type, with common values one click away (in place of +/- steppers).
+struct MinutesField: View {
+    @Binding var value: Int
+    var range: ClosedRange<Int> = 1...480
+    var suffix = "min"
+    var choices = [5, 10, 15, 20, 25, 30, 45, 50, 60, 90, 120]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            TextField("", value: Binding(get: { value }, set: { value = min(range.upperBound, max(range.lowerBound, $0)) }), format: .number)
+                .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 46)
+            Menu {
+                ForEach(choices.filter(range.contains), id: \.self) { m in Button("\(m) \(suffix)") { value = m } }
+            } label: { Text(suffix).font(.caption) }
+            .menuStyle(.borderlessButton).menuIndicator(.visible).fixedSize()
+        }
     }
 }

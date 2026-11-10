@@ -77,8 +77,15 @@ final class StudyEngine: ObservableObject {
         case .dynamic:
             guard !r.taskBased, !r.wrapUp, let p = r.period else { break }
             if r.periodSecondsLeft(now) <= 0, notified.insert("p\(r.cycle)|\(r.index)").inserted {
-                let next = r.periods.indices.contains(r.index + 1) ? r.periods[r.index + 1].title : "wrap up"
-                notify("Time's up: \(p.title)", "Next: \(next). Move on when you're ready.", symbol: p.kind.symbol)
+                let last = r.index + 1 >= r.periods.count && r.cycle >= (r.repeats ?? 1)
+                let next = r.periods.indices.contains(r.index + 1) ? r.periods[r.index + 1] : r.periods.first
+                if r.autoAdvance == true {
+                    if last { notify("Session done", "\(r.title): all intervals finished. Nice work."); finish(); return }
+                    update { $0.nextPeriod(now) }
+                    if let n = run?.period { notify("\(n.title): \(n.minutes) min", n.kind == .breakTime ? "Break time. Look away from the screen." : "Back to \(r.title).", symbol: n.kind.symbol) }
+                } else {
+                    notify("Time's up: \(p.title)", "Next: \(last ? "wrap up" : next?.title ?? "wrap up"). Move on when you're ready.", symbol: p.kind.symbol)
+                }
             }
         case .offline:
             // Using the Mac during a no-computer session: it's noted, with a reminder every couple of minutes.

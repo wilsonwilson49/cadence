@@ -42,6 +42,17 @@ final class MobileStudy: ObservableObject {
         now = Date()
         guard let r = run, !r.paused else { return }
         if r.mode == .timed, r.timedState(now).finished { finish(); return }
+        // Intervals that move on by themselves: catch up on any that ended (also after the app was closed).
+        if r.mode == .dynamic, r.autoAdvance == true, !r.taskBased, !r.wrapUp {
+            var x = r, moved = false
+            while !x.wrapUp, x.periodSecondsLeft(now) <= 0 {
+                let last = x.index + 1 >= x.periods.count && x.cycle >= (x.repeats ?? 1)
+                if last { run = x; finish(); return }
+                let over = Double(-x.periodSecondsLeft(now))
+                x.nextPeriod(now); x.periodStart -= over; moved = true
+            }
+            if moved { run = x }
+        }
         if r.mode == .offline, active { run?.screenSeconds += 1 }
     }
 
@@ -95,8 +106,22 @@ final class MobileStudy: ObservableObject {
             }
         case .dynamic:
             if !r.taskBased, !r.wrapUp, let p = r.period {
-                let next = r.periods.indices.contains(r.index + 1) ? r.periods[r.index + 1].title : "wrap up"
-                events.append((r.periodStart + Double(p.minutes * 60), "Time's up: \(p.title)", "Next: \(next)."))
+                if r.autoAdvance == true {
+                    // Every switch still ahead, as the intervals move on by themselves.
+                    var t = r.periodStart, i = r.index, cycle = r.cycle
+                    while true {
+                        t += Double(r.periods[i].minutes * 60)
+                        let last = i + 1 >= r.periods.count && cycle >= (r.repeats ?? 1)
+                        if last { events.append((t, "Session done", "\(r.title): all intervals finished.")); break }
+                        if i + 1 < r.periods.count { i += 1 } else { i = 0; cycle += 1 }
+                        let n = r.periods[i]
+                        events.append((t, "\(n.title): \(n.minutes) min", n.kind == .breakTime ? "Break time. Put the books down." : "Back to \(r.title)."))
+                        if events.count > 40 { break }
+                    }
+                } else {
+                    let next = r.periods.indices.contains(r.index + 1) ? r.periods[r.index + 1].title : "wrap up"
+                    events.append((r.periodStart + Double(p.minutes * 60), "Time's up: \(p.title)", "Next: \(next)."))
+                }
             }
         case .offline:
             if r.plannedMinutes > 0 { events.append((Double(r.plannedMinutes * 60), "Time's up", "\(r.plannedMinutes) min of \(r.title) away from the phone. Open Cadence to log it.")) }
@@ -128,7 +153,8 @@ private struct MobileStudySetup: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var study: MobileStudy
     @AppStorage("studyMode") private var mode: StudyMode = .dynamic
-    @AppStorage("studyCourse") private var courseKey = ""
+    @AppStorage("studyPreset") private var courseKey = "tpl:classPeriod"
+    @State private var draft = Course.template(.classPeriod)
     @AppStorage("studyMinutes") private var studyMinutes = 25
     @AppStorage("studyBreak") private var breakMinutes = 5
     @AppStorage("studyRounds") private var rounds = 4
@@ -136,6 +162,9 @@ private struct MobileStudySetup: View {
     @State private var title = ""
 
     private var course: Course? { UUID(uuidString: courseKey).flatMap(store.course) }
+    private func loadDraft() {
+        draft = course ?? Course.template(Course.Template(rawValue: courseKey.replacingOccurrences(of: "tpl:", with: "")) ?? .classPeriod)
+    }
 
     var body: some View {
         List {
@@ -145,40 +174,47 @@ private struct MobileStudySetup: View {
                 }
             }
             Section {
-                Picker("Mode", selection: $mode) { ForEach(StudyMode.allCases) { Text($0.title).tag($0) } }.pickerStyle(.segmented)
+                Picker("Mode", selection: $mode) { ForEach(StudyMode.startable) { Text($0.title).tag($0) } }.pickerStyle(.segmented)
                 Text(mode.blurb).font(.footnote).foregroundStyle(.secondary)
             }
             Section {
-                Picker("Course", selection: $courseKey) {
-                    Text("No course").tag("")
-                    ForEach(store.activeCourses) { Text($0.title).tag($0.id.uuidString) }
+                Picker("Preset", selection: $courseKey) {
+                    if !store.activeCourses.isEmpty {
+                        Section("Your presets") { ForEach(store.activeCourses) { Text($0.title).tag($0.id.uuidString) } }
+                    }
+                    Section("Built in") { ForEach(Course.Template.allCases.filter { $0 != .blank }) { Text($0.title).tag("tpl:\($0.rawValue)") } }
                 }
                 TextField("What you're studying", text: $title)
-                switch mode {
-                case .timed:
-                    Stepper("Study \(studyMinutes) min", value: $studyMinutes, in: 5...240, step: 5)
-                    Stepper("Break \(breakMinutes) min", value: $breakMinutes, in: 0...60)
-                    Stepper("\(rounds) round\(rounds == 1 ? "" : "s")", value: $rounds, in: 1...12)
-                case .dynamic:
-                    if let c = course {
+                if mode == .offline {
+                    MobileMinutes(label: "How long (0 = until I stop)", value: $offlineMinutes, range: 0...600)
+                } else {
+                    if draft.showPhase, let c = course {
                         LabeledContent("Phase", value: c.phase.title)
                         let r = c.rules(for: c.phase)
-                        LabeledContent("Homework", value: r.homework.title)
-                        LabeledContent("Quiz", value: r.quiz.title)
+                        LabeledContent("Homework · Quiz", value: "\(r.homework.title) · \(r.quiz.title)")
                         if !c.openMistakes.isEmpty { Label("You'll start with \(c.openMistakes.count) thing(s) you got wrong", systemImage: "arrow.uturn.backward.circle").foregroundStyle(.orange) }
                     }
-                    Text((course?.activePeriods ?? StudyPeriod.classPeriod).map(\.title).joined(separator: " → ")).font(.footnote).foregroundStyle(.secondary)
-                case .offline:
-                    Picker("How long", selection: $offlineMinutes) {
-                        ForEach([30, 45, 60, 90, 120, 180], id: \.self) { Text(durationString(seconds: $0 * 60)).tag($0) }
-                        Text("Until I stop").tag(0)
+                    ForEach(draft.periods.indices, id: \.self) { i in
+                        if draft.periods[i].enabled {
+                            MobileMinutes(label: draft.periods[i].title, value: $draft.periods[i].minutes)
+                        }
+                    }
+                    MobileMinutes(label: "Repeat", value: $draft.repeats, range: 1...20, suffix: "×")
+                    Toggle("Move on by itself", isOn: $draft.autoAdvance)
+                    if course == nil {
+                        Button("Save as my preset") {
+                            var c = draft; c.id = UUID(); c.periods = c.periods.map { var p = $0; p.id = UUID(); return p }
+                            store.upsert(c); courseKey = c.id.uuidString
+                        }
+                    } else if let c = course, c.periods != draft.periods || c.repeats != draft.repeats || c.autoAdvance != draft.autoAdvance {
+                        Button("Save to \(c.title)") { store.editCourse(c.id) { $0.periods = draft.periods; $0.repeats = draft.repeats; $0.autoAdvance = draft.autoAdvance } }
                     }
                 }
             } footer: {
                 if mode == .offline { Text("Put the phone face down or in another room. Time with Cadence open counts as phone use.") }
             }
             Section {
-                Button { start() } label: { Label("Start \(mode.title.lowercased()) session", systemImage: "play.fill").frame(maxWidth: .infinity) }
+                Button { start() } label: { Label("Start \(mode == .offline ? "no-phone" : "interval") session", systemImage: "play.fill").frame(maxWidth: .infinity) }
                     .buttonStyle(.borderedProminent)
                     .listRowBackground(Color.clear)
             }
@@ -186,17 +222,39 @@ private struct MobileStudySetup: View {
                 LabeledContent("Today", value: durationString(seconds: store.studyMinutes(on: Date()) * 60))
                 LabeledContent("Streak", value: "\(store.studyStreak) day\(store.studyStreak == 1 ? "" : "s")")
                 NavigationLink { StudyHistoryScreen() } label: { Text("History") }
-                NavigationLink { CoursesScreen() } label: { Text("Courses").badge(store.activeCourses.count) }
+                NavigationLink { CoursesScreen() } label: { Text("Presets").badge(store.activeCourses.count) }
             }
         }
+        .onAppear { if mode == .timed { mode = .dynamic; courseKey = "tpl:pomodoro" }; loadDraft() }
+        .onChange(of: courseKey) { _, _ in loadDraft() }
     }
 
     private func start() {
         let t = title.trimmingCharacters(in: .whitespaces)
-        var r = StudyRun.make(mode, course: course, title: t.isEmpty ? (course.map { $0.chapter.isEmpty ? $0.title : "\($0.title): \($0.chapter)" } ?? "") : t)
-        r.studyMinutes = studyMinutes; r.breakMinutes = breakMinutes; r.rounds = rounds; r.plannedMinutes = offlineMinutes
+        var r = StudyRun.make(mode, course: draft, title: t.isEmpty ? (course.map { $0.chapter.isEmpty ? $0.title : "\($0.title): \($0.chapter)" } ?? draft.title) : t)
+        r.courseID = course?.id
+        r.plannedMinutes = offlineMinutes
         study.start(r)
         title = ""
+    }
+}
+
+/// A length you can type, with common values in a menu (in place of +/- steppers).
+struct MobileMinutes: View {
+    let label: String
+    @Binding var value: Int
+    var range: ClosedRange<Int> = 1...480
+    var suffix = "min"
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("", value: Binding(get: { value }, set: { value = min(range.upperBound, max(range.lowerBound, $0)) }), format: .number)
+                .keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 60)
+            Menu {
+                ForEach([1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45, 50, 60, 90, 120].filter(range.contains), id: \.self) { m in Button("\(m) \(suffix)") { value = m } }
+            } label: { Text(suffix).foregroundStyle(.secondary) }
+        }
     }
 }
 
@@ -256,7 +314,7 @@ private struct MobileRunningStudy: View {
     }
 
     @ViewBuilder private func classPeriod(_ r: StudyRun, _ course: Course?) -> some View {
-        if let c = course {
+        if r.showPhase != false, let c = course {
             let rules = c.rules(for: r.phase)
             Section {
                 LabeledContent("Phase", value: r.phase.title)
@@ -278,9 +336,9 @@ private struct MobileRunningStudy: View {
             }
         }
         if r.wrapUp {
-            Section("Cycle \(r.cycle) done") {
-                Button("Repeat \(r.phase.title.lowercased())") { study.update { $0.repeatCycle(phase: r.phase) } }
-                if let next = r.phase.next { Button("Move on to \(next.title.lowercased())") { study.update { $0.repeatCycle(phase: next) } } }
+            Section(r.showPhase == false ? "All intervals done" : "Cycle \(r.cycle) done") {
+                Button(r.showPhase == false ? "Go again" : "Repeat \(r.phase.title.lowercased())") { study.update { $0.repeatCycle(phase: r.phase) } }
+                if r.showPhase != false, let next = r.phase.next { Button("Move on to \(next.title.lowercased())") { study.update { $0.repeatCycle(phase: next) } } }
                 Button("Finish and log") { study.finish() }
             }
         } else if let p = r.period {
@@ -302,7 +360,13 @@ private struct MobileRunningStudy: View {
                         .onSubmit { study.addMistake(mistake, card: asCard); mistake = "" }
                     if course != nil { Toggle("Also make a flashcard", isOn: $asCard) }
                 }
-                if !r.taskBased { Button("+5 min") { study.update { $0.periodStart += 300 } } }
+                if !r.taskBased {
+                    MobileMinutes(label: "Length", value: Binding(get: { p.minutes }, set: { v in study.update { $0.setMinutes(v) } }))
+                    HStack {
+                        Button("−5 min") { study.update { $0.setMinutes(p.minutes - 5) } }.buttonStyle(.bordered)
+                        Button("+5 min") { study.update { $0.setMinutes(p.minutes + 5) } }.buttonStyle(.bordered)
+                    }
+                }
                 Button {
                     study.update { $0.nextPeriod() }
                 } label: {
@@ -352,10 +416,14 @@ struct CoursesScreen: View {
                 .swipeActions { Button("Delete", role: .destructive) { store.deleteCourse(c.id) } }
             }
         }
-        .navigationTitle("Courses")
-        .toolbar { Button { let c = Course(title: "New course", color: TaskColor.allCases.randomElement() ?? .blue); store.upsert(c); open = c.id } label: { Image(systemName: "plus") } }
+        .navigationTitle("Presets")
+        .toolbar {
+            Menu {
+                ForEach(Course.Template.allCases) { t in Button(t == .blank ? "Blank" : "From \(t.title)") { let c = Course.template(t); store.upsert(c); open = c.id } }
+            } label: { Image(systemName: "plus") }
+        }
         .navigationDestination(item: $open) { CourseScreen(id: $0) }
-        .overlay { if store.activeCourses.isEmpty { ContentUnavailableView("No courses yet", systemImage: "graduationcap", description: Text("A course is a subject you study, with its own class period and phase.")) } }
+        .overlay { if store.activeCourses.isEmpty { ContentUnavailableView("No presets yet", systemImage: "timer", description: Text("A preset is a set of intervals: the class period, 25 on / 5 off, or your own.")) } }
     }
 }
 
@@ -369,12 +437,16 @@ struct CourseScreen: View {
     var body: some View {
         Form {
             Section {
-                TextField("Course name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } })).font(.headline)
+                TextField("Preset name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } })).font(.headline)
                 TextField("What you're on now", text: Binding(get: { c.chapter }, set: { v in edit { $0.chapter = v } }))
                 Picker("Color", selection: Binding(get: { c.color }, set: { v in edit { $0.color = v } })) {
                     ForEach(TaskColor.allCases) { Text($0.rawValue.capitalized).tag($0) }
                 }
             }
+            Section {
+                Toggle("Phase, note rules and mistakes", isOn: Binding(get: { c.showPhase }, set: { v in edit { $0.showPhase = v } }))
+            } footer: { Text("The class-period way of studying. Turn it off for simple on/off intervals.") }
+            if c.showPhase {
             Section {
                 Picker("Phase", selection: Binding(get: { c.phase }, set: { v in edit { $0.phase = v } })) {
                     ForEach(StudyPhase.allCases) { Text($0.title).tag($0) }
@@ -386,11 +458,14 @@ struct CourseScreen: View {
                     }
                 }
             } header: { Text("Phase") } footer: { Text(c.phase.blurb) }
+            }
             Section {
                 Picker("Each period ends", selection: Binding(get: { c.taskBased }, set: { v in edit { $0.taskBased = v } })) {
                     Text("On time").tag(false); Text("By tasks").tag(true)
                 }
                 .pickerStyle(.segmented)
+                MobileMinutes(label: "Repeat", value: Binding(get: { c.repeats }, set: { v in edit { $0.repeats = v } }), range: 1...20, suffix: "×")
+                Toggle("Move on by itself", isOn: Binding(get: { c.autoAdvance }, set: { v in edit { $0.autoAdvance = v } }))
                 ForEach(Array(c.periods.enumerated()), id: \.element.id) { i, p in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
@@ -399,7 +474,7 @@ struct CourseScreen: View {
                             }
                         }
                         if !c.taskBased {
-                            Stepper("\(p.minutes) min", value: Binding(get: { p.minutes }, set: { v in edit { $0.periods[i].minutes = v } }), in: 1...240, step: 5)
+                            MobileMinutes(label: "Length", value: Binding(get: { p.minutes }, set: { v in edit { $0.periods[i].minutes = v } }))
                         }
                         ForEach(Array(p.tasks.enumerated()), id: \.offset) { ti, t in
                             HStack { Image(systemName: "square").foregroundStyle(.secondary); Text(t).font(.callout); Spacer()
@@ -417,8 +492,8 @@ struct CourseScreen: View {
                 }
                 .onDelete { idx in edit { $0.periods.remove(atOffsets: idx) } }
                 .onMove { from, to in edit { $0.periods.move(fromOffsets: from, toOffset: to) } }
-                Menu("Add a period") { ForEach(PeriodKind.allCases) { k in Button(k.defaultTitle) { edit { $0.periods.append(StudyPeriod(kind: k)) } } } }
-            } header: { Text("Class period") }
+                Menu("Add an interval") { ForEach(PeriodKind.allCases) { k in Button(k.defaultTitle) { edit { $0.periods.append(StudyPeriod(kind: k)) } } } }
+            } header: { Text("Intervals") }
             if !c.openMistakes.isEmpty {
                 Section("What you got wrong") {
                     ForEach(c.openMistakes) { m in
@@ -459,7 +534,7 @@ struct FlashcardsScreen: View {
                 }
             }
             if courses.isEmpty {
-                Text("Flashcards belong to a course. Make one under Study › Courses first.").foregroundStyle(.secondary)
+                Text("Flashcards belong to a preset (one per subject works well). Make one under Study › Presets first.").foregroundStyle(.secondary)
             } else {
                 Section("New card") {
                     Picker("Course", selection: Binding(get: { UUID(uuidString: addTo).flatMap(store.course)?.id.uuidString ?? courses[0].id.uuidString }, set: { addTo = $0 })) {
