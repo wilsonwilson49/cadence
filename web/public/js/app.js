@@ -382,6 +382,9 @@ function todayView() {
       <div class="card">${later.map(o => { const d = M.untilDoneDeadline(o.task, o.day);
         return `<div class="later-row">${crow(o)}${d ? `<span class="small muted mono">due ${M.WEEKDAY_SHORT[d.getDay()]} ${M.fmtTime(d)}</span>` : ''}
           <button class="btn sm" data-act="task-urgent" data-task="${o.task.id}" title="Put it on today’s list and in today’s progress">! Urgent</button></div>`; }).join('')}</div></div>` : ''}
+    ${(() => { const up = store.upcomingOneOffs(); return up.length ? `<div><div class="section-title">${ic('cal')}Upcoming <span class="count">${up.length}</span>
+        <span class="small muted" style="font-weight:400">one-off tasks in the next 30 days · not counted today</span></div>
+      <div class="card">${up.map(o => `<div class="later-row">${crow(o, { showDate: true })}<span class="small muted">${M.dueRelative(M.dateKey(o.day))}</span></div>`).join('')}</div></div>` : ''; })()}
     ${projectTodaySection()}
     ${projectUpcomingSection()}
     <div><div class="section-title">${ic('cal')}Schedule <span class="count">${events.length}</span><span class="grow"></span>
@@ -2263,6 +2266,12 @@ function finishStudy() {
   if (!r) return;
   const log = M.runLog(r);
   if (log.minutes > 0 || log.completed > 0) store.saveStudyLog(log);
+  // Studying counts for Focus too (points, levels, streak).
+  if (log.minutes > 0) {
+    const percent = log.mode === 'offline' ? Math.max(0, 100 - Math.round(100 * log.screenSeconds / (log.minutes * 60))) : 100;
+    store.saveFocusSession({ id: log.id, startedAt: log.startedAt, endedAt: log.endedAt, plannedMinutes: log.minutes, actualMinutes: log.minutes, picked: 1, finished: 1,
+      finishedTitles: [`Study: ${log.title}`], finishedIds: [], awaySeconds: log.mode === 'offline' ? log.screenSeconds : 0, focusPercent: percent, device: 'web', points: M.studyPoints(log.minutes, percent) });
+  }
   if (r.mode === 'dynamic' && r.courseId) store.editCourse(r.courseId, c => { c.phase = r.phase; });
   studyRun = null; saveRun();
   ui.studyLast = log;

@@ -62,7 +62,7 @@ final class MobileStudy: ObservableObject {
     func finish() {
         guard let r = run else { return }
         let log = r.log(Date())
-        if log.minutes > 0 || log.completed > 0 { store.saveStudyLog(log) }
+        if log.minutes > 0 || log.completed > 0 { store.saveStudyLog(log); store.logStudyAsFocus(log, device: "ios") }
         if r.mode == .dynamic, let id = r.courseID { store.editCourse(id) { $0.phase = r.phase } }
         run = nil
         lastLog = log

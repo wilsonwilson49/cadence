@@ -420,6 +420,13 @@ class Store {
   }
 
   todayChecklist() { return [...this.overdue(), ...this.tasksOn(new Date())]; }
+  /** One-off tasks dated after today (next `days` days): Today's "Upcoming" section, not counted. Same as Store.upcomingOneOffs. */
+  upcomingOneOffs(days = 30) {
+    const t = M.startOfDay(new Date()), end = M.addDays(t, days + 1);
+    return [...this.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && x.recurrence.frequency === 'none' && x.mode !== 'longTerm' && !M.isCycle(x)
+        && M.startOfDay(new Date(x.startDate)) > t && new Date(x.startDate) < end && !M.hasHistory(x))
+      .map(x => M.makeOccurrence(x, new Date(x.startDate))).sort((a, b) => (a.start || a.day) - (b.start || b.day));
+  }
   remainingToday() { return this.countedToday().filter(o => !o.resolved).length + this.projectToday().filter(d => d.item && !M.itemDone(d.item)).length; }
   /** Today's list as it counts in the ring: until-done items not due yet are left out ("Due later") unless urgent. */
   countedToday(items = this.todayChecklist()) { return items.filter(o => M.countsToday(o, this.settings.projectTodayDays ?? 0)); }

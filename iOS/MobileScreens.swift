@@ -108,6 +108,12 @@ struct TodayScreen: View {
                         Text("Not counted in today's progress. Swipe left on one and tap Urgent to put it on today's list.")
                     }
                 }
+                let upcoming = store.upcomingOneOffs()
+                if !upcoming.isEmpty {
+                    Section {
+                        ForEach(upcoming) { MobileRow(occ: $0, showDate: true) }
+                    } header: { Text("Upcoming") } footer: { Text("One-off tasks in the next 30 days. Not counted today.") }
+                }
                 MobileProjectSections()
                 Section("Schedule") {
                     if events.isEmpty { Text("No events today.").foregroundStyle(.secondary) }

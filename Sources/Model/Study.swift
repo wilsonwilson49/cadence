@@ -485,3 +485,39 @@ func clockString(_ seconds: Int) -> String {
     let str = s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
     return seconds < 0 ? "+" + str : str
 }
+
+// MARK: - Study counts for Focus
+
+extension Focus {
+    /// 2 points per 5 minutes studied, times the focus multiplier. Same as studyPoints() on the web.
+    static func studyPoints(minutes: Int, focusPercent: Int) -> Int {
+        Int((Double(minutes / 5 * 2) * multiplier(focusPercent)).rounded())
+    }
+}
+
+extension Store {
+    /// A finished study session also counts as a focus session (points, levels, streak, "in focus today").
+    func logStudyAsFocus(_ l: StudyLog, device: String) {
+        guard l.minutes > 0 else { return }
+        let total = max(1, l.minutes * 60)
+        let percent = l.mode == .offline ? max(0, 100 - Int((100 * Double(l.screenSeconds) / Double(total)).rounded())) : 100
+        var f = FocusSession(id: l.id, startedAt: l.startedAt, endedAt: l.endedAt, plannedMinutes: l.minutes, actualMinutes: l.minutes,
+                             picked: 1, finished: 1, points: Focus.studyPoints(minutes: l.minutes, focusPercent: percent))
+        f.finishedTitles = ["Study: \(l.title)"]
+        f.awaySeconds = l.mode == .offline ? l.screenSeconds : 0
+        f.focusPercent = percent
+        f.device = device
+        saveFocusSession(f)
+    }
+}
+
+extension Store {
+    /// One-off tasks dated after today (the next `days` days): Today's "Upcoming" section, not counted in the ring.
+    func upcomingOneOffs(days: Int = 30, today: Date = Date()) -> [Occurrence] {
+        let t = today.startOfDay, end = t.adding(days: days + 1)
+        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.recurrence.isRepeating && !$0.isLongTerm && !$0.isCycle
+                && $0.startDate.startOfDay > t && $0.startDate < end && !$0.hasHistory }
+            .map { Occurrence(task: $0, day: $0.startDate.startOfDay) }
+            .sorted { ($0.start ?? $0.day) < ($1.start ?? $1.day) }
+    }
+}

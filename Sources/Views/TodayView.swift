@@ -126,6 +126,24 @@ struct TodayView: View {
                         } }
                     }
                 }
+                let upcoming = store.upcomingOneOffs()
+                if !upcoming.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(text: "Upcoming", symbol: "calendar.badge.clock", count: upcoming.count)
+                            Text("one-off tasks in the next 30 days · not counted today").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Card { VStack(spacing: 0) {
+                            ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, occ in
+                                if i > 0 { Divider().padding(.leading, 42) }
+                                HStack {
+                                    ChecklistRow(occ: occ, showDate: true)
+                                    Text(dueRelative(DateKey.string(occ.day))).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        } }
+                    }
+                }
                 ProjectTodaySection()
                 ProjectUpcomingSection()
 

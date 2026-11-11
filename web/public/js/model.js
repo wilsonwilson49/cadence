@@ -914,6 +914,8 @@ export function runLog(r, now = Date.now()) {
   if (r.mistakes.length) l.note = `Got wrong: ${r.mistakes.join('; ')}`;
   return l;
 }
+/** 2 points per 5 minutes studied, times the focus multiplier. Same as Focus.studyPoints on the Mac. */
+export const studyPoints = (minutes, percent) => Math.round(Math.floor(minutes / 5) * 2 * focusMultiplier(percent));
 export const fmtStudyClock = ms => {
   const s = Math.round(Math.abs(ms) / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
   return `${ms < 0 ? '+' : ''}${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${x}`;

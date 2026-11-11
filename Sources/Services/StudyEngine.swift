@@ -110,7 +110,7 @@ final class StudyEngine: ObservableObject {
         guard var r = run else { return }
         r.screenSeconds += pendingScreen; pendingScreen = 0
         let log = r.log(Date())
-        if log.minutes > 0 || log.completed > 0 { model.store.saveStudyLog(log) }
+        if log.minutes > 0 || log.completed > 0 { model.store.saveStudyLog(log); model.store.logStudyAsFocus(log, device: "mac") }
         if r.mode == .dynamic, let id = r.courseID { model.store.editCourse(id) { $0.phase = r.phase } }
         timer?.invalidate(); timer = nil
         run = nil
