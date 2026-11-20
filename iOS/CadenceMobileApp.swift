@@ -190,6 +190,20 @@ final class MobileModel: ObservableObject {
                 }
             }
         }
+        // Your own reminders (More › Reminders), for the same days.
+        for r in store.customReminders where r.enabled {
+            for offset in 0...2 {
+                for fire in r.fireTimes(on: now.startOfDay.adding(days: offset)) where fire > now {
+                    let c = UNMutableNotificationContent()
+                    c.title = r.title.isEmpty ? "Reminder" : r.title
+                    c.body = r.body.isEmpty ? r.summary : r.body
+                    if r.channels.contains(.sound) || r.channels.contains(.notification) { c.sound = .default }
+                    let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+                    requests.append(UNNotificationRequest(identifier: "custom-\(r.id)|\(Int(fire.timeIntervalSince1970))", content: c,
+                                                          trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+                }
+            }
+        }
         // iOS keeps at most 64 pending notifications; keep the soonest.
         requests.sort { ($0.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate() ?? .distantFuture
             < ($1.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate() ?? .distantFuture }

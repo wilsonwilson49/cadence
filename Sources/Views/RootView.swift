@@ -130,6 +130,7 @@ struct RootView: View {
         case .study: StudyView()
         case .flashcards: FlashcardsView()
         case .notes: NotesView()
+        case .reminders: CustomRemindersView()
         case .reflections: ReflectionsView()
         case .habits: HabitsView()
         case .focus: FocusView()
@@ -150,7 +151,7 @@ struct SidebarGroup: Identifiable {
         SidebarGroup(name: "Study", screens: [.study, .flashcards]),
         SidebarGroup(name: "Grow", screens: [.habits, .reflections]),
         SidebarGroup(name: "Focus", screens: [.focus, .screentime]),
-        SidebarGroup(name: "Tools", screens: [.notes]),
+        SidebarGroup(name: "Tools", screens: [.notes, .reminders]),
         SidebarGroup(name: "Connect", screens: [.booking]),
     ]
 }

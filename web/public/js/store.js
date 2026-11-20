@@ -31,6 +31,7 @@ class Store {
   courses = new Map();     // study courses (periods, phase, mistakes, flashcards)
   studyLogs = new Map();   // finished study sessions
   notes = new Map();       // Notes tool
+  customReminders = new Map(); // Reminders tool
   settings = structuredClone(M.DEFAULT_SETTINGS);
   stamps = new Map();      // "kind|id" -> updatedAt (ms) of our copy
   pending = new Map();     // "kind|id" -> change waiting to be pushed
@@ -110,7 +111,7 @@ class Store {
   #resetData() {
     this.tasks = new Map(); this.reflections = new Map(); this.stamps = new Map(); this.pending = new Map();
     this.focus = new Map(); this.screen = new Map(); this.projects = new Map();
-    this.courses = new Map(); this.studyLogs = new Map(); this.notes = new Map();
+    this.courses = new Map(); this.studyLogs = new Map(); this.notes = new Map(); this.customReminders = new Map();
     this.settings = structuredClone(M.DEFAULT_SETTINGS); this.cursor = 0;
     this.google = { configured: false, connected: false, email: null, calendars: [], events: new Map(), months: new Set(), loading: new Set() };
   }
@@ -130,6 +131,7 @@ class Store {
       this.courses = new Map((c.courses || []).map(x => [x.id, x]));
       this.studyLogs = new Map((c.studyLogs || []).map(x => [x.id, x]));
       this.notes = new Map((c.notes || []).map(x => [x.id, x]));
+      this.customReminders = new Map((c.customReminders || []).map(x => [x.id, x]));
       this.settings = { ...structuredClone(M.DEFAULT_SETTINGS), ...c.settings };
       this.stamps = new Map(c.stamps);
       this.pending = new Map(c.pending);
@@ -143,7 +145,7 @@ class Store {
       localStorage.setItem(this.#cacheKey(), JSON.stringify({
         tasks: [...this.tasks.values()], reflections: [...this.reflections.values()], settings: this.settings,
         focus: [...this.focus.values()], screen: [...this.screen.values()], projects: [...this.projects.values()],
-        courses: [...this.courses.values()], studyLogs: [...this.studyLogs.values()], notes: [...this.notes.values()],
+        courses: [...this.courses.values()], studyLogs: [...this.studyLogs.values()], notes: [...this.notes.values()], customReminders: [...this.customReminders.values()],
         stamps: [...this.stamps], pending: [...this.pending], cursor: this.cursor,
       }));
     } catch { /* storage full or blocked */ }
@@ -209,8 +211,8 @@ class Store {
         if (c.deleted) this.tasks.delete(id); else this.tasks.set(id, { ...c.data, id });
       } else if (c.kind === 'reflection') {
         if (c.deleted) this.reflections.delete(id); else this.reflections.set(id, { ...c.data, id });
-      } else if (c.kind === 'course' || c.kind === 'study' || c.kind === 'note') {
-        const map = c.kind === 'course' ? this.courses : c.kind === 'study' ? this.studyLogs : this.notes;
+      } else if (c.kind === 'course' || c.kind === 'study' || c.kind === 'note' || c.kind === 'reminder') {
+        const map = c.kind === 'course' ? this.courses : c.kind === 'study' ? this.studyLogs : c.kind === 'reminder' ? this.customReminders : this.notes;
         if (c.deleted) map.delete(id); else map.set(id, { ...c.data, id });
       } else if (c.kind === 'project') {
         if (c.deleted) this.projects.delete(id); else this.projects.set(id, { ...c.data, id });
@@ -244,6 +246,10 @@ class Store {
   get dueCardCount() { return this.activeCourses.reduce((n, c) => n + M.dueCards(c).length, 0); }
   upsertNote(n) { return this.#put('note', this.notes, n); }
   deleteNote(id) { this.notes.delete(id); this.#queue('note', id, null, true); }
+  upsertCustomReminder(r) { return this.#put('reminder', this.customReminders, r); }
+  editCustomReminder(id, fn) { const cur = this.customReminders.get(id); if (!cur) return; const copy = structuredClone(cur); this.upsertCustomReminder(fn(copy) || copy); }
+  deleteCustomReminder(id) { this.customReminders.delete(id); this.#queue('reminder', id, null, true); }
+  get sortedCustomReminders() { return [...this.customReminders.values()].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))); }
   get sortedNotes() {
     return [...this.notes.values()].sort((a, b) => (Boolean(b.pinned) - Boolean(a.pinned)) || String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
   }

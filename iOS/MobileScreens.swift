@@ -529,6 +529,7 @@ struct MoreScreen: View {
                     NavigationLink { StudyScreen() } label: { Label("Study", systemImage: "graduationcap") }
                     NavigationLink { FlashcardsScreen() } label: { Label("Flashcards", systemImage: "rectangle.on.rectangle.angled").badge(store.dueCardCount) }
                     NavigationLink { NotesScreen() } label: { Label("Notes", systemImage: "note.text") }
+                    NavigationLink { RemindersScreen() } label: { Label("Reminders", systemImage: "bell.badge").badge(store.customReminders.filter(\.enabled).count) }
                     NavigationLink { ProjectsScreen() } label: {
                         Label("Projects", systemImage: "square.stack.3d.up").badge(store.projectToday().filter { $0.item?.isDone == false }.count)
                     }

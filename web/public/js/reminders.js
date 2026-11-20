@@ -87,6 +87,14 @@ export class Reminders {
       return true;
     };
 
+    for (const r of store.customReminders.values()) {
+      for (const day of [M.addDays(M.startOfDay(new Date()), -1), M.startOfDay(new Date())]) {
+        for (const t of M.reminderFireTimes(r, day)) {
+          if (due(t, `custom|${r.id}|${+t}`)) this.deliver({ kind: 'nudge', title: r.title || 'Reminder', body: r.body || M.reminderSummary(r), tint: '#30b0c7' }, r.channels || ['notification', 'banner']);
+        }
+      }
+    }
+
     for (const off of [-1, 0, 1]) {
       const day = M.addDays(M.startOfDay(new Date()), off);
       for (const occ of store.occurrencesOn(day)) {

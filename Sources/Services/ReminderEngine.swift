@@ -129,6 +129,17 @@ final class ReminderEngine: ObservableObject {
             at > windowStart && at <= now && fired.insert(key).inserted
         }
 
+        // Your own reminders (Reminders screen).
+        for r in store.customReminders where r.enabled {
+            for day in [now.startOfDay.adding(days: -1), now.startOfDay] {
+                for t in r.fireTimes(on: day) where due(t, "custom|\(r.id)|\(t.timeIntervalSince1970)") {
+                    model.notifier.deliver(AlertContent(kind: .nudge, title: r.title.isEmpty ? "Reminder" : r.title,
+                                                        body: r.body.isEmpty ? r.summary : r.body, symbol: "bell.badge", tint: .teal),
+                                           channels: r.channels)
+                }
+            }
+        }
+
         // Task reminders (tomorrow included, for "1 day before" reminders).
         for offset in -1...1 {
             let day = now.startOfDay.adding(days: offset)

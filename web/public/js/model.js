@@ -921,3 +921,33 @@ export const fmtStudyClock = ms => {
   return `${ms < 0 ? '+' : ''}${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${x}`;
 };
 export const noteTitle = n => (n.title || '').trim() || (n.body || '').split('\n')[0].trim().slice(0, 60) || 'Untitled';
+
+// ---------- custom reminders (same as CustomReminder.fireTimes / summary in Swift) ----------
+export function reminderFireTimes(r, day) {
+  if (!r || r.enabled === false) return [];
+  const d = startOfDay(day), wd = weekday(d), days = r.weekdays || [];
+  const kind = r.kind || 'times';
+  if (kind === 'once') return r.at && sameDay(new Date(r.at), d) ? [new Date(r.at)] : [];
+  if (days.length && !days.includes(wd)) return [];
+  if (kind === 'times') return [...(r.times || [540])].sort((a, b) => a - b).map(m => dayAt(d, m));
+  const every = Math.max(5, r.everyMinutes || 60), out = [];
+  for (let m = r.fromMinutes ?? 540; m <= (r.toMinutes ?? 1020); m += every) out.push(dayAt(d, m));
+  return out;
+}
+export function reminderSummary(r) {
+  const w = new Set(r.weekdays || []);
+  const days = !w.size || w.size === 7 ? 'Every day' : [2, 3, 4, 5, 6].every(x => w.has(x)) && w.size === 5 ? 'Weekdays'
+    : w.size === 2 && w.has(1) && w.has(7) ? 'Weekends' : [...w].sort().map(x => WEEKDAY_SHORT[x - 1]).join(' ');
+  const kind = r.kind || 'times';
+  if (kind === 'once') return `Once, ${r.at ? `${fmtDay(new Date(r.at), { weekday: 'short', month: 'short', day: 'numeric' })} at ${fmtTime(r.at)}` : 'no time set'}`;
+  if (kind === 'times') return `${days} at ${[...(r.times || [540])].sort((a, b) => a - b).map(fmtTimeMinutes).join(', ')}`;
+  const e = r.everyMinutes || 60;
+  return `${days}, every ${e % 60 === 0 ? `${e / 60}h` : `${e} min`} from ${fmtTimeMinutes(r.fromMinutes ?? 540)} to ${fmtTimeMinutes(r.toMinutes ?? 1020)}`;
+}
+export function nextReminderFire(r, now = new Date()) {
+  for (let i = 0; i < 15; i++) { const t = reminderFireTimes(r, addDays(startOfDay(now), i)).find(x => x > now); if (t) return t; }
+  return null;
+}
+export const newCustomReminder = (over = {}) => ({ id: uuid(), title: 'New reminder', body: '', kind: 'times', times: [540], weekdays: [],
+  everyMinutes: 60, fromMinutes: 540, toMinutes: 1020, at: iso(addMinutes(new Date(), 60)), enabled: true,
+  channels: ['notification', 'banner'], createdAt: iso(new Date()), ...over });

@@ -18,7 +18,7 @@ const SCREENS = [
   ['todo', 'To-Do List', 'list', 'Plan'], ['projects', 'Projects', 'layers', 'Plan'],
   ['study', 'Study', 'study', 'Study'], ['flashcards', 'Flashcards', 'cards', 'Study'], ['habits', 'Habits', 'habit', 'Grow'], ['reflections', 'Reflections', 'quote', 'Grow'],
   ['focus', 'Focus', 'target', 'Focus'], ['screentime', 'Screen Time', 'monitor', 'Focus'],
-  ['notes', 'Notes', 'note', 'Tools'],
+  ['notes', 'Notes', 'note', 'Tools'], ['reminders', 'Reminders', 'bell', 'Tools'],
   ['booking', 'Booking', 'people', 'Connect'], ['settings', 'Settings', 'gear', ''],
 ];
 
@@ -166,6 +166,7 @@ function view() {
     case 'study': return studyView();
     case 'flashcards': return flashcardsView();
     case 'notes': return notesView();
+    case 'reminders': return customRemindersView();
     case 'reflections': return reflectionsView();
     case 'habits': return habitsView();
     case 'focus': return focusView();
@@ -2601,7 +2602,61 @@ function notesView() {
         : '<div class="muted" style="padding:40px;text-align:center">Pick a note, or make a new one.</div>'}</div></div>`;
 }
 
+const REMINDER_TEMPLATES = [
+  { title: 'Drink water', kind: 'every', everyMinutes: 60 },
+  { title: 'Stand up and stretch', times: [660, 900], weekdays: [2, 3, 4, 5, 6] },
+  { title: 'Take medicine', times: [480, 1200] },
+  { title: 'Rest your eyes', kind: 'every', everyMinutes: 20, body: 'Look at something 20 feet away for 20 seconds.' },
+  { title: 'Wind down for bed', times: [1350] },
+];
+const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const localDT = d => { const x = new Date(d); return `${M.dateKey(x)}T${hhmm(M.minutesOf(x))}`; };
+
+function customRemindersView() {
+  const list = store.sortedCustomReminders;
+  let sel = ui.remSel;
+  if (!store.customReminders.get(sel)) sel = ui.remSel = list[0]?.id || null;
+  const r = sel && store.customReminders.get(sel), kind = r?.kind || 'times';
+  const days = r ? (r.weekdays?.length ? r.weekdays : [1, 2, 3, 4, 5, 6, 7]) : [];
+  const dayRow = `<div class="srow"><span class="small muted">Days</span> ${M.WEEKDAY_LETTER.map((l, i) => `<button class="btn sm ${days.includes(i + 1) ? 'primary' : 'ghost'}" data-act="rem-day" data-d="${i + 1}" data-id="${r?.id}">${l}</button>`).join('')}</div>`;
+  const editor = !r ? '<div class="muted" style="padding:40px;text-align:center">Pick a reminder, or make a new one.</div>' : `
+    <div class="row"><input class="ptitle-input" placeholder="Title" value="${esc(r.title)}" data-rem-field="title" data-id="${r.id}">
+      <label class="row small"><input type="checkbox" data-rem-check="enabled" data-id="${r.id}" ${r.enabled !== false ? 'checked' : ''}> On</label>
+      <button class="btn ghost sm icon danger" data-act="rem-delete" data-id="${r.id}" title="Delete">${ic('trash')}</button></div>
+    <input class="input" placeholder="Message (optional)" value="${esc(r.body || '')}" data-rem-field="body" data-id="${r.id}">
+    <div class="seg">${[['times', 'At set times'], ['every', 'Every so often'], ['once', 'Once']].map(([k, t]) => `<button class="${kind === k ? 'on' : ''}" data-act="rem-kind" data-k="${k}" data-id="${r.id}">${t}</button>`).join('')}</div>
+    ${kind === 'times' ? `<div class="srow">${[...(r.times || [540])].sort((a, b) => a - b).map(m => `<span class="chip">${M.fmtTimeMinutes(m)} <button class="btn ghost sm icon" data-act="rem-untime" data-m="${m}" data-id="${r.id}" ${(r.times || []).length <= 1 ? 'disabled' : ''}>${ic('x')}</button></span>`).join(' ')}
+        <input type="time" class="input" style="width:auto" data-rem-addtime data-id="${r.id}" title="Add a time"></div>${dayRow}` : ''}
+    ${kind === 'every' ? `<div class="srow row">Every <input type="number" class="input" style="width:80px" min="5" max="720" value="${r.everyMinutes || 60}" data-rem-num="everyMinutes" data-id="${r.id}"> min
+        from <input type="time" class="input" style="width:auto" value="${hhmm(r.fromMinutes ?? 540)}" data-rem-time="fromMinutes" data-id="${r.id}">
+        to <input type="time" class="input" style="width:auto" value="${hhmm(r.toMinutes ?? 1020)}" data-rem-time="toMinutes" data-id="${r.id}"></div>${dayRow}` : ''}
+    ${kind === 'once' ? `<div class="srow"><input type="datetime-local" class="input" style="width:auto" value="${r.at ? localDT(r.at) : ''}" data-rem-at data-id="${r.id}"></div>` : ''}
+    <div class="small muted">${esc(M.reminderSummary(r))}${(() => { const n = M.nextReminderFire(r); return n ? ` · next ${M.fmtDay(n, { weekday: 'short' })} ${M.fmtTime(n)}` : ''; })()}</div>
+    <div class="srow"><span class="small muted">Alert with</span> ${[['notification', 'Notification'], ['banner', 'On-screen banner'], ['sound', 'Sound']].map(([c, t]) => `<label class="row small"><input type="checkbox" data-rem-chan="${c}" data-id="${r.id}" ${(r.channels || []).includes(c) ? 'checked' : ''}> ${t}</label>`).join(' ')}</div>`;
+  return `<div class="header"><div class="grow"><h1>Reminders</h1><div class="sub">Get notified about anything: drink water, stretch, take medicine. Syncs to your Mac and iPhone.</div></div>
+      <select class="input" style="width:auto" data-rem-template><option value="">From a template…</option>${REMINDER_TEMPLATES.map((t, i) => `<option value="${i}">${esc(t.title)}</option>`).join('')}</select>
+      <button class="btn primary" data-act="rem-new">${ic('plus')} New reminder</button></div>
+    <div class="page notes-page"><div class="note-list">
+        ${list.map(x => `<button class="note-item ${x.id === sel ? 'on' : ''}" data-act="rem-pick" data-id="${x.id}"><b class="ellipsis">${ic(x.enabled === false ? 'bell-off' : 'bell')} ${esc(x.title || 'Untitled')}</b>
+          <span class="tiny muted ellipsis">${esc(M.reminderSummary(x))}</span></button>`).join('') || '<div class="small muted" style="padding:8px">No reminders yet.</div>'}</div>
+      <div class="note-edit rem-edit">${editor}</div></div>`;
+}
+const remNew = over => { const r = store.upsertCustomReminder(M.newCustomReminder(over)); ui.remSel = r.id; render(); };
+
 const actions = {
+  'rem-new': () => remNew(),
+  'rem-pick': el => { ui.remSel = el.dataset.id; render(); },
+  'rem-delete': el => { const r = store.customReminders.get(el.dataset.id); if (!r) return; store.deleteCustomReminder(r.id); ui.remSel = null; render(); toast('Reminder deleted', { icon: 'trash', undo: () => { store.upsertCustomReminder(r); render(); } }); },
+  'rem-kind': el => { store.editCustomReminder(el.dataset.id, r => { r.kind = el.dataset.k; }); render(); },
+  'rem-untime': el => { store.editCustomReminder(el.dataset.id, r => { r.times = (r.times || []).filter(m => m !== +el.dataset.m); }); render(); },
+  'rem-day': el => {
+    store.editCustomReminder(el.dataset.id, r => {
+      const w = new Set(r.weekdays?.length ? r.weekdays : [1, 2, 3, 4, 5, 6, 7]), d = +el.dataset.d;
+      w.has(d) ? w.delete(d) : w.add(d);
+      if (w.size) r.weekdays = w.size === 7 ? [] : [...w].sort();
+    });
+    render();
+  },
   'nav-fold': el => { const f = new Set(store.device('navFolded', [])); f.has(el.dataset.sec) ? f.delete(el.dataset.sec) : f.add(el.dataset.sec); store.setDevice('navFolded', [...f]); render(); },
   'study-tab': el => { store.setDevice('studyTab', el.dataset.tab); render(); },
   'study-mode': el => { store.setDevice('studySetup', { ...store.device('studySetup', {}), mode: el.dataset.mode }); render(); },
@@ -3085,6 +3140,7 @@ document.addEventListener('input', e => {
   if (el.dataset.courseField) { store.editCourse(el.dataset.course, c => { c[el.dataset.courseField] = el.value; }); return; }
   if (el.dataset.periodField && el.dataset.periodField !== 'minutes') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i][el.dataset.periodField] = el.value; }); return; }
   if (el.dataset.cardField) { store.editCourse(el.dataset.course, c => { const k = c.cards.find(x => x.id === el.dataset.card); if (k) k[el.dataset.cardField] = el.value; }); return; }
+  if (el.dataset.remField) { store.editCustomReminder(el.dataset.id, r => { r[el.dataset.remField] = el.value; }); return; }
   if (el.dataset.noteField) { const n = store.notes.get(el.dataset.id); if (n) store.upsertNote({ ...n, [el.dataset.noteField]: el.value }); return; }
   if (el.dataset.bind === 'cardSearch') { ui.cardSearch = el.value; render(); return; }
   if (el.dataset.bind === 'noteSearch') { ui.noteSearch = el.value; render(); return; }
@@ -3107,6 +3163,18 @@ function setProjectDate(el, value) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.remTemplate !== undefined) { const t = REMINDER_TEMPLATES[+el.value]; if (t) remNew(structuredClone(t)); return; }
+  if (el.dataset.id && store.customReminders.get(el.dataset.id) && !el.dataset.remField) {
+    const id = el.dataset.id, toMin = v => { const [h, m] = String(v).split(':').map(Number); return h * 60 + m; };
+    if (el.dataset.remCheck) store.editCustomReminder(id, r => { r[el.dataset.remCheck] = el.checked; });
+    else if (el.dataset.remChan) store.editCustomReminder(id, r => { const c = new Set(r.channels || []); el.checked ? c.add(el.dataset.remChan) : c.delete(el.dataset.remChan); r.channels = [...c]; });
+    else if (el.dataset.remAddtime !== undefined) { if (!el.value) return; store.editCustomReminder(id, r => { const m = toMin(el.value); r.times = [...new Set([...(r.times || []), m])]; }); }
+    else if (el.dataset.remTime) { if (!el.value) return; store.editCustomReminder(id, r => { r[el.dataset.remTime] = toMin(el.value); }); }
+    else if (el.dataset.remNum) store.editCustomReminder(id, r => { r[el.dataset.remNum] = Math.min(720, Math.max(5, Number(el.value) || 60)); });
+    else if (el.dataset.remAt !== undefined) { if (!el.value) return; store.editCustomReminder(id, r => { r.at = M.iso(new Date(el.value)); }); }
+    else return;
+    render(); return;
+  }
   if (el.dataset.studyOpt === 'preset') { store.setDevice('studyPreset', el.value); ui.studyDraft = null; render(); return; }
   if (el.dataset.draft || el.dataset.draftPick) {
     const c = studyDraft().course, k = el.dataset.draft || el.dataset.draftPick;

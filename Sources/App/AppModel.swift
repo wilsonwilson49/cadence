@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 
 enum Screen: String, CaseIterable, Identifiable {
-    case home, today, week, month, todo, projects, study, flashcards, notes, habits, reflections, focus, screentime, booking, settings
+    case home, today, week, month, todo, projects, study, flashcards, notes, reminders, habits, reflections, focus, screentime, booking, settings
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -16,6 +16,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .study: return "Study"
         case .flashcards: return "Flashcards"
         case .notes: return "Notes"
+        case .reminders: return "Reminders"
         case .reflections: return "Reflections"
         case .habits: return "Habits"
         case .focus: return "Focus"
@@ -35,6 +36,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .study: return "graduationcap"
         case .flashcards: return "rectangle.on.rectangle.angled"
         case .notes: return "note.text"
+        case .reminders: return "bell.badge"
         case .reflections: return "text.quote"
         case .habits: return "arrow.triangle.2.circlepath.circle"
         case .focus: return "scope"

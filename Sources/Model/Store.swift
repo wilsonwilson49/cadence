@@ -14,6 +14,7 @@ final class Store: ObservableObject {
     @Published var courses: [Course] = [] { didSet { stamp(\.courses, oldValue, kind: "course"); scheduleSave() } }
     @Published var studyLogs: [StudyLog] = [] { didSet { stamp(\.studyLogs, oldValue, kind: "study"); scheduleSave() } }
     @Published var notes: [Note] = [] { didSet { stamp(\.notes, oldValue, kind: "note"); scheduleSave() } }
+    @Published var customReminders: [CustomReminder] = [] { didSet { stamp(\.customReminders, oldValue, kind: "reminder"); scheduleSave() } }
 
     /// Deleted records ("task|<id>" / "reflection|<id>") → when, so deletions sync too.
     private(set) var tombstones: [String: Date] = [:]
@@ -37,6 +38,7 @@ final class Store: ObservableObject {
         var courses: [Course]?
         var studyLogs: [StudyLog]?
         var notes: [Note]?
+        var customReminders: [CustomReminder]?
     }
 
     init(directory: URL) {
@@ -64,6 +66,7 @@ final class Store: ObservableObject {
             courses = snap.courses ?? []
             studyLogs = snap.studyLogs ?? []
             notes = snap.notes ?? []
+            customReminders = snap.customReminders ?? []
             settingsUpdatedAt = snap.settingsUpdatedAt
             isLoading = false
         } catch {
@@ -94,7 +97,7 @@ final class Store: ObservableObject {
             let data = try encoder.encode(Snapshot(tasks: tasks, reflections: reflections, settings: settings,
                                                    tombstones: tombstones, settingsUpdatedAt: settingsUpdatedAt,
                                                    focusSessions: focusSessions, screenDays: screenDays, projects: projects,
-                                                   courses: courses, studyLogs: studyLogs, notes: notes))
+                                                   courses: courses, studyLogs: studyLogs, notes: notes, customReminders: customReminders))
             try data.write(to: fileURL, options: .atomic)
         } catch {
             NSLog("Cadence: save failed: %@", "\(error)")
@@ -266,6 +269,7 @@ final class Store: ObservableObject {
         pending(courses, kind: "course", since: since, newer, into: &out)
         pending(studyLogs, kind: "study", since: since, newer, into: &out)
         pending(notes, kind: "note", since: since, newer, into: &out)
+        pending(customReminders, kind: "reminder", since: since, newer, into: &out)
         for (key, when) in tombstones where newer(when) {
             let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
             if parts.count == 2 { out.append(SyncChange(kind: parts[0], id: parts[1], updatedAt: when, deleted: true, data: nil)) }
@@ -288,7 +292,7 @@ final class Store: ObservableObject {
         var newReflections = reflections
         var newSettings = settings
         var newProjects = projects
-        var newCourses = courses, newLogs = studyLogs, newNotes = notes
+        var newCourses = courses, newLogs = studyLogs, newNotes = notes, newReminders = customReminders
         for c in changes {
             switch c.kind {
             case "task":
@@ -354,6 +358,7 @@ final class Store: ObservableObject {
             case "course": merge(&newCourses, c)
             case "study": merge(&newLogs, c)
             case "note": merge(&newNotes, c)
+            case "reminder": merge(&newReminders, c)
             default:
                 continue
             }
@@ -363,6 +368,7 @@ final class Store: ObservableObject {
         courses = newCourses
         studyLogs = newLogs
         notes = newNotes
+        customReminders = newReminders
         reflections = newReflections.sorted { $0.createdAt > $1.createdAt }
         settings = newSettings
     }
@@ -401,6 +407,13 @@ final class Store: ObservableObject {
     var dueCardCount: Int { activeCourses.reduce(0) { $0 + $1.dueCards().count } }
     func upsert(_ n: Note) { if let i = notes.firstIndex(where: { $0.id == n.id }) { notes[i] = n } else { notes.append(n) } }
     func deleteNote(_ id: UUID) { notes.removeAll { $0.id == id } }
+    func upsert(_ r: CustomReminder) { if let i = customReminders.firstIndex(where: { $0.id == r.id }) { customReminders[i] = r } else { customReminders.append(r) } }
+    func deleteCustomReminder(_ id: UUID) { customReminders.removeAll { $0.id == id } }
+    /// Next time each reminder goes off (looks two weeks ahead).
+    func nextFire(_ r: CustomReminder, after now: Date = Date()) -> Date? {
+        for d in 0..<15 { if let t = r.fireTimes(on: now.startOfDay.adding(days: d)).first(where: { $0 > now }) { return t } }
+        return nil
+    }
     var sortedNotes: [Note] {
         notes.sorted { a, b in
             if (a.pinned == true) != (b.pinned == true) { return a.pinned == true }
