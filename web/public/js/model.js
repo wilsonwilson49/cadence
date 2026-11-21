@@ -320,6 +320,16 @@ export function untilDoneMarker(o) {
   return Boolean(rep && sameDay(rep, o.day)) || o.resolved || isToday(o.day);
 }
 
+/** Where an until-done task sits on the week calendar (same as Occurrence.isUntilDoneWeekDay in Swift): its due date
+ *  (or the day it started if none), the day it was settled, or today once that day has passed and it's still open. */
+export function untilDoneWeekDay(o) {
+  if (o.resolved) return true;
+  const d = startOfDay(o.day);
+  const home = o.task.dueDate ? startOfDay(parseKey(String(o.task.dueDate).slice(0, 10))) : (heldOver(o.task, d)?.rep ?? repStartOn(o.task, d));
+  if (!home) return isToday(d);
+  return sameDay(home, d) || (isToday(d) && home < d);
+}
+
 export function occurs(task, day) {
   if (task.archived) return false;
   const d = startOfDay(day);

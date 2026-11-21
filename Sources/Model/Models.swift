@@ -299,6 +299,14 @@ struct Occurrence: Identifiable, Hashable {
     var isHabit: Bool { task.isHabit }
     /// Where an until-done task appears on a month grid: the day one starts, the day it's settled, and today.
     var isUntilDoneMarker: Bool { task.repStart(on: day).map { $0.isSameDay(day) } == true || isResolved || day.isToday }
+    /// Where an until-done task sits on the week calendar: its due date (or the day it started if it has none),
+    /// the day it was settled, or today once that day has passed and it's still open.
+    var isUntilDoneWeekDay: Bool {
+        if isResolved { return true }
+        guard let home = task.dueDate?.startOfDay ?? task.currentRepStart(on: day) else { return day.isToday }
+        if day.isSameDay(home) { return true }
+        return day.isToday && home < day.startOfDay
+    }
     var isOverdue: Bool { !task.isEvent && !isResolved && day < Date().startOfDay }
 }
 

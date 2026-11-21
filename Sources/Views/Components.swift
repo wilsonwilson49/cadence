@@ -481,6 +481,7 @@ enum CalendarItem: Identifiable, Hashable {
         case .google(let e): return e.title
         }
     }
+    var isUntilDone: Bool { if case .task(let o) = self { return o.isUntilDone && !o.isResolved }; return false }
     var start: Date? {
         switch self {
         case .task(let o): return o.start
@@ -801,7 +802,9 @@ struct ItemChip: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if item.isCalendarEvent {
+            if item.isUntilDone {
+                Image(systemName: "flame.fill").font(.system(size: 9)).foregroundStyle(.orange)
+            } else if item.isCalendarEvent {
                 Image(systemName: "calendar").font(.system(size: 8, weight: .bold)).foregroundStyle(item.color)
             } else {
                 Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")

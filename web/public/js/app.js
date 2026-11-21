@@ -699,7 +699,7 @@ function screenTimeView() {
 // ---------- Week ----------
 function calItemsTimed(day) {
   const items = [];
-  for (const o of store.visibleOccurrencesOn(day)) if (o.start && !M.isUntilDone(o.task)) items.push({ kind: o.event ? 'event' : 'task', o, start: o.start, end: o.end, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` });
+  for (const o of store.visibleOccurrencesOn(day)) if (o.start && (!M.isUntilDone(o.task) || M.untilDoneWeekDay(o))) items.push({ kind: o.event ? 'event' : 'task', o, ud: M.isUntilDone(o.task) && !o.resolved, start: o.start, end: o.end, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` });
   for (const e of store.visibleGoogleEventsOn(day)) if (!e.isAllDay) items.push({ kind: 'google', e, start: e.startDate, end: e.endDate, title: e.title, color: e.colorHex || '#0a84ff', done: false, id: `g|${e.id}` });
   items.sort((a, b) => a.start - b.start || b.end - a.end);
   // Greedy lanes inside clusters of overlapping items.
@@ -716,12 +716,12 @@ function calItemsTimed(day) {
 }
 
 const chipFor = it => `<div class="chip ${it.done ? 'done' : ''} ${it.missed ? 'missed' : ''}" style="background:${tint(it.color, it.kind === 'task' ? .18 : .12)}" data-act="detail" data-item="${esc(it.id)}">
-  ${it.kind !== 'task' ? `<span style="color:${it.color}">${ic('cal')}</span>` : `<span class="dot" style="border-color:${it.color};background:${it.done ? it.color : 'transparent'}"></span>`}
+  ${it.ud ? `<span class="flame">${ic('flame')}</span>` : it.kind !== 'task' ? `<span style="color:${it.color}">${ic('cal')}</span>` : `<span class="dot" style="border-color:${it.color};background:${it.done ? it.color : 'transparent'}"></span>`}
   <span>${it.start && it.kind !== 'allday' ? `<span class="muted">${M.fmtTime(it.start)}</span> ` : ''}${esc(it.title)}</span></div>`;
 
 function allDayItems(day) {
   return [
-    ...store.visibleOccurrencesOn(day).filter(o => !o.start && !M.isUntilDone(o.task)).map(o => ({ kind: o.event ? 'event' : 'task', o, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
+    ...store.visibleOccurrencesOn(day).filter(o => !o.start && (!M.isUntilDone(o.task) || M.untilDoneWeekDay(o))).map(o => ({ kind: o.event ? 'event' : 'task', o, ud: M.isUntilDone(o.task) && !o.resolved, title: o.task.title, color: color(o.task.color), done: o.done, missed: o.missed, id: `t|${o.id}` })),
     ...store.visibleGoogleEventsOn(day).filter(e => e.isAllDay).map(e => ({ kind: 'google', e, title: e.title, color: e.colorHex || '#0a84ff', id: `g|${e.id}` })),
   ];
 }
@@ -731,27 +731,6 @@ function splitUntilDone(items) {
   const habits = items.filter(o => M.isHabit(o.task));
   const daily = items.filter(o => !M.isHabit(o.task) && !M.isUntilDone(o.task)), ongoing = items.filter(o => !M.isHabit(o.task) && M.isUntilDone(o.task));
   return [[null, daily], ...(habits.length ? [['Habits', habits]] : []), ...(ongoing.length ? [['Until done', ongoing]] : [])];
-}
-
-/** Until-done tasks in a week as one bar per stretch of days (a new bar when the next repeat takes over). */
-function untilDoneSpans(days) {
-  const spans = [];
-  for (const t of store.tasks.values()) {
-    if (!M.isUntilDone(t) || M.isEvent(t) || t.archived || !store.taskShown(t)) continue;
-    let run = null;
-    days.forEach((d, i) => {
-      if (!M.untilDoneActive(t, d)) { run = null; return; }
-      const rep = +(M.heldOver(t, d)?.rep ?? M.repStartOn(t, d)), o = M.makeOccurrence(t, d);
-      if (run && run.rep === rep && run.end === i - 1) { run.end = i; run.last = o; return; }
-      run = { task: t, rep, start: i, end: i, first: o, last: o, before: i === 0 && rep < +d };
-      spans.push(run);
-    });
-  }
-  for (const r of spans) {
-    const next = M.addDays(days[r.end], 1);
-    r.after = r.end === 6 && M.untilDoneActive(r.task, next) && +M.repStartOn(r.task, next) === r.rep;
-  }
-  return spans.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
 }
 
 function weekView() {
@@ -768,19 +747,6 @@ function weekView() {
       const open = store.tasksOn(d).filter(o => !o.resolved).length;
       return `<div class="d ${M.isToday(d) ? 'today' : ''}"><div class="dow">${M.WEEKDAY_SHORT[d.getDay()].toUpperCase()}</div><div class="num">${d.getDate()}</div><div class="open">${open ? `${open} open` : ''}</div></div>`;
     }).join('')}</div>
-    ${(() => {
-      const spans = untilDoneSpans(days);
-      if (!spans.length) return '';
-      const today = days.findIndex(d => M.isToday(d));
-      return `<div class="week-spans"><div class="lab" style="grid-row:1 / span ${spans.length}">until<br>done</div>${spans.map(r => {
-        const o = today >= r.start && today <= r.end ? M.makeOccurrence(r.task, days[today]) : r.last;
-        const state = r.last.done ? 'done' : r.last.missed ? 'missed' : '';
-        return `<div class="span-bar ${state} ${r.before ? 'from-before' : ''} ${r.after ? 'to-after' : ''}" style="grid-column:${r.start + 2} / ${r.end + 3};--hue:${color(r.task.color)}"
-          data-act="detail" data-item="t|${esc(o.id)}" title="${esc(r.task.title)} · ${esc(M.planSummary(r.task))}">
-          ${ic(state === 'done' ? 'check' : state === 'missed' ? 'x' : 'flame')}<span class="ellipsis">${esc(r.task.title)}</span>
-          ${r.end > r.start ? `<span class="span-days">${r.end - r.start + 1} days</span>` : ''}</div>`;
-      }).join('')}</div>`;
-    })()}
     <div class="week-allday"><div class="lab">any<br>time</div>${days.map(d => {
       const items = allDayItems(d);
       return `<div class="cell">${items.slice(0, items.length > 4 ? 3 : 4).map(chipFor).join('')}${items.length > 4 ? `<div class="more">+${items.length - 3} more</div>` : ''}</div>`;
@@ -796,7 +762,7 @@ function weekView() {
             title="${busyOf(p) ? 'Closed' : 'Open (just for info)'} · click for details · double-click to add a task at this time"
             style="top:${top}px;height:${Math.max(20, bottom - top - 1)}px;left:calc(${(p.lane * 100) / p.lanes}% + 2px);width:calc(${100 / p.lanes}% - 4px);
             background:${tint(p.color, p.done ? .1 : p.kind !== 'task' ? .14 : .24)};border-color:${p.color}">
-            <b>${p.kind !== 'task' ? `${ic('cal')} ` : ''}${esc(p.title)}</b>${M.fmtTime(p.start)}</div>`;
+            <b>${p.ud ? `<span class="flame">${ic('flame')}</span> ` : p.kind !== 'task' ? `${ic('cal')} ` : ''}${esc(p.title)}</b>${M.fmtTime(p.start)}</div>`;
         }).join('')}
         ${M.isToday(d) ? `<div class="nowline" style="top:${M.minutesOf(now) / 60 * HOUR}px"></div>` : ''}
       </div>`).join('')}
@@ -1442,7 +1408,7 @@ document.addEventListener('pointerdown', e => {
   const el = e.target.closest('.block[data-item], .ot-item[data-item]');
   if (!el || e.button !== 0) return;
   const it = itemById(el.dataset.item);
-  if (!it?.start || (it.kind === 'task' && (it.o.done || it.o.missed))) return;
+  if (!it?.start || (it.kind === 'task' && M.isUntilDone(it.o.task)) || (it.kind === 'task' && (it.o.done || it.o.missed))) return;
   const col = el.closest('.wcol, .ot-col');
   if (!col) return;
   const r = el.getBoundingClientRect();

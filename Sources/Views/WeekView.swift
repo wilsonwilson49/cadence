@@ -34,7 +34,6 @@ struct WeekView: View {
                 let colW = max(60, (geo.size.width - gutter - 8) / 7)
                 VStack(spacing: 0) {
                     dayHeader(colW)
-                    UntilDoneStrip(days: days, colW: colW, gutter: gutter)
                     allDayRow(colW)
                     Divider()
                     ScrollViewReader { proxy in
@@ -91,7 +90,7 @@ struct WeekView: View {
 
     private func allDayRow(_ colW: CGFloat) -> some View {
         let columns: [[CalendarItem]] = days.map { day in
-            google.visibleOccurrences(on: day).filter { $0.start == nil && !$0.isUntilDone }.map(CalendarItem.task)
+            google.visibleOccurrences(on: day).filter { $0.start == nil && (!$0.isUntilDone || $0.isUntilDoneWeekDay) }.map(CalendarItem.task)
                 + google.visibleEvents(on: day).filter(\.isAllDay).map(CalendarItem.google)
         }
         let rows = min(4, columns.map(\.count).max() ?? 0)
@@ -184,7 +183,7 @@ struct WeekView: View {
 
     private func placed(_ day: Date) -> [Placed] {
         var items: [Placed] = []
-        for occ in google.visibleOccurrences(on: day) where !occ.isUntilDone {
+        for occ in google.visibleOccurrences(on: day) where !occ.isUntilDone || occ.isUntilDoneWeekDay {
             if let s = occ.start, let e = occ.end { items.append(Placed(item: .task(occ), start: s, end: e, day: day)) }
         }
         for ev in google.visibleEvents(on: day) where !ev.isAllDay {
@@ -243,7 +242,7 @@ struct TimedBlock: View {
     }
     private var canMove: Bool {
         guard grid != nil, item.start != nil else { return false }
-        if case .task(let o) = item { return !o.isDone && !o.isMissed }
+        if case .task(let o) = item { return !o.isDone && !o.isMissed && !o.isUntilDone }
         return true
     }
     private var dragLabel: String? {
@@ -269,7 +268,9 @@ struct TimedBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 3) {
-                if item.isCalendarEvent {
+                if item.isUntilDone {
+                    Image(systemName: "flame.fill").font(.system(size: 9)).foregroundStyle(.orange)
+                } else if item.isCalendarEvent {
                     Image(systemName: "calendar").font(.system(size: 8, weight: .bold))
                 } else if item.isDone {
                     Image(systemName: "checkmark.circle.fill").font(.system(size: 9))
