@@ -42,6 +42,11 @@ enum DebugDriver {
                                                              items: [ProjectItem(title: "Pick dates"), ProjectItem(title: "Book flights", due: DateKey.string(Date().adding(days: 10)))])]
         }
         if let s = LaunchOptions.value("-screen"), let screen = Screen(rawValue: s) { model.screen = screen }
+        // -weekSelect: Week calendar in Select mode with today's tasks picked.
+        if LaunchOptions.args.contains("-weekSelect") {
+            model.screen = .week; model.weekSelecting = true
+            for o in model.store.occurrences(on: Date()) where !o.isResolved && !o.isUntilDone { model.weekSelection[o.id] = o }
+        }
         // -openProject [outline|timeline|map]: opens the first project in that view.
         if let i = LaunchOptions.args.firstIndex(of: "-openProject") {
             model.screen = .projects

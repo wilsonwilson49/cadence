@@ -22,6 +22,9 @@ struct WeekView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(title: title, subtitle: "Double-click an empty slot to add a task there.") {
+                Toggle(isOn: $model.weekSelecting) { Label("Select", systemImage: "checkmark.circle") }
+                    .toggleStyle(.button)
+                    .help("Pick several tasks to change them all at once. You can also ⌘-click or ⇧-click tasks any time.")
                 CalendarsMenu()
                 Button { model.newEvent(on: weekStart.isSameDay(Date().startOfWeek) ? Date() : weekStart) } label: {
                     Label("New Event", systemImage: "calendar.badge.plus")
@@ -30,6 +33,7 @@ struct WeekView: View {
                             onToday: { weekStart = Date().startOfWeek },
                             onNext: { weekStart = weekStart.adding(days: 7) })
             }
+            if model.weekSelecting || !model.weekSelection.isEmpty { WeekSelectionBar(days: days) }
             GeometryReader { geo in
                 let colW = max(60, (geo.size.width - gutter - 8) / 7)
                 VStack(spacing: 0) {
@@ -297,12 +301,13 @@ struct TimedBlock: View {
             else { Rectangle().stroke(item.color, style: StrokeStyle(lineWidth: 3, dash: [2, 2])).frame(width: 1.5) }
         }
         .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .overlay { if model.weekSelection[item.occID ?? ""] != nil { RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor, lineWidth: 2.5) } }
         .contentShape(Rectangle())
         // Double-click inside a block adds a task at that exact time; single click shows details.
         .gesture(
             SpatialTapGesture(count: 2)
                 .onEnded { v in if let m = moment(atY: v.location.y) { model.newTask(at: m) } }
-                .exclusively(before: TapGesture().onEnded { showing = true })
+                .exclusively(before: TapGesture().onEnded { if !model.weekPick(item) { showing = true } })
         )
         .overlay(alignment: .bottom) {
             // Drag the bottom edge to change how long it is.
@@ -456,5 +461,97 @@ private struct SpanBar: View {
         .onTapGesture { showing = true }
         .help("\(occ.task.title) · \(occ.task.planSummary ?? "")")
         .popover(isPresented: $showing, arrowEdge: .bottom) { ItemDetail(item: .task(occ)) { showing = false } }
+    }
+}
+
+/// Week calendar: what's picked, and changes for all of them at once.
+struct WeekSelectionBar: View {
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var store: Store
+    @EnvironmentObject private var google: GoogleCalendar
+    let days: [Date]
+    @State private var confirmDeleteAll = false
+    @State private var checkingOff = false
+    @State private var reflection = ""
+
+    private var picked: [Occurrence] { Array(model.weekSelection.values) }
+    private var taskIDs: Set<UUID> { Set(picked.map(\.task.id)) }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(picked.isEmpty ? "Click tasks to pick them, or pick a whole day:" : "\(picked.count) picked")
+                .font(.callout.weight(.semibold))
+            if picked.isEmpty {
+                ForEach(days, id: \.self) { d in
+                    Button(d.formatted(.dateTime.weekday(.abbreviated))) { pickDay(d) }.controlSize(.small)
+                }
+                Button("Whole week") { days.forEach(pickDay) }.controlSize(.small)
+            } else {
+                Button { checkingOff = true } label: { Label("Check off", systemImage: "checkmark.circle") }
+                Menu {
+                    Button("Keep on checklist until done") { editTasks { $0.mode = "untilDone" } }
+                    Button("Just on its day (not until done)") { editTasks { $0.mode = nil; $0.dueDate = nil } }
+                    Divider()
+                    Button("Mark urgent") { editTasks { $0.urgent = true } }
+                    Button("Not urgent") { editTasks { $0.urgent = nil } }
+                    Divider()
+                    Menu("Color") { ForEach(TaskColor.allCases) { c in Button(c.rawValue.capitalized) { editTasks { $0.color = c } } } }
+                    Menu("Move") {
+                        Button("1 day earlier") { move(-1) }
+                        Button("1 day later") { move(1) }
+                        Button("1 week later") { move(7) }
+                    }
+                } label: { Label("Change", systemImage: "slider.horizontal.3") }
+                .fixedSize()
+                Menu {
+                    Button("Delete only these days") { for o in picked { store.delete(o, scope: .one) }; model.weekSelection = [:] }
+                    Button("Delete these and later repeats") { for o in picked { store.delete(o, scope: .fromHere) }; model.weekSelection = [:] }
+                    Divider()
+                    Button("Delete the whole tasks…", role: .destructive) { confirmDeleteAll = true }
+                } label: { Label("Delete", systemImage: "trash") }
+                .fixedSize()
+            }
+            Spacer()
+            if !picked.isEmpty { Button("Clear") { model.weekSelection = [:] } }
+            Button("Done") { model.weekSelection = [:]; model.weekSelecting = false }.keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.10))
+        .confirmationDialog("Delete \(taskIDs.count) task\(taskIDs.count == 1 ? "" : "s") completely, every repeat included?", isPresented: $confirmDeleteAll) {
+            Button("Delete", role: .destructive) { for id in taskIDs { store.delete(taskID: id) }; model.weekSelection = [:] }
+        }
+        .sheet(isPresented: $checkingOff) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Check off \(picked.count) item\(picked.count == 1 ? "" : "s")").font(.headline)
+                Text("One reflection, saved for each of them.").font(.caption).foregroundStyle(.secondary)
+                TextEditor(text: $reflection).frame(height: 90).border(.separator)
+                let need = store.settings.minReflectionWords, have = countWords(reflection)
+                HStack {
+                    if have < need { Text("\(need - have) more word\(need - have == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                    Button("Cancel") { checkingOff = false }
+                    Button("Check off") {
+                        for o in picked where !o.isResolved { store.complete(o, reflection: reflection) }
+                        reflection = ""; checkingOff = false; model.weekSelection = [:]
+                    }.keyboardShortcut(.defaultAction).disabled(have < need)
+                }
+            }
+            .padding(20).frame(width: 380)
+        }
+    }
+
+    private func pickDay(_ d: Date) {
+        for o in google.visibleOccurrences(on: d) where !o.isResolved && !o.task.isEvent && (!o.isUntilDone || o.isUntilDoneWeekDay) {
+            model.weekSelection[o.id] = o
+        }
+    }
+    private func editTasks(_ change: (inout PlanTask) -> Void) {
+        for id in taskIDs { if var t = store.task(id) { change(&t); store.upsert(t) } }
+        model.weekSelection = [:]
+    }
+    /// Moves one-off tasks by whole days (repeating ones keep their pattern, so they're left alone).
+    private func move(_ days: Int) {
+        for id in taskIDs { if var t = store.task(id), !t.recurrence.isRepeating { t.startDate = t.startDate.adding(days: days); t.dueDate = t.dueDate?.adding(days: days); store.upsert(t) } }
+        model.weekSelection = [:]
     }
 }

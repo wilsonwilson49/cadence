@@ -481,6 +481,7 @@ enum CalendarItem: Identifiable, Hashable {
         case .google(let e): return e.title
         }
     }
+    var occID: String? { if case .task(let o) = self { return o.id }; return nil }
     var isUntilDone: Bool { if case .task(let o) = self { return o.isUntilDone && !o.isResolved }; return false }
     var start: Date? {
         switch self {
@@ -797,6 +798,7 @@ struct EventRow: View {
 
 /// A compact one-line chip for month cells and all-day rows.
 struct ItemChip: View {
+    @EnvironmentObject private var model: AppModel
     let item: CalendarItem
     @State private var showing = false
 
@@ -821,8 +823,9 @@ struct ItemChip: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 1.5)
         .background(RoundedRectangle(cornerRadius: 4).fill(item.color.opacity(item.isCalendarEvent ? 0.10 : 0.16)))
+        .overlay { if model.weekSelection[item.occID ?? ""] != nil { RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: 2) } }
         .contentShape(Rectangle())
-        .onTapGesture { showing = true }
+        .onTapGesture { if !model.weekPick(item) { showing = true } }
         .popover(isPresented: $showing, arrowEdge: .trailing) { ItemDetail(item: item) { showing = false } }
     }
 }

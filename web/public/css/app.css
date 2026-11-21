@@ -823,3 +823,5 @@ table.rules tr.on td:first-child b { color: var(--accent); }
 .rem-edit .srow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rem-edit .chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; }
 .flame { color: #ff9500; display: inline-flex; }
+.week-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; margin: 0 0 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent, #0a84ff) 12%, transparent); }
+.chip.picked, .block.picked { outline: 2.5px solid var(--accent, #0a84ff); outline-offset: 1px; z-index: 5; }

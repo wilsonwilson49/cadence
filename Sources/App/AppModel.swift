@@ -64,7 +64,18 @@ final class AppModel: ObservableObject {
     private(set) lazy var focus = FocusEngine(model: self)
     private(set) lazy var study = StudyEngine(model: self)
 
-    @Published var screen: Screen = .home
+    @Published var screen: Screen = .home { didSet { if screen != .week { weekSelection = [:]; weekSelecting = false } } }
+    /// Week calendar: tasks picked for changing all at once (by occurrence id), and whether a plain click picks.
+    @Published var weekSelection: [String: Occurrence] = [:]
+    @Published var weekSelecting = false
+    /// Week calendar: a click picks instead of opening details while Select is on or ⌘/⇧ is held.
+    func weekPick(_ item: CalendarItem) -> Bool {
+        guard screen == .week, case .task(let o) = item else { return false }
+        let mods = NSEvent.modifierFlags
+        guard weekSelecting || mods.contains(.command) || mods.contains(.shift) else { return false }
+        if weekSelection[o.id] != nil { weekSelection[o.id] = nil } else { weekSelection[o.id] = o }
+        return true
+    }
     @Published var reflectionTarget: Occurrence?
     /// True when the open reflection is for "didn't do it" rather than a check-off.
     @Published var reflectionMissed = false

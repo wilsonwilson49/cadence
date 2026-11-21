@@ -715,7 +715,7 @@ function calItemsTimed(day) {
   return out;
 }
 
-const chipFor = it => `<div class="chip ${it.done ? 'done' : ''} ${it.missed ? 'missed' : ''}" style="background:${tint(it.color, it.kind === 'task' ? .18 : .12)}" data-act="detail" data-item="${esc(it.id)}">
+const chipFor = it => `<div class="chip ${ui.weekSel?.has(it.id) ? 'picked' : ''} ${it.done ? 'done' : ''} ${it.missed ? 'missed' : ''}" style="background:${tint(it.color, it.kind === 'task' ? .18 : .12)}" data-act="detail" data-item="${esc(it.id)}">
   ${it.ud ? `<span class="flame">${ic('flame')}</span>` : it.kind !== 'task' ? `<span style="color:${it.color}">${ic('cal')}</span>` : `<span class="dot" style="border-color:${it.color};background:${it.done ? it.color : 'transparent'}"></span>`}
   <span>${it.start && it.kind !== 'allday' ? `<span class="muted">${M.fmtTime(it.start)}</span> ` : ''}${esc(it.title)}</span></div>`;
 
@@ -733,6 +733,36 @@ function splitUntilDone(items) {
   return [[null, daily], ...(habits.length ? [['Habits', habits]] : []), ...(ongoing.length ? [['Until done', ongoing]] : [])];
 }
 
+// ---------- Week: pick several tasks and change them together ----------
+function weekPicked() { return [...(ui.weekSel || new Map()).keys()].map(id => findOcc(id.slice(2))).filter(Boolean); }
+function weekSelBar(days) {
+  const n = ui.weekSel?.size || 0;
+  if (!ui.weekSelecting && !n) return '';
+  const pick = n ? '' : `${days.map(d => `<button class="btn sm" data-act="sel-day" data-day="${M.dateKey(d)}">${M.WEEKDAY_SHORT[d.getDay()]}</button>`).join('')}<button class="btn sm" data-act="sel-week">Whole week</button>`;
+  const acts = !n ? '' : `<button class="btn sm" data-act="sel-checkoff">${ic('check')} Check off</button>
+    <button class="btn sm" data-act="sel-mode" data-v="untilDone">${ic('flame')} Until done</button>
+    <button class="btn sm" data-act="sel-mode" data-v="">Just on its day</button>
+    <button class="btn sm" data-act="sel-urgent" data-v="1">Urgent</button><button class="btn sm" data-act="sel-urgent" data-v="">Not urgent</button>
+    <select class="input sm" style="width:auto" data-sel-color><option value="">Color…</option>${Object.keys(M.COLORS).map(c => `<option value="${c}">${c[0].toUpperCase() + c.slice(1)}</option>`).join('')}</select>
+    <select class="input sm" style="width:auto" data-sel-move><option value="">Move…</option><option value="-1">1 day earlier</option><option value="1">1 day later</option><option value="7">1 week later</option></select>
+    <button class="btn sm danger" data-act="sel-del" data-scope="one">${ic('trash')} Only these days</button>
+    <button class="btn sm danger" data-act="sel-del" data-scope="later">These and later</button>
+    <button class="btn sm danger" data-act="sel-del" data-scope="all">Whole tasks…</button>`;
+  return `<div class="week-selbar"><b>${n ? `${n} picked` : 'Click tasks to pick them, or pick a whole day:'}</b>${pick}${acts}<span class="grow"></span>
+    ${n ? '<button class="btn sm" data-act="sel-clear">Clear</button>' : ''}<button class="btn sm" data-act="sel-done">Done</button></div>`;
+}
+function selPickDay(d) {
+  ui.weekSel ??= new Map();
+  for (const o of store.visibleOccurrencesOn(d)) if (!o.resolved && !o.event && (!M.isUntilDone(o.task) || M.untilDoneWeekDay(o))) ui.weekSel.set(`t|${o.id}`, true);
+}
+function selTasks() { return [...new Set(weekPicked().map(o => o.task.id))].map(id => store.tasks.get(id)).filter(Boolean); }
+function selEdit(fn, msg) {
+  const before = selTasks().map(t => structuredClone(t));
+  for (const t of before) { const c = structuredClone(t); fn(c); store.upsertTask(c); }
+  ui.weekSel = new Map(); render();
+  toast(msg, { icon: 'check', undo: () => { before.forEach(t => store.upsertTask(t)); render(); } });
+}
+
 function weekView() {
   const days = [...Array(7)].map((_, i) => M.addDays(ui.weekStart, i));
   store.ensureGoogle(days[0], M.addDays(days[6], 1));
@@ -741,8 +771,9 @@ function weekView() {
   const now = new Date();
   return `<div class="week">
     <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">Double-click an empty slot — or inside an existing block — to add a task at that time.</div></div>
-      <div class="row">${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
+      <div class="row"><button class="btn ${ui.weekSelecting ? 'primary' : ''}" data-act="sel-toggle" title="Pick several tasks to change them all at once. You can also ⌘/Ctrl- or Shift-click tasks any time.">${ic('check')} Select</button>${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
       <button class="btn" data-act="week-today">Today</button><button class="btn icon" data-act="week-next" title="Next week">${ic('right')}</button></div></div>
+    ${weekSelBar(days)}
     <div class="week-head"><div></div>${days.map(d => {
       const open = store.tasksOn(d).filter(o => !o.resolved).length;
       return `<div class="d ${M.isToday(d) ? 'today' : ''}"><div class="dow">${M.WEEKDAY_SHORT[d.getDay()].toUpperCase()}</div><div class="num">${d.getDate()}</div><div class="open">${open ? `${open} open` : ''}</div></div>`;
@@ -758,7 +789,7 @@ function weekView() {
           const dayStart = M.startOfDay(d);
           const top = Math.max(0, (p.start - dayStart) / 3_600_000) * HOUR;
           const bottom = Math.min(24, (p.end - dayStart) / 3_600_000) * HOUR;
-          return `<div class="block ${p.done ? 'done' : ''} ${p.missed ? 'missed' : ''} ${p.kind !== 'task' ? 'evt' : ''} ${busyOf(p) ? '' : 'free'}" data-item="${esc(p.id)}" data-start="${+p.start}" data-end="${+p.end}"
+          return `<div class="block ${ui.weekSel?.has(p.id) ? 'picked' : ''} ${p.done ? 'done' : ''} ${p.missed ? 'missed' : ''} ${p.kind !== 'task' ? 'evt' : ''} ${busyOf(p) ? '' : 'free'}" data-item="${esc(p.id)}" data-start="${+p.start}" data-end="${+p.end}"
             title="${busyOf(p) ? 'Closed' : 'Open (just for info)'} · click for details · double-click to add a task at this time"
             style="top:${top}px;height:${Math.max(20, bottom - top - 1)}px;left:calc(${(p.lane * 100) / p.lanes}% + 2px);width:calc(${100 / p.lanes}% - 4px);
             background:${tint(p.color, p.done ? .1 : p.kind !== 'task' ? .14 : .24)};border-color:${p.color}">
@@ -1230,6 +1261,10 @@ function renderModal() {
     <div class="foot" style="flex-wrap:wrap"><button class="btn" data-act="close">Cancel</button><span class="grow"></span>
       <button class="btn" data-act="google-hide">Hide in Cadence</button>
       <button class="btn primary" style="background:var(--red)" data-act="google-delete" ${m.working ? 'disabled' : ''}>${m.working ? 'Deleting…' : 'Delete from Google too'}</button></div></div>`;
+  else if (m.type === 'sel-checkoff') html = `<div class="dialog sm"><div class="body"><h2>Check off ${ui.weekSel?.size || 0} item${ui.weekSel?.size === 1 ? '' : 's'}</h2>
+      <div class="muted small">One reflection (at least ${store.settings.minReflectionWords} words), saved for each of them.</div>
+      <textarea class="input" id="selRefl" rows="4" autofocus style="width:100%;margin-top:8px"></textarea></div>
+    <div class="foot"><span class="grow"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="sel-checkoff-go">Check off</button></div></div>`;
   else if (m.type === 'confirm') html = `<div class="dialog sm"><div class="body"><h2>${esc(m.title)}</h2><div class="muted">${esc(m.text)}</div></div>
     <div class="foot">${m.alt ? `<button class="btn danger" data-act="confirm-alt">${esc(m.alt)}</button>` : ''}<span class="grow"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-yes">${esc(m.yes)}</button></div></div>`;
   root.innerHTML = `<div class="overlay ${ui.modalFresh ? 'opening' : ''}" data-act="overlay">${html}</div>`;
@@ -1451,6 +1486,16 @@ addEventListener('pointerup', e => {
   render();
 });
 // The click that ends a drag shouldn't also open the details.
+// Week: while Select is on (or with ⌘/Ctrl/Shift held), clicking a task picks it instead of opening it.
+document.addEventListener('click', e => {
+  if (ui.route !== 'week') return;
+  const el = e.target.closest('.week [data-item^="t|"]');
+  if (!el || !(ui.weekSelecting || e.metaKey || e.ctrlKey || e.shiftKey)) return;
+  e.stopPropagation(); e.preventDefault();
+  ui.weekSel ??= new Map();
+  ui.weekSel.has(el.dataset.item) ? ui.weekSel.delete(el.dataset.item) : ui.weekSel.set(el.dataset.item, true);
+  render();
+}, true);
 document.addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
 // --- task editor ---
@@ -2610,6 +2655,40 @@ function customRemindersView() {
 const remNew = over => { const r = store.upsertCustomReminder(M.newCustomReminder(over)); ui.remSel = r.id; render(); };
 
 const actions = {
+  'sel-toggle': () => { ui.weekSelecting = !ui.weekSelecting; if (!ui.weekSelecting) ui.weekSel = new Map(); render(); },
+  'sel-done': () => { ui.weekSelecting = false; ui.weekSel = new Map(); render(); },
+  'sel-clear': () => { ui.weekSel = new Map(); render(); },
+  'sel-day': el => { selPickDay(M.parseKey(el.dataset.day)); render(); },
+  'sel-week': () => { for (let i = 0; i < 7; i++) selPickDay(M.addDays(ui.weekStart, i)); render(); },
+  'sel-mode': el => selEdit(t => { if (el.dataset.v) t.mode = 'untilDone'; else { delete t.mode; delete t.dueDate; } }, el.dataset.v ? 'Kept on the checklist until done' : 'Now just on their day'),
+  'sel-urgent': el => selEdit(t => { if (el.dataset.v) t.urgent = true; else delete t.urgent; }, el.dataset.v ? 'Marked urgent' : 'Not urgent'),
+  'sel-checkoff': () => openModal({ type: 'sel-checkoff' }),
+  'sel-checkoff-go': () => {
+    const text = $('#selRefl')?.value || '';
+    if (M.countWords(text) < store.settings.minReflectionWords) return;
+    for (const o of weekPicked()) if (!o.resolved) store.complete(o, text);
+    ui.weekSel = new Map(); closeModal(); toast('Checked off', { icon: 'check' });
+  },
+  'sel-del': el => {
+    const scope = el.dataset.scope, occs = weekPicked();
+    if (scope === 'all') {
+      const ts = selTasks();
+      openModal({ type: 'confirm', title: `Delete ${ts.length} task${ts.length === 1 ? '' : 's'} completely?`, text: 'Every repeat goes too. Past reflections stay.', yes: 'Delete', fn: () => {
+        const copies = ts.map(t => structuredClone(t)); ts.forEach(t => store.deleteTask(t.id)); ui.weekSel = new Map(); render();
+        toast(`Deleted ${copies.length}`, { icon: 'trash', undo: () => { copies.forEach(t => store.upsertTask(t)); render(); } });
+      } });
+      return;
+    }
+    const copies = new Map();
+    for (const o of occs) {
+      const t = store.tasks.get(o.task.id); if (!t) continue;
+      if (!copies.has(t.id)) copies.set(t.id, structuredClone(t));
+      const next = M.deleteOccurrence(t, o.day, scope === 'later' ? 'fromHere' : 'one');
+      if (next) store.upsertTask(next); else store.deleteTask(t.id);
+    }
+    ui.weekSel = new Map(); render();
+    toast(`Deleted ${occs.length}`, { icon: 'trash', undo: () => { copies.forEach(t => store.upsertTask(t)); render(); } });
+  },
   'rem-new': () => remNew(),
   'rem-pick': el => { ui.remSel = el.dataset.id; render(); },
   'rem-delete': el => { const r = store.customReminders.get(el.dataset.id); if (!r) return; store.deleteCustomReminder(r.id); ui.remSel = null; render(); toast('Reminder deleted', { icon: 'trash', undo: () => { store.upsertCustomReminder(r); render(); } }); },
@@ -3129,6 +3208,12 @@ function setProjectDate(el, value) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
+  if (el.dataset.selMove !== undefined) {
+    const n = Number(el.value); if (!n) return;
+    selEdit(t => { if (t.recurrence.frequency !== 'none') return; t.startDate = M.iso(M.addDays(new Date(t.startDate), n)); if (t.dueDate) t.dueDate = M.dateKey(M.addDays(M.parseKey(String(t.dueDate).slice(0, 10)), n)); }, 'Moved (repeating ones keep their pattern)');
+    return;
+  }
   if (el.dataset.remTemplate !== undefined) { const t = REMINDER_TEMPLATES[+el.value]; if (t) remNew(structuredClone(t)); return; }
   if (el.dataset.id && store.customReminders.get(el.dataset.id) && !el.dataset.remField) {
     const id = el.dataset.id, toMin = v => { const [h, m] = String(v).split(':').map(Number); return h * 60 + m; };
