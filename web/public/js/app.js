@@ -757,6 +757,7 @@ function selPickDay(d) {
 }
 function selTasks() { return [...new Set(weekPicked().map(o => o.task.id))].map(id => store.tasks.get(id)).filter(Boolean); }
 function selEdit(fn, msg) {
+  pushWeekUndo();
   const before = selTasks().map(t => structuredClone(t));
   for (const t of before) { const c = structuredClone(t); fn(c); store.upsertTask(c); }
   ui.weekSel = new Map(); render();
@@ -780,7 +781,7 @@ function weekView() {
     }).join('')}</div>
     <div class="week-allday"><div class="lab">any<br>time</div>${days.map(d => {
       const items = allDayItems(d);
-      return `<div class="cell">${items.slice(0, items.length > 4 ? 3 : 4).map(chipFor).join('')}${items.length > 4 ? `<div class="more">+${items.length - 3} more</div>` : ''}</div>`;
+      return `<div class="cell" data-day="${M.dateKey(d)}">${items.slice(0, items.length > 4 ? 3 : 4).map(chipFor).join('')}${items.length > 4 ? `<div class="more">+${items.length - 3} more</div>` : ''}</div>`;
     }).join('')}</div>
     <div class="week-scroll" id="weekScroll"><div class="week-grid" style="height:${24 * HOUR}px">
       <div class="hours">${[...Array(24)].map((_, h) => `<div class="h">${h ? M.fmtTimeMinutes(h * 60) : ''}</div>`).join('')}</div>
@@ -1486,6 +1487,75 @@ addEventListener('pointerup', e => {
   render();
 });
 // The click that ends a drag shouldn't also open the details.
+// Week: ⌘/Ctrl + Z X C V. Copy and cut take the picked tasks, or the one under the mouse; paste drops them at the
+// spot under the mouse (keeping their spacing), or on today if the mouse isn't over the calendar.
+const weekClip = { items: [], undo: [], hoverItem: null, hoverPoint: null };
+function pushWeekUndo() { weekClip.undo.push(structuredClone([...store.tasks.values()])); if (weekClip.undo.length > 30) weekClip.undo.shift(); }
+function weekUndo() {
+  const before = weekClip.undo.pop(); if (!before) return false;
+  const ids = new Set(before.map(t => t.id));
+  for (const t of [...store.tasks.values()]) if (!ids.has(t.id)) store.deleteTask(t.id);
+  for (const t of before) { const cur = store.tasks.get(t.id); if (!cur || JSON.stringify(cur) !== JSON.stringify(t)) store.upsertTask(t); }
+  ui.weekSel = new Map(); render(); toast('Undone', { icon: 'check' });
+  return true;
+}
+function weekTargets() {
+  if (ui.weekSel?.size) return weekPicked();
+  const o = weekClip.hoverItem && findOcc(weekClip.hoverItem.slice(2));
+  return o ? [o] : [];
+}
+function weekCopy(quiet) {
+  const occs = weekTargets().filter(o => !o.task.source || o.task.source === 'gtasks' ? true : !M.isEvent(o.task));
+  if (!occs.length) return false;
+  weekClip.items = occs.map(o => ({ ...structuredClone(o.task), startDate: M.iso(M.startOfDay(o.day)), recurrence: { frequency: 'none', interval: 1 } }));
+  if (!quiet) toast(`Copied ${occs.length}`, { icon: 'check' });
+  return true;
+}
+function weekCut() {
+  const occs = weekTargets();
+  if (!weekCopy(true)) return false;
+  pushWeekUndo();
+  for (const o of occs) { const t = store.tasks.get(o.task.id); if (!t) continue; const next = M.deleteOccurrence(t, o.day, 'one'); if (next) store.upsertTask(next); else store.deleteTask(t.id); }
+  ui.weekSel = new Map(); render(); toast(`Cut ${occs.length}`, { icon: 'trash' });
+  return true;
+}
+function weekPaste() {
+  const src = weekClip.items; if (!src.length) return false;
+  const when = t => M.dayAt(new Date(t.startDate), t.timeMinutes ?? 0);
+  const first = Math.min(...src.map(t => +when(t)));
+  const p = weekClip.hoverPoint || { day: M.startOfDay(new Date()), minutes: null };
+  const timed = src.filter(t => t.timeMinutes != null).map(t => t.timeMinutes);
+  const shift = +M.dayAt(p.day, p.minutes ?? (timed.length ? Math.min(...timed) : 0)) - first;
+  pushWeekUndo();
+  ui.weekSel = new Map();
+  for (const s of src) {
+    const moved = new Date(+when(s) + shift);
+    const t = { ...structuredClone(s), id: M.uuid(), createdAt: M.iso(new Date()), startDate: M.iso(M.startOfDay(moved)), completions: {}, missed: {}, skipped: [] };
+    for (const k of ['updatedAt', 'stepsDone', 'googleEventID', 'googleTaskID', 'source', 'externalURL', 'sourceCalendar', 'archived']) delete t[k];
+    if (s.timeMinutes != null) t.timeMinutes = M.minutesOf(moved);
+    if (s.dueDate) t.dueDate = M.dateKey(new Date(+M.parseKey(String(s.dueDate).slice(0, 10)) + shift));
+    store.upsertTask(t);
+    ui.weekSel.set(`t|${t.id}|${M.dateKey(moved)}`, true);
+  }
+  render(); toast(`Pasted ${src.length}`, { icon: 'check' });
+  return true;
+}
+document.addEventListener('mousemove', e => {
+  if (ui.route !== 'week') return;
+  weekClip.hoverItem = e.target.closest?.('.week [data-item^="t|"]')?.dataset.item || null;
+  const col = e.target.closest?.('.wcol[data-day]'), cell = e.target.closest?.('.week-allday .cell[data-day]');
+  if (col) { const r = col.getBoundingClientRect(); weekClip.hoverPoint = { day: M.parseKey(col.dataset.day), minutes: Math.min(1425, Math.max(0, Math.floor((e.clientY - r.top) / HOUR * 4) * 15)) }; }
+  else if (cell) weekClip.hoverPoint = { day: M.parseKey(cell.dataset.day), minutes: null };
+  else weekClip.hoverPoint = null;
+});
+document.addEventListener('keydown', e => {
+  if (ui.route !== 'week' || ui.modal || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  const k = e.key.toLowerCase();
+  const done = k === 'z' ? weekUndo() : k === 'x' ? weekCut() : k === 'c' ? weekCopy() : k === 'v' ? weekPaste() : false;
+  if (done) e.preventDefault();
+});
+
 // Week: shift + drag draws a box; every task it touches is picked.
 let band = null;
 document.addEventListener('pointerdown', e => {
@@ -2703,11 +2773,12 @@ const actions = {
     if (scope === 'all') {
       const ts = selTasks();
       openModal({ type: 'confirm', title: `Delete ${ts.length} task${ts.length === 1 ? '' : 's'} completely?`, text: 'Every repeat goes too. Past reflections stay.', yes: 'Delete', fn: () => {
-        const copies = ts.map(t => structuredClone(t)); ts.forEach(t => store.deleteTask(t.id)); ui.weekSel = new Map(); render();
+        pushWeekUndo(); const copies = ts.map(t => structuredClone(t)); ts.forEach(t => store.deleteTask(t.id)); ui.weekSel = new Map(); render();
         toast(`Deleted ${copies.length}`, { icon: 'trash', undo: () => { copies.forEach(t => store.upsertTask(t)); render(); } });
       } });
       return;
     }
+    pushWeekUndo();
     const copies = new Map();
     for (const o of occs) {
       const t = store.tasks.get(o.task.id); if (!t) continue;

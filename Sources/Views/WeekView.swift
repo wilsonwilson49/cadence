@@ -39,6 +39,12 @@ struct WeekView: View {
                 VStack(spacing: 0) {
                     dayHeader(colW)
                     allDayRow(colW)
+                        .onContinuousHover { phase in
+                            if case .active(let p) = phase {
+                                let i = Int((p.x - gutter) / colW)
+                                model.weekHoverPoint = days.indices.contains(i) && p.x >= gutter ? (days[i], nil) : nil
+                            } else { model.weekHoverPoint = nil }
+                        }
                     Divider()
                     ScrollViewReader { proxy in
                         ScrollView(.vertical) {
@@ -56,6 +62,12 @@ struct WeekView: View {
                                 nowLine(colW)
                             }
                             .frame(height: hourHeight * 24, alignment: .topLeading)
+                            .onContinuousHover { phase in
+                                if case .active(let p) = phase {
+                                    let i = Int((p.x - gutter) / colW)
+                                    model.weekHoverPoint = days.indices.contains(i) && p.x >= gutter ? (days[i], min(1425, max(0, Int(p.y / hourHeight * 4) * 15))) : nil
+                                } else { model.weekHoverPoint = nil }
+                            }
                             .environment(\.calendarGrid, CalendarGrid(hourHeight: hourHeight, dayWidth: colW))
                         }
                         .onAppear { proxy.scrollTo(7, anchor: .top) }
@@ -64,6 +76,7 @@ struct WeekView: View {
             }
         }
         .modifier(WeekBandPicker())
+        .modifier(WeekKeys())
         .onAppear { google.ensure(from: weekStart, to: weekStart.adding(days: 7)) }
         .onChange(of: weekStart) { _, new in google.ensure(from: new, to: new.adding(days: 7)) }
     }
@@ -304,6 +317,7 @@ struct TimedBlock: View {
         .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         .overlay { if model.weekSelection[item.occID ?? ""] != nil { RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor, lineWidth: 2.5) } }
         .reportWeekFrame(item)
+        .onHover { model.weekHover(item, $0) }
         .contentShape(Rectangle())
         // Double-click inside a block adds a task at that exact time; single click shows details.
         .gesture(
@@ -506,8 +520,8 @@ struct WeekSelectionBar: View {
                 } label: { Label("Change", systemImage: "slider.horizontal.3") }
                 .fixedSize()
                 Menu {
-                    Button("Delete only these days") { for o in picked { store.delete(o, scope: .one) }; model.weekSelection = [:] }
-                    Button("Delete these and later repeats") { for o in picked { store.delete(o, scope: .fromHere) }; model.weekSelection = [:] }
+                    Button("Delete only these days") { model.pushWeekUndo(); for o in picked { store.delete(o, scope: .one) }; model.weekSelection = [:] }
+                    Button("Delete these and later repeats") { model.pushWeekUndo(); for o in picked { store.delete(o, scope: .fromHere) }; model.weekSelection = [:] }
                     Divider()
                     Button("Delete the whole tasks…", role: .destructive) { confirmDeleteAll = true }
                 } label: { Label("Delete", systemImage: "trash") }
@@ -520,7 +534,7 @@ struct WeekSelectionBar: View {
         .padding(.horizontal, 16).padding(.vertical, 8)
         .background(Color.accentColor.opacity(0.10))
         .confirmationDialog("Delete \(taskIDs.count) task\(taskIDs.count == 1 ? "" : "s") completely, every repeat included?", isPresented: $confirmDeleteAll) {
-            Button("Delete", role: .destructive) { for id in taskIDs { store.delete(taskID: id) }; model.weekSelection = [:] }
+            Button("Delete", role: .destructive) { model.pushWeekUndo(); for id in taskIDs { store.delete(taskID: id) }; model.weekSelection = [:] }
         }
         .sheet(isPresented: $checkingOff) {
             VStack(alignment: .leading, spacing: 12) {
@@ -548,11 +562,13 @@ struct WeekSelectionBar: View {
         }
     }
     private func editTasks(_ change: (inout PlanTask) -> Void) {
+        model.pushWeekUndo()
         for id in taskIDs { if var t = store.task(id) { change(&t); store.upsert(t) } }
         model.weekSelection = [:]
     }
     /// Moves one-off tasks by whole days (repeating ones keep their pattern, so they're left alone).
     private func move(_ days: Int) {
+        model.pushWeekUndo()
         for id in taskIDs { if var t = store.task(id), !t.recurrence.isRepeating { t.startDate = t.startDate.adding(days: days); t.dueDate = t.dueDate?.adding(days: days); store.upsert(t) } }
         model.weekSelection = [:]
     }
@@ -599,5 +615,27 @@ struct WeekBandPicker: ViewModifier {
                 for (id, f) in frames where f.rect.intersects(r) && !f.occ.isResolved { model.weekSelection[id] = f.occ }
                 band = nil
             })
+    }
+}
+
+/// ⌘Z / ⌘X / ⌘C / ⌘V on the week calendar (see WeekClipboard.swift).
+struct WeekKeys: ViewModifier {
+    @EnvironmentObject private var model: AppModel
+    @State private var monitor: Any?
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak model] e in
+                    MainActor.assumeIsolated { (model?.weekKey(e) ?? false) ? nil : e }
+                }
+            }
+            .onDisappear { if let m = monitor { NSEvent.removeMonitor(m) }; monitor = nil }
+    }
+}
+
+extension AppModel {
+    func weekHover(_ item: CalendarItem, _ inside: Bool) {
+        guard case .task(let o) = item else { return }
+        if inside { weekHoverOcc = o } else if weekHoverOcc?.id == o.id { weekHoverOcc = nil }
     }
 }

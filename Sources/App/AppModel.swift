@@ -68,6 +68,11 @@ final class AppModel: ObservableObject {
     /// Week calendar: tasks picked for changing all at once (by occurrence id), and whether a plain click picks.
     @Published var weekSelection: [String: Occurrence] = [:]
     @Published var weekSelecting = false
+    /// Week calendar: what the mouse is over (not published: hovering shouldn't redraw anything).
+    var weekHoverOcc: Occurrence?
+    var weekHoverPoint: (day: Date, minutes: Int?)?
+    var weekClipboard: [PlanTask] = []
+    var weekUndo: [[PlanTask]] = []
     /// Week calendar: a click picks instead of opening details while Select is on or ⌘/⇧ is held.
     func weekPick(_ item: CalendarItem) -> Bool {
         guard screen == .week, case .task(let o) = item else { return false }

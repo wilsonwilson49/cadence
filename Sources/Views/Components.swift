@@ -825,6 +825,7 @@ struct ItemChip: View {
         .background(RoundedRectangle(cornerRadius: 4).fill(item.color.opacity(item.isCalendarEvent ? 0.10 : 0.16)))
         .overlay { if model.weekSelection[item.occID ?? ""] != nil { RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: 2) } }
         .reportWeekFrame(item)
+        .onHover { model.weekHover(item, $0) }
         .contentShape(Rectangle())
         .onTapGesture { if !model.weekPick(item) { showing = true } }
         .popover(isPresented: $showing, arrowEdge: .trailing) { ItemDetail(item: item) { showing = false } }
