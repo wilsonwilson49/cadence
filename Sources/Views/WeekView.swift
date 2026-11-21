@@ -63,6 +63,7 @@ struct WeekView: View {
                 }
             }
         }
+        .modifier(WeekBandPicker())
         .onAppear { google.ensure(from: weekStart, to: weekStart.adding(days: 7)) }
         .onChange(of: weekStart) { _, new in google.ensure(from: new, to: new.adding(days: 7)) }
     }
@@ -302,6 +303,7 @@ struct TimedBlock: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         .overlay { if model.weekSelection[item.occID ?? ""] != nil { RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor, lineWidth: 2.5) } }
+        .reportWeekFrame(item)
         .contentShape(Rectangle())
         // Double-click inside a block adds a task at that exact time; single click shows details.
         .gesture(
@@ -342,9 +344,9 @@ struct TimedBlock: View {
         .offset(drag)
         .zIndex(drag == .zero && stretch == 0 ? 0 : 10)
         .simultaneousGesture(DragGesture(minimumDistance: 6)
-            .onChanged { v in if canMove { drag = v.translation } }
+            .onChanged { v in if canMove && !NSEvent.modifierFlags.contains(.shift) { drag = v.translation } }
             .onEnded { v in
-                guard canMove, let s = item.start else { drag = .zero; return }
+                guard canMove, drag != .zero, let s = item.start else { drag = .zero; return }
                 let st = steps(v.translation)
                 drag = .zero
                 if st.days != 0 || st.minutes != 0 { model.applyEdit(item, start: s.adding(days: st.days).adding(minutes: st.minutes)) }
@@ -553,5 +555,49 @@ struct WeekSelectionBar: View {
     private func move(_ days: Int) {
         for id in taskIDs { if var t = store.task(id), !t.recurrence.isRepeating { t.startDate = t.startDate.adding(days: days); t.dueDate = t.dueDate?.adding(days: days); store.upsert(t) } }
         model.weekSelection = [:]
+    }
+}
+
+/// Where each task sits on the week calendar, for shift-drag picking.
+struct WeekFrame: Equatable { var rect: CGRect; var occ: Occurrence; static func == (a: Self, b: Self) -> Bool { a.rect == b.rect && a.occ.id == b.occ.id } }
+struct WeekFramesKey: PreferenceKey {
+    static var defaultValue: [String: WeekFrame] = [:]
+    static func reduce(value: inout [String: WeekFrame], nextValue: () -> [String: WeekFrame]) { value.merge(nextValue()) { $1 } }
+}
+extension View {
+    @ViewBuilder func reportWeekFrame(_ item: CalendarItem) -> some View {
+        if case .task(let o) = item {
+            background(GeometryReader { g in Color.clear.preference(key: WeekFramesKey.self, value: [o.id: WeekFrame(rect: g.frame(in: .named("week")), occ: o)]) })
+        } else { self }
+    }
+}
+
+/// Shift + drag on the week calendar: draw a box, and every task it touches is picked.
+struct WeekBandPicker: ViewModifier {
+    @EnvironmentObject private var model: AppModel
+    @State private var band: CGRect?
+    @State private var frames: [String: WeekFrame] = [:]
+    func body(content: Content) -> some View {
+        content
+            .coordinateSpace(name: "week")
+            .onPreferenceChange(WeekFramesKey.self) { frames = $0 }
+            .overlay(alignment: .topLeading) {
+            if let r = band {
+                Rectangle().fill(Color.accentColor.opacity(0.12)).overlay(Rectangle().strokeBorder(Color.accentColor, lineWidth: 1))
+                    .frame(width: r.width, height: r.height).offset(x: r.minX, y: r.minY).allowsHitTesting(false)
+            }
+        }
+        // Shift + drag: draw a box, and every task it touches is picked.
+            .simultaneousGesture(DragGesture(minimumDistance: 4, coordinateSpace: .named("week"))
+            .onChanged { v in
+                guard band != nil || NSEvent.modifierFlags.contains(.shift) else { return }
+                band = CGRect(x: min(v.startLocation.x, v.location.x), y: min(v.startLocation.y, v.location.y),
+                              width: abs(v.location.x - v.startLocation.x), height: abs(v.location.y - v.startLocation.y))
+            }
+            .onEnded { _ in
+                guard let r = band else { return }
+                for (id, f) in frames where f.rect.intersects(r) && !f.occ.isResolved { model.weekSelection[id] = f.occ }
+                band = nil
+            })
     }
 }

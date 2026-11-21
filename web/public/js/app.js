@@ -771,7 +771,7 @@ function weekView() {
   const now = new Date();
   return `<div class="week">
     <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">Double-click an empty slot — or inside an existing block — to add a task at that time.</div></div>
-      <div class="row"><button class="btn ${ui.weekSelecting ? 'primary' : ''}" data-act="sel-toggle" title="Pick several tasks to change them all at once. You can also ⌘/Ctrl- or Shift-click tasks any time.">${ic('check')} Select</button>${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
+      <div class="row"><button class="btn ${ui.weekSelecting ? 'primary' : ''}" data-act="sel-toggle" title="Pick several tasks to change them all at once. You can also ⌘/Ctrl- or Shift-click tasks, or Shift-drag a box around them.">${ic('check')} Select</button>${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
       <button class="btn" data-act="week-today">Today</button><button class="btn icon" data-act="week-next" title="Next week">${ic('right')}</button></div></div>
     ${weekSelBar(days)}
     <div class="week-head"><div></div>${days.map(d => {
@@ -1441,7 +1441,7 @@ function applyEdit(it, { title, start, minutes, busy } = {}) {
 let calDrag = null, swallowClick = false;
 document.addEventListener('pointerdown', e => {
   const el = e.target.closest('.block[data-item], .ot-item[data-item]');
-  if (!el || e.button !== 0) return;
+  if (!el || e.button !== 0 || (e.shiftKey && el.closest('.week'))) return;
   const it = itemById(el.dataset.item);
   if (!it?.start || (it.kind === 'task' && M.isUntilDone(it.o.task)) || (it.kind === 'task' && (it.o.done || it.o.missed))) return;
   const col = el.closest('.wcol, .ot-col');
@@ -1486,6 +1486,35 @@ addEventListener('pointerup', e => {
   render();
 });
 // The click that ends a drag shouldn't also open the details.
+// Week: shift + drag draws a box; every task it touches is picked.
+let band = null;
+document.addEventListener('pointerdown', e => {
+  if (ui.route !== 'week' || !e.shiftKey || e.button !== 0 || !e.target.closest('.week') || e.target.closest('button, input, select, .week-selbar')) return;
+  e.preventDefault();
+  const box = document.createElement('div'); box.className = 'sel-band'; document.body.appendChild(box);
+  band = { x: e.clientX, y: e.clientY, box, moved: false };
+});
+document.addEventListener('pointermove', e => {
+  if (!band) return;
+  const x = Math.min(band.x, e.clientX), y = Math.min(band.y, e.clientY), w = Math.abs(e.clientX - band.x), h = Math.abs(e.clientY - band.y);
+  if (w + h > 4) band.moved = true;
+  Object.assign(band.box.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+});
+document.addEventListener('pointerup', e => {
+  if (!band) return;
+  const r = band.box.getBoundingClientRect(), moved = band.moved;
+  band.box.remove(); band = null;
+  if (!moved) return;
+  ui.weekSel ??= new Map();
+  for (const el of document.querySelectorAll('.week [data-item^="t|"]')) {
+    const b = el.getBoundingClientRect();
+    if (b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom || el.classList.contains('done') || el.classList.contains('missed')) continue;
+    ui.weekSel.set(el.dataset.item, true);
+  }
+  swallowClick = true; setTimeout(() => { swallowClick = false; }, 0);
+  render();
+});
+
 // Week: while Select is on (or with ⌘/Ctrl/Shift held), clicking a task picks it instead of opening it.
 document.addEventListener('click', e => {
   if (ui.route !== 'week') return;

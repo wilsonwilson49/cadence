@@ -825,3 +825,4 @@ table.rules tr.on td:first-child b { color: var(--accent); }
 .flame { color: #ff9500; display: inline-flex; }
 .week-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; margin: 0 0 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent, #0a84ff) 12%, transparent); }
 .chip.picked, .block.picked { outline: 2.5px solid var(--accent, #0a84ff); outline-offset: 1px; z-index: 5; }
+.sel-band { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--accent, #0a84ff); background: color-mix(in srgb, var(--accent, #0a84ff) 14%, transparent); border-radius: 3px; }
