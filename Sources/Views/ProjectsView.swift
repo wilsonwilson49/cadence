@@ -160,13 +160,15 @@ private struct ProjectDetail: View {
     let id: UUID
     @AppStorage("projectViewMode") private var mode: ProjectViewMode = .outline
     @State private var collapsed: Set<UUID> = []
-    @State private var selected: UUID?
     @State private var newTitle = ""
     @State private var confirmDelete = false
+    @StateObject private var editor = ProjectEditor()
     @FocusState private var focusedItem: UUID?
+    @State private var band: CGRect?
+    @State private var rowFrames: [UUID: CGRect] = [:]
 
     private var project: Project { store.project(id) ?? Project(title: "") }
-    private func edit(_ change: (inout Project) -> Void) { store.editProject(id, change) }
+    private func edit(_ change: (inout Project) -> Void) { editor.edit(nil, change) }
 
     var body: some View {
         let p = project
@@ -176,6 +178,11 @@ private struct ProjectDetail: View {
                 Button { model.openProjectID = nil } label: { Label("Projects", systemImage: "chevron.left") }
                     .buttonStyle(.borderless)
                 Spacer()
+                Button { editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                    .buttonStyle(.borderless).help("Undo (⌘Z)").disabled(!editor.canUndo)
+                Button { editor.redo() } label: { Image(systemName: "arrow.uturn.forward") }
+                    .buttonStyle(.borderless).help("Redo (⇧⌘Z)").disabled(!editor.canRedo)
+                ProjectKeysButton(editor: editor)
                 Picker("View", selection: $mode) {
                     ForEach(ProjectViewMode.allCases) { m in Label(m.rawValue, systemImage: m.symbol).tag(m) }
                 }
@@ -184,6 +191,7 @@ private struct ProjectDetail: View {
                     Button(p.archived == true ? "Unarchive" : "Archive") { edit { $0.archived = $0.archived == true ? nil : true } }
                     Button("Expand all") { collapsed = [] }
                     Button("Collapse all") { collapsed = Set(p.rows().filter { !$0.item.items.isEmpty }.map(\.id)) }
+                    Button("Pick everything") { editor.pickAll() }
                     Divider()
                     Button("Delete project…", role: .destructive) { confirmDelete = true }
                 } label: { Image(systemName: "ellipsis.circle") }
@@ -193,7 +201,7 @@ private struct ProjectDetail: View {
 
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    TextField("Project name", text: Binding(get: { project.title }, set: { v in edit { $0.title = v } }))
+                    TextField("Project name", text: Binding(get: { project.title }, set: { v in editor.edit("ptitle") { $0.title = v } }))
                         .textFieldStyle(.plain).font(.largeTitle.bold())
                     HStack(spacing: 10) {
                         Menu {
@@ -218,15 +226,18 @@ private struct ProjectDetail: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if !editor.picked.isEmpty { ProjectPickBar(editor: editor) }
                     switch mode {
                     case .outline: outline(p)
                     case .gantt:
                         legend
-                        Card { GanttChart(projects: [p], collapsed: collapsed, selected: selected) { sid in selected = sid } }
+                        Card { GanttChart(projects: [p], collapsed: collapsed, picked: editor.picked,
+                                          onSelect: { editor.click($0) }, onAdd: { _, parent in editor.add(under: parent) }) }
                         selectedEditor(p)
                     case .map:
                         legend
-                        Card { ProjectMap(project: p, collapsed: collapsed, selected: selected) { sid in selected = sid } }
+                        Card { ProjectMap(project: p, collapsed: collapsed, picked: editor.picked,
+                                          onSelect: { editor.click($0) }, onAdd: { editor.add(under: $0) }) }
                         selectedEditor(p)
                     }
                 }
@@ -237,7 +248,20 @@ private struct ProjectDetail: View {
         .confirmationDialog("Delete “\(p.title.isEmpty ? "Untitled project" : p.title)” and all its subtasks?", isPresented: $confirmDelete) {
             Button("Delete project", role: .destructive) { model.openProjectID = nil; store.deleteProject(id) }
         }
-        .onChange(of: id) { _, _ in collapsed = []; selected = nil }
+        .modifier(ProjectKeys(editor: editor))
+        .onAppear { editor.store = store; editor.projectID = id; editor.collapsed = collapsed }
+        .onChange(of: id) { _, new in collapsed = []; editor.projectID = new; editor.picked = [] }
+        .onChange(of: collapsed) { _, c in editor.collapsed = c }
+        .onChange(of: editor.focusRequest) { _, r in
+            guard let r else { return }
+            // In the timeline and map, typing happens in the "Selected" box, which shows the one picked row.
+            if mode != .outline { editor.picked = [r] }
+            DispatchQueue.main.async { focusedItem = r; editor.focusRequest = nil }
+        }
+        .onChange(of: focusedItem) { _, f in
+            editor.focused = f
+            if f != nil, mode == .outline { editor.picked = [] }
+        }
     }
 
     private var legend: some View {
@@ -248,18 +272,18 @@ private struct ProjectDetail: View {
             HStack(spacing: 4) { Image(systemName: "diamond.fill").font(.system(size: 8)); Text("Deadline") }
             HStack(spacing: 4) { Rectangle().fill(Color.red).frame(width: 2, height: 10); Text("Today") }
             Spacer()
-            Text("Click a row to edit it. Collapse subtasks in the outline to simplify the picture.").foregroundStyle(.secondary)
+            Text("Click to pick (⌘/⇧ for several). The dashed + boxes add subtasks.").foregroundStyle(.secondary)
         }
         .font(.caption)
     }
 
-    /// Under the timeline and map: edit whatever row was clicked.
+    /// Under the timeline and map: edit the one picked row.
     @ViewBuilder private func selectedEditor(_ p: Project) -> some View {
-        if let sid = selected, let row = p.rows(collapsed: collapsed).first(where: { $0.id == sid }) {
+        if editor.picked.count == 1, let sid = editor.picked.first, let row = p.rows(collapsed: collapsed).first(where: { $0.id == sid }) {
             Card {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Selected").font(.caption).foregroundStyle(.secondary)
-                    ItemRow(projectID: id, row: row, collapsed: $collapsed, focused: $focusedItem, showPath: true)
+                    ItemRow(editor: editor, row: row, collapsed: $collapsed, focused: $focusedItem, showPath: true)
                 }
             }
         }
@@ -267,16 +291,46 @@ private struct ProjectDetail: View {
 
     // MARK: Outline
 
+    private enum Entry: Identifiable {
+        case row(Project.Row)
+        case ghost(parent: UUID, depth: Int)
+        var id: String {
+            switch self {
+            case .row(let r): return r.id.uuidString
+            case .ghost(let p, _): return "ghost-\(p)"
+            }
+        }
+    }
+
+    /// The rows, with a ghost "+" box closing each open group of subtasks.
+    private func entries(_ rows: [Project.Row]) -> [Entry] {
+        var out: [Entry] = [], open: [(id: UUID, depth: Int)] = []
+        for r in rows {
+            while let last = open.last, last.depth >= r.depth { out.append(.ghost(parent: last.id, depth: last.depth + 1)); open.removeLast() }
+            out.append(.row(r))
+            if !r.item.items.isEmpty && !collapsed.contains(r.id) { open.append((r.id, r.depth)) }
+        }
+        while let last = open.popLast() { out.append(.ghost(parent: last.id, depth: last.depth + 1)) }
+        return out
+    }
+
     @ViewBuilder private func outline(_ p: Project) -> some View {
         let rows = p.rows(collapsed: collapsed)
         Card {
             VStack(alignment: .leading, spacing: 0) {
                 if rows.isEmpty {
-                    Text("No subtasks yet. Add the first one below, then use the + on a row to break it down further.")
+                    Text("No subtasks yet. Add the first one below, then use the + boxes to break it down further.")
                         .foregroundStyle(.secondary).padding(.vertical, 6)
                 }
-                ForEach(rows) { r in
-                    ItemRow(projectID: id, row: r, collapsed: $collapsed, focused: $focusedItem)
+                ForEach(entries(rows)) { e in
+                    switch e {
+                    case .row(let r):
+                        ItemRow(editor: editor, row: r, collapsed: $collapsed, focused: $focusedItem)
+                            .background(GeometryReader { g in Color.clear.preference(key: RowFramesKey.self, value: [r.id: g.frame(in: .named("outline"))]) })
+                    case .ghost(let parent, let depth):
+                        GhostAdd(label: "Add to “\(p.item(parent)?.title.isEmpty == false ? p.item(parent)!.title : "this")”") { editor.add(under: parent) }
+                            .padding(.leading, CGFloat(depth) * 22 + 46).padding(.vertical, 2)
+                    }
                 }
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill").foregroundStyle(p.color.color)
@@ -286,8 +340,28 @@ private struct ProjectDetail: View {
                 }
                 .padding(.vertical, 8).padding(.leading, 4)
             }
+            .coordinateSpace(name: "outline")
+            .onPreferenceChange(RowFramesKey.self) { rowFrames = $0 }
+            .overlay(alignment: .topLeading) {
+                if let r = band {
+                    Rectangle().fill(Color.accentColor.opacity(0.12)).overlay(Rectangle().strokeBorder(Color.accentColor, lineWidth: 1))
+                        .frame(width: r.width, height: r.height).offset(x: r.minX, y: r.minY).allowsHitTesting(false)
+                }
+            }
+            // Shift + drag (from a row's edge or the space between rows) draws a box to pick rows.
+            .simultaneousGesture(DragGesture(minimumDistance: 4, coordinateSpace: .named("outline"))
+                .onChanged { v in
+                    guard band != nil || NSEvent.modifierFlags.contains(.shift) else { return }
+                    band = CGRect(x: min(v.startLocation.x, v.location.x), y: min(v.startLocation.y, v.location.y),
+                                  width: abs(v.location.x - v.startLocation.x), height: abs(v.location.y - v.startLocation.y))
+                }
+                .onEnded { _ in
+                    guard let r = band else { return }
+                    for (id, f) in rowFrames where f.intersects(r) { editor.picked.insert(id) }
+                    band = nil
+                })
         }
-        Text("Tip: hover a row for its buttons. Use + to add a subtask inside it, and the arrows to move it in or out a level. A subtask with subtasks is done when they all are.")
+        Text("Tip: Return adds the next subtask, Tab moves it in a level, ⇧Tab out. Click a row's edge to pick it (⌘ or ⇧ for several, or ⇧-drag a box), then change them all from the bar. Press ⌘/ for every shortcut.")
             .font(.caption).foregroundStyle(.secondary)
     }
 
@@ -299,18 +373,23 @@ private struct ProjectDetail: View {
     }
 }
 
+private struct RowFramesKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) { value.merge(nextValue()) { $1 } }
+}
+
 /// One outline row: collapse arrow, check circle, editable title, deadline, and (on hover) the row's buttons.
 private struct ItemRow: View {
-    @EnvironmentObject private var store: Store
-    let projectID: UUID
+    @ObservedObject var editor: ProjectEditor
     let row: Project.Row
     @Binding var collapsed: Set<UUID>
     var focused: FocusState<UUID?>.Binding
     var showPath = false
     @State private var hovering = false
 
-    private func edit(_ change: (inout Project) -> Void) { store.editProject(projectID, change) }
+    private func edit(_ change: (inout Project) -> Void) { editor.edit(nil, change) }
     private var item: ProjectItem { row.item }
+    private var isPicked: Bool { editor.picked.contains(item.id) }
 
     var body: some View {
         let hasKids = !item.items.isEmpty
@@ -332,7 +411,7 @@ private struct ItemRow: View {
             .buttonStyle(.plain)
             .help(hasKids ? (item.isDone ? "Mark everything inside not done" : "Mark everything inside done") : item.isDone ? "Mark not done" : "Mark done")
 
-            TextField("Subtask", text: Binding(get: { item.title }, set: { v in edit { p in p.update(item.id) { $0.title = v } } }))
+            TextField("Subtask", text: Binding(get: { item.title }, set: { v in editor.edit("title-\(item.id)") { p in p.update(item.id) { $0.title = v } } }))
                 .textFieldStyle(.plain)
                 .font(row.depth == 0 ? .body.weight(.medium) : .body)
                 .strikethrough(item.isDone && !hasKids)
@@ -353,7 +432,7 @@ private struct ItemRow: View {
                         .background(Capsule().fill((item.isUrgent ? Color.red : .secondary).opacity(item.isUrgent ? 0.14 : 0.08)))
                 }
                 .buttonStyle(.plain)
-                .help(item.isUrgent ? "Urgent: on today's list and in today's progress ring. Click to unmark." : "Mark urgent: put it on today's list and in today's progress ring")
+                .help(item.isUrgent ? "Urgent: on today's list and in today's progress ring. Click to unmark. (U)" : "Mark urgent: put it on today's list and in today's progress ring (U)")
             }
             if row.conflict {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.caption)
@@ -374,12 +453,12 @@ private struct ItemRow: View {
                 DueChip(due: inherited, done: item.isDone, inherited: true, compact: true)
             }
             HStack(spacing: 2) {
-                Button { addChild() } label: { Image(systemName: "plus") }.help("Add a subtask inside this one")
-                Button { edit { $0.outdent(item.id) } } label: { Image(systemName: "arrow.left") }.help("Move out a level").disabled(row.parentID == nil)
-                Button { edit { $0.indent(item.id) } } label: { Image(systemName: "arrow.right") }.help("Make it a subtask of the one above")
+                Button { addChild() } label: { Image(systemName: "plus") }.help("Add a subtask inside this one (⇧Return)")
+                Button { edit { $0.outdent(item.id) } } label: { Image(systemName: "arrow.left") }.help("Move out a level (⇧Tab)").disabled(row.parentID == nil)
+                Button { edit { $0.indent(item.id) } } label: { Image(systemName: "arrow.right") }.help("Make it a subtask of the one above (Tab)")
                 Menu {
-                    Button("Move up") { edit { $0.move(item.id, by: -1) } }
-                    Button("Move down") { edit { $0.move(item.id, by: 1) } }
+                    Button("Move up  ⌥↑") { edit { $0.move(item.id, by: -1) } }
+                    Button("Move down  ⌥↓") { edit { $0.move(item.id, by: 1) } }
                     Divider()
                     Button("Delete", role: .destructive) { edit { $0.remove(item.id) } }
                 } label: { Image(systemName: "ellipsis") }
@@ -388,33 +467,34 @@ private struct ItemRow: View {
             .buttonStyle(.borderless)
             .opacity(hovering ? 1 : 0)
         }
-        .padding(.leading, CGFloat(row.depth) * 22)
+        .padding(.leading, showPath ? 0 : CGFloat(row.depth) * 22)
         .padding(.vertical, 4).padding(.horizontal, 4)
-        .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Color.primary.opacity(0.04) : .clear))
+        .background(
+            RoundedRectangle(cornerRadius: 6).fill(isPicked ? Color.accentColor.opacity(0.16) : hovering ? Color.primary.opacity(0.04) : .clear)
+                .contentShape(Rectangle())
+                // Clicking the row (not its title) picks it; ⌘ and ⇧ pick several.
+                .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil); editor.click(item.id) }
+        )
+        .simultaneousGesture(TapGesture().modifiers(.command).onEnded { editor.click(item.id, modifiers: .command) })
+        .simultaneousGesture(TapGesture().modifiers(.shift).onEnded { editor.click(item.id, modifiers: .shift) })
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Add subtask inside") { addChild() }
-            Button("Add subtask below") { addSibling() }
-            Button(item.isUrgent ? "Not urgent" : "Mark urgent (on today's list)") { edit { p in p.update(item.id) { $0.urgent = item.isUrgent ? nil : true } } }
-            Button("Move in a level") { edit { $0.indent(item.id) } }
-            Button("Move out a level") { edit { $0.outdent(item.id) } }.disabled(row.parentID == nil)
+            Button("Add subtask inside  ⇧↩") { addChild() }
+            Button("Add subtask below  ↩") { addSibling() }
+            Button(item.isUrgent ? "Not urgent  U" : "Mark urgent (on today's list)  U") { edit { p in p.update(item.id) { $0.urgent = item.isUrgent ? nil : true } } }
+            Button("Move in a level  Tab") { edit { $0.indent(item.id) } }
+            Button("Move out a level  ⇧Tab") { edit { $0.outdent(item.id) } }.disabled(row.parentID == nil)
+            Divider()
+            Button("Copy  ⌘C") { editor.picked = editor.picked.contains(item.id) ? editor.picked : [item.id]; editor.copy() }
+            Button("Duplicate  ⌘D") { editor.picked = editor.picked.contains(item.id) ? editor.picked : [item.id]; editor.duplicate() }
+            Button("Paste below  ⌘V") { editor.picked = [item.id]; editor.paste() }.disabled(ProjectEditor.clipboard.isEmpty)
             Divider()
             Button("Delete", role: .destructive) { edit { $0.remove(item.id) } }
         }
     }
 
-    private func addChild() {
-        let n = ProjectItem(title: "")
-        edit { $0.insert(n, under: item.id) }
-        collapsed.remove(item.id)
-        DispatchQueue.main.async { focused.wrappedValue = n.id }
-    }
-
-    private func addSibling() {
-        let n = ProjectItem(title: "")
-        edit { $0.insert(n, under: row.parentID, after: item.id) }
-        DispatchQueue.main.async { focused.wrappedValue = n.id }
-    }
+    private func addChild() { editor.add(under: item.id) }
+    private func addSibling() { editor.add(under: row.parentID, after: item.id) }
 }
 
 /// A date that may be unset: shows the day (coloured by status) or "Deadline", and opens a calendar.

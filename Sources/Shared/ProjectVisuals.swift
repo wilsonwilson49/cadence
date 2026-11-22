@@ -57,23 +57,40 @@ struct GanttChart: View {
     /// Narrowest a day can get; the chart scrolls sideways past that.
     var minDayWidth: CGFloat = 14
     var selected: UUID?
+    /// Several picked rows (highlighted like the selected one).
+    var picked: Set<UUID> = []
     var onSelect: ((UUID) -> Void)?
     var onToggleProject: ((UUID) -> Void)?
+    /// When set, a ghost "+" row closes each group of subtasks: (project, parent subtask or nil for top level).
+    var onAdd: ((UUID, UUID?) -> Void)?
 
     enum Line: Identifiable {
         case project(Project)
         case item(Project, Project.Row)
+        case ghost(Project, UUID?, Int)
         var id: String {
             switch self {
             case .project(let p): return "p\(p.id)"
             case .item(let p, let r): return "\(p.id)|\(r.id)"
+            case .ghost(let p, let parent, _): return "g\(p.id)|\(parent?.uuidString ?? "top")"
             }
         }
     }
 
     private var lines: [Line] {
         projects.flatMap { p -> [Line] in
-            [.project(p)] + (collapsed.contains(p.id) ? [] : p.rows(collapsed: collapsed).map { .item(p, $0) })
+            guard !collapsed.contains(p.id) else { return [.project(p)] }
+            let rows = p.rows(collapsed: collapsed)
+            guard onAdd != nil else { return [.project(p)] + rows.map { .item(p, $0) } }
+            var out: [Line] = [.project(p)], open: [(UUID, Int)] = []
+            for r in rows {
+                while let last = open.last, last.1 >= r.depth { out.append(.ghost(p, last.0, last.1 + 1)); open.removeLast() }
+                out.append(.item(p, r))
+                if !r.item.items.isEmpty && !collapsed.contains(r.id) { open.append((r.id, r.depth)) }
+            }
+            while let last = open.popLast() { out.append(.ghost(p, last.0, last.1 + 1)) }
+            out.append(.ghost(p, nil, 0))
+            return out
         }
     }
 
@@ -135,6 +152,10 @@ struct GanttChart: View {
                     .background(p.color.color.opacity(0.08))
                     .contentShape(Rectangle())
                     .onTapGesture { onToggleProject?(p.id) }
+                case .ghost(let p, let parent, let depth):
+                    GhostAdd(label: parent == nil ? "Add subtask" : "Add inside") { onAdd?(p.id, parent) }
+                        .padding(.leading, CGFloat(depth) * 14 + 16)
+                        .frame(width: labelWidth, height: rowHeight, alignment: .leading)
                 case .item(_, let r):
                     HStack(spacing: 4) {
                         Image(systemName: r.item.isDone ? "checkmark.circle.fill" : r.item.items.isEmpty ? "circle" : "circle.dashed")
@@ -149,7 +170,7 @@ struct GanttChart: View {
                     }
                     .padding(.leading, CGFloat(r.depth) * 14 + 16)
                     .frame(width: labelWidth, height: rowHeight, alignment: .leading)
-                    .background(selected == r.id ? Color.accentColor.opacity(0.12) : .clear)
+                    .background(selected == r.id || picked.contains(r.id) ? Color.accentColor.opacity(0.14) : .clear)
                     .contentShape(Rectangle())
                     .onTapGesture { onSelect?(r.id) }
                 }
@@ -210,6 +231,7 @@ struct GanttChart: View {
             for (i, line) in ls.enumerated() {
                 let y = header + CGFloat(i) * rowHeight
                 switch line {
+                case .ghost: continue
                 case .project(let p):
                     ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: rowHeight)), with: .color(p.color.color.opacity(0.06)))
                     let latest = p.rows().compactMap(\.due).max()
@@ -237,7 +259,7 @@ struct GanttChart: View {
                         ctx.draw(Text(shortDay(due)).font(.system(size: 9, weight: .medium).monospacedDigit()).foregroundStyle(tint),
                                  at: CGPoint(x: cx + 9, y: cy), anchor: .leading)
                     }
-                    if selected == r.id {
+                    if selected == r.id || picked.contains(r.id) {
                         ctx.stroke(Path(CGRect(x: 0, y: y, width: size.width, height: rowHeight)), with: .color(.accentColor.opacity(0.6)), lineWidth: 1)
                     }
                 }
@@ -266,7 +288,10 @@ struct ProjectMap: View {
     var collapsed: Set<UUID> = []
     var nodeWidth: CGFloat = 176
     var selected: UUID?
+    var picked: Set<UUID> = []
     var onSelect: ((UUID) -> Void)?
+    /// When set, each node gets a small ghost "+" on its right edge that adds a subtask inside it (nil = top level).
+    var onAdd: ((UUID?) -> Void)?
 
     private let colGap: CGFloat = 44
     private let rowHeight: CGFloat = 62
@@ -292,7 +317,11 @@ struct ProjectMap: View {
                 }
                 .frame(width: w, height: h)
                 ForEach(lay.nodes) { n in
-                    node(n).frame(width: nodeWidth).position(pos[key(n.id)] ?? .zero)
+                    node(n).frame(width: nodeWidth)
+                        .overlay(alignment: .trailing) {
+                            if let onAdd { GhostAdd(label: "Add a subtask inside", compact: true) { onAdd(n.item?.id) }.offset(x: 24) }
+                        }
+                        .position(pos[key(n.id)] ?? .zero)
                 }
             }
             .frame(width: w, height: h)
@@ -331,8 +360,8 @@ struct ProjectMap: View {
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 9).fill(.background))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(selected == item.id ? Color.accentColor
-                     : st == .overdue || st == .today ? st.color.opacity(0.8) : Color.secondary.opacity(0.3), lineWidth: selected == item.id ? 2 : 1))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(selected == item.id || picked.contains(item.id) ? Color.accentColor
+                     : st == .overdue || st == .today ? st.color.opacity(0.8) : Color.secondary.opacity(0.3), lineWidth: selected == item.id || picked.contains(item.id) ? 2 : 1))
             .contentShape(Rectangle())
             .onTapGesture { onSelect?(item.id) }
         } else {
@@ -349,5 +378,30 @@ struct ProjectMap: View {
             .padding(9)
             .background(RoundedRectangle(cornerRadius: 10).fill(project.color.color.gradient))
         }
+    }
+}
+
+/// A faint dashed "+" box for adding a subtask in place.
+struct GhostAdd: View {
+    var label = "Add subtask"
+    var compact = false
+    let action: () -> Void
+    @State private var hover = false
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus").font(.system(size: compact ? 9 : 10, weight: .bold))
+                if !compact { Text(label).font(.caption) }
+            }
+            .foregroundStyle(hover ? Color.accentColor : .secondary)
+            .padding(.horizontal, compact ? 5 : 8).padding(.vertical, compact ? 3 : 3)
+            .background(RoundedRectangle(cornerRadius: 6).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                .foregroundStyle(hover ? Color.accentColor : Color.secondary.opacity(0.4)))
+            .opacity(hover ? 1 : 0.7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help(label)
     }
 }

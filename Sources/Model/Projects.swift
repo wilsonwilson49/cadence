@@ -45,6 +45,13 @@ struct ProjectItem: Codable, Identifiable, Equatable {
         if done { if doneAt == nil { doneAt = now } } else { doneAt = nil }
         for i in items.indices { items[i].setDone(done, at: now) }
     }
+    /// A copy with fresh ids all the way down (for paste and duplicate).
+    func cloned() -> ProjectItem {
+        var c = self
+        c.id = UUID()
+        c.items = items.map { $0.cloned() }
+        return c
+    }
     /// After a change below, a parent follows its children: done once all are done.
     mutating func settle() {
         for i in items.indices { items[i].settle() }
@@ -153,6 +160,20 @@ struct Project: Codable, Identifiable, Equatable {
     mutating func outdent(_ id: UUID) {
         guard let parentID = parent(of: id), let moved = remove(id) else { return }
         insert(moved, under: parent(of: parentID), after: parentID)
+    }
+
+    /// Of these ids, the ones not inside another one of them, in outline order.
+    func topMost(_ ids: Set<UUID>) -> [UUID] {
+        var out: [UUID] = []
+        func walk(_ list: [ProjectItem], covered: Bool) {
+            for i in list {
+                let picked = !covered && ids.contains(i.id)
+                if picked { out.append(i.id) }
+                walk(i.items, covered: covered || picked)
+            }
+        }
+        walk(items, covered: false)
+        return out
     }
 
     // MARK: Flattened view, with dates passed down

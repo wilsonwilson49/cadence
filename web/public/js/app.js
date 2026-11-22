@@ -58,7 +58,7 @@ function readRoute() {
   const route = (location.pathname.match(/^\/app\/?([^/]*)/) || [])[1] || 'home';
   ui.route = SCREENS.some(s => s[0] === route) ? route : 'home';
   const projectId = ui.route === 'projects' ? (location.pathname.match(/^\/app\/projects\/([^/]+)/) || [])[1] || null : null;
-  if (projectId !== ui.projectId) ui.projSelected = null;
+  if (projectId !== ui.projectId) { proj.picked = new Set(); proj.anchor = null; }
   ui.projectId = projectId;
   const params = new URLSearchParams(location.search);
   const google = params.get('google');
@@ -1262,6 +1262,10 @@ function renderModal() {
     <div class="foot" style="flex-wrap:wrap"><button class="btn" data-act="close">Cancel</button><span class="grow"></span>
       <button class="btn" data-act="google-hide">Hide in Cadence</button>
       <button class="btn primary" style="background:var(--red)" data-act="google-delete" ${m.working ? 'disabled' : ''}>${m.working ? 'Deleting…' : 'Delete from Google too'}</button></div></div>`;
+  else if (m.type === 'pj-keys') html = `<div class="dialog sm"><div class="body"><h2>Keyboard shortcuts</h2>
+      <table class="keys">${PROJECT_KEYS.map(([k, v]) => `<tr><td><kbd>${esc(k)}</kbd></td><td class="muted">${esc(v)}</td></tr>`).join('')}</table>
+      <div class="small muted" style="margin-top:10px">No shortcuts needed: the + boxes add subtasks, the bar above the list changes picked ones, and each row has its own buttons. On Windows, use Ctrl for ⌘.</div></div>
+    <div class="foot"><span class="grow"></span><button class="btn primary" data-act="close">Done</button></div></div>`;
   else if (m.type === 'sel-checkoff') html = `<div class="dialog sm"><div class="body"><h2>Check off ${ui.weekSel?.size || 0} item${ui.weekSel?.size === 1 ? '' : 's'}</h2>
       <div class="muted small">One reflection (at least ${store.settings.minReflectionWords} words), saved for each of them.</div>
       <textarea class="input" id="selRefl" rows="4" autofocus style="width:100%;margin-top:8px"></textarea></div>
@@ -1487,6 +1491,84 @@ addEventListener('pointerup', e => {
   render();
 });
 // The click that ends a drag shouldn't also open the details.
+/** Project keys. Returns true when the key was used. */
+function projKey(e) {
+  const cmd = e.metaKey || e.ctrlKey, sh = e.shiftKey, alt = e.altKey, k = e.key;
+  const pf = e.target.dataset?.pfield === 'item-title' ? e.target : null;
+  if (pf) {
+    const id = pf.dataset.item, p = store.projects.get(ui.projectId); if (!p) return false;
+    if (k === 'Tab') { projEdit(p.id, q => (sh ? M.outdentItem : M.indentItem)(q, id)); render(); focusItem(id); return true; }
+    if (k === 'Enter' && sh) { projAdd(id); return true; }
+    if (k === 'Enter' && cmd) { projOps.toggleDone(); return true; }
+    if (k === 'Enter' && !alt) { projAdd(M.findItem(p, id)?.parent?.id ?? null, id); return true; }
+    if ((k === 'ArrowUp' || k === 'ArrowDown') && alt) { projOps.move(k === 'ArrowUp' ? -1 : 1); return true; }
+    if ((k === 'ArrowUp' || k === 'ArrowDown') && !cmd && !sh) {
+      const ids = projRowsNow().map(r => r.item.id), j = ids.indexOf(id) + (k === 'ArrowUp' ? -1 : 1);
+      if (ids[j]) focusItem(ids[j]); return true;
+    }
+    if (k === 'Backspace' && !pf.value && !cmd) { projOps.delete(); return true; }
+    if (k === 'Escape') { pf.blur(); proj.picked = new Set([id]); proj.anchor = id; render(); return true; }
+    return false;
+  }
+  if (e.target.closest?.('input, textarea, select, [contenteditable]')) return false;
+  const kl = k.toLowerCase();
+  if (cmd && kl === 'z') return sh ? projUndo(proj.redo, proj.undo) || true : projUndo(proj.undo, proj.redo) || true;
+  if (cmd && kl === 'a') { projRowsNow(); const p = store.projects.get(ui.projectId); proj.picked = new Set(M.projectRows(p).map(r => r.item.id)); render(); return true; }
+  if (cmd && kl === 'c') return projOps.copy() !== false;
+  if (cmd && kl === 'x') { projOps.cut(); return true; }
+  if (cmd && kl === 'v') { projOps.paste(); return true; }
+  if (cmd && kl === 'd') { projOps.duplicate(); return true; }
+  if (k === '?' || (cmd && k === '/')) { openModal({ type: 'pj-keys' }); return true; }
+  if (k === 'Escape' && proj.picked.size) { proj.picked = new Set(); render(); return true; }
+  if ((k === 'ArrowUp' || k === 'ArrowDown') && alt) { projOps.move(k === 'ArrowUp' ? -1 : 1); return true; }
+  if ((k === 'ArrowUp' || k === 'ArrowDown') && !cmd) {
+    const ids = projRowsNow().map(r => r.item.id); if (!ids.length) return false;
+    const cur = ids.indexOf(proj.anchor), next = ids[Math.min(ids.length - 1, Math.max(0, (cur < 0 ? (k === 'ArrowUp' ? ids.length : -1) : cur) + (k === 'ArrowUp' ? -1 : 1)))];
+    if (!sh) proj.picked = new Set(); proj.picked.add(next); proj.anchor = next; render(); return true;
+  }
+  if (!proj.picked.size || cmd) return false;
+  if (k === 'Tab') { sh ? projOps.outdent() : projOps.indent(); return true; }
+  if (k === 'Enter' && sh && proj.picked.size === 1) { projAdd([...proj.picked][0]); return true; }
+  if (k === 'Enter' && proj.picked.size === 1) { const id = [...proj.picked][0]; if (projMode() === 'outline') proj.picked = new Set(); render(); focusItem(id); return true; }
+  if (k === ' ') { projOps.toggleDone(); return true; }
+  if (k === 'Delete' || k === 'Backspace') { projOps.delete(); return true; }
+  if (kl === 'u') { projOps.toggleUrgent(); return true; }
+  return false;
+}
+
+// Projects outline: clicking a row (not its title or buttons) picks it; Shift-drag draws a box to pick rows.
+document.addEventListener('click', e => {
+  if (ui.route !== 'projects') return;
+  const row = e.target.closest('.poutline .prow[data-pick]');
+  if (!row || e.target.closest('input, button, select, label, a, .datefield')) return;
+  projClick(row.dataset.pick, e);
+});
+let pjBand = null;
+document.addEventListener('pointerdown', e => {
+  if (ui.route !== 'projects' || !e.shiftKey || e.button !== 0 || !e.target.closest('.poutline') || e.target.closest('input, button, select')) return;
+  e.preventDefault();
+  const box = document.createElement('div'); box.className = 'sel-band'; document.body.appendChild(box);
+  pjBand = { x: e.clientX, y: e.clientY, box, moved: false };
+});
+document.addEventListener('pointermove', e => {
+  if (!pjBand) return;
+  const x = Math.min(pjBand.x, e.clientX), y = Math.min(pjBand.y, e.clientY), w = Math.abs(e.clientX - pjBand.x), h = Math.abs(e.clientY - pjBand.y);
+  if (w + h > 4) pjBand.moved = true;
+  Object.assign(pjBand.box.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+});
+document.addEventListener('pointerup', () => {
+  if (!pjBand) return;
+  const r = pjBand.box.getBoundingClientRect(), moved = pjBand.moved;
+  pjBand.box.remove(); pjBand = null;
+  if (!moved) return;
+  for (const el of document.querySelectorAll('.poutline .prow[data-pick]')) {
+    const b = el.getBoundingClientRect();
+    if (!(b.bottom < r.top || b.top > r.bottom)) proj.picked.add(el.dataset.pick);
+  }
+  swallowClick = true; setTimeout(() => { swallowClick = false; }, 0);
+  render();
+});
+
 // Week: ⌘/Ctrl + Z X C V. Copy and cut take the picked tasks, or the one under the mouse; paste drops them at the
 // spot under the mouse (keeping their spacing), or on today if the mouse isn't over the calendar.
 const weekClip = { items: [], undo: [], hoverItem: null, hoverPoint: null };
@@ -2159,17 +2241,118 @@ function projectListView() {
     </div>`;
 }
 
+// ---------- Project editing: picking several, undo/redo, clipboard, keyboard ----------
+// Everything here also has a button, menu or ghost box, so none of it needs a shortcut.
+const proj = { picked: new Set(), anchor: null, undo: [], redo: [], lastKey: null, clip: [] };
+const projPicked = id => proj.picked.has(id);
+/** Every project change goes through here. Changes with the same key (typing in one title) undo together. */
+function projEdit(pid, fn, key = null) {
+  const cur = store.projects.get(pid);
+  if (!cur) return;
+  if (!key || key !== proj.lastKey) { proj.undo.push({ pid, p: structuredClone(cur) }); if (proj.undo.length > 60) proj.undo.shift(); proj.redo = []; }
+  proj.lastKey = key;
+  store.editProject(pid, fn);
+}
+function projUndo(from, to) {
+  const s = from.pop(); if (!s) return false;
+  const cur = store.projects.get(s.pid); if (!cur) return false;
+  to.push({ pid: s.pid, p: structuredClone(cur) }); proj.lastKey = null;
+  store.upsertProject(s.p); render(); return true;
+}
+function projRowsNow() { const p = store.projects.get(ui.projectId); return p ? M.projectRows(p, projCollapsed(p.id)) : []; }
+/** Picked items not inside another picked one, in outline order (or the one being typed in). */
+function projTargets() {
+  const p = store.projects.get(ui.projectId); if (!p) return [];
+  const typing = document.activeElement?.dataset?.pfield === 'item-title' ? document.activeElement.dataset.item : null;
+  const ids = proj.picked.size ? proj.picked : new Set(typing ? [typing] : []);
+  const out = [];
+  const walk = (list, covered) => { for (const i of list) { const on = !covered && ids.has(i.id); if (on) out.push(i.id); walk(i.items || [], covered || on); } };
+  walk(p.items, false);
+  return out;
+}
+function projClick(id, e) {
+  if (e?.metaKey || e?.ctrlKey) { proj.picked.has(id) ? proj.picked.delete(id) : proj.picked.add(id); proj.anchor = id; }
+  else if (e?.shiftKey && proj.anchor) {
+    const ids = projRowsNow().map(r => r.item.id), a = ids.indexOf(proj.anchor), b = ids.indexOf(id);
+    if (a >= 0 && b >= 0) ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => proj.picked.add(x)); else proj.picked.add(id);
+  } else { proj.picked = proj.picked.size === 1 && proj.picked.has(id) ? new Set() : new Set([id]); proj.anchor = id; }
+  render();
+}
+const focusItem = id => setTimeout(() => { const el = document.getElementById(`pi-${id}`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0);
+function projAdd(parent, after = null) {
+  const pid = ui.projectId, n = M.newProjectItem();
+  projEdit(pid, p => M.insertItem(p, n, parent, after));
+  if (parent) { const set = new Set(projCollapsed(pid)); set.delete(parent); ui.projCollapsed.set(pid, set); }
+  proj.anchor = n.id;
+  proj.picked = projMode() === 'outline' ? new Set() : new Set([n.id]);
+  render(); focusItem(n.id);
+  return n.id;
+}
+function projBulk(fn) { const ids = projTargets(); if (!ids.length) return; const f = document.activeElement?.dataset?.item; projEdit(ui.projectId, p => { fn(p, ids); }); render(); if (f && !proj.picked.size) focusItem(f); }
+const projOps = {
+  toggleDone: () => projBulk((p, ids) => { const all = ids.every(id => M.itemDone(M.findItem(p, id)?.item || {})); ids.forEach(id => M.updateItem(p, id, i => M.setItemDone(i, !all))); }),
+  toggleUrgent: () => projBulk((p, ids) => { const all = ids.every(id => M.findItem(p, id)?.item.urgent); ids.forEach(id => M.updateItem(p, id, i => { if (all) delete i.urgent; else i.urgent = true; })); }),
+  setDue: key => projBulk((p, ids) => ids.forEach(id => M.updateItem(p, id, i => { if (key) i.due = key; else delete i.due; }))),
+  indent: () => projBulk((p, ids) => ids.forEach(id => M.indentItem(p, id))),
+  outdent: () => projBulk((p, ids) => [...ids].reverse().forEach(id => M.outdentItem(p, id))),
+  move: d => projBulk((p, ids) => (d < 0 ? ids : [...ids].reverse()).forEach(id => M.moveItem(p, id, d))),
+  delete: () => {
+    const ids = projTargets(); if (!ids.length) return;
+    const order = projRowsNow().map(r => r.item.id), k = order.indexOf(ids[0]), above = k > 0 ? order[k - 1] : null;
+    const wasTyping = !proj.picked.size;
+    projEdit(ui.projectId, p => { ids.forEach(id => M.removeItem(p, id)); });
+    proj.picked = new Set();
+    if (above) { if (wasTyping) { render(); focusItem(above); return; } proj.picked.add(above); proj.anchor = above; }
+    render(); toast(`Deleted ${plural(ids.length, 'subtask')}`, { icon: 'trash', undo: () => projUndo(proj.undo, proj.redo) });
+  },
+  copy: () => { const p = store.projects.get(ui.projectId), ids = projTargets(); if (!p || !ids.length) return false; proj.clip = ids.map(id => structuredClone(M.findItem(p, id).item)); toast(`Copied ${plural(ids.length, 'subtask')}`, { icon: 'check' }); return true; },
+  cut: () => { if (projOps.copy()) projOps.delete(); },
+  paste: () => {
+    const p = store.projects.get(ui.projectId); if (!p || !proj.clip.length) return;
+    const fresh = i => ({ ...i, id: M.uuid(), items: (i.items || []).map(fresh) });
+    const after = projTargets().pop() || null, parent = after ? M.findItem(p, after)?.parent?.id ?? null : null;
+    const copies = proj.clip.map(fresh);
+    projEdit(p.id, q => { let prev = after; for (const c of copies) { M.insertItem(q, c, parent, prev); prev = c.id; } });
+    proj.picked = new Set(copies.map(c => c.id)); proj.anchor = copies.at(-1).id; render();
+  },
+  duplicate: () => { if (projOps.copy()) projOps.paste(); },
+};
+const PROJECT_KEYS = [['Return', 'New subtask below (while typing) · edit the picked one'], ['⇧ Return', 'New subtask inside this one'],
+  ['Tab / ⇧ Tab', 'Move in a level / out a level'], ['↑ ↓', 'Move between subtasks (⇧ to pick several)'], ['⌥ ↑ / ⌥ ↓', 'Move it up or down'],
+  ['⌘ Return / Space', 'Done / not done'], ['U', 'Urgent on or off'], ['Delete', 'Delete (or Backspace in an empty title)'],
+  ['Esc', 'Stop typing and pick the row · clear the pick'], ['⌘-click / ⇧-click', 'Pick several · pick a range'], ['⇧-drag', 'Draw a box to pick rows'],
+  ['⌘A', 'Pick everything'], ['⌘C ⌘X ⌘V ⌘D', 'Copy, cut, paste, duplicate'], ['⌘Z / ⇧⌘Z', 'Undo / redo'], ['?', 'Show these shortcuts']];
+function projPickBar() {
+  const n = proj.picked.size; if (!n) return '';
+  return `<div class="week-selbar proj-bar"><b>${n} picked</b>
+    <button class="btn sm" data-act="pj" data-op="toggleDone" title="Space">${ic('check')} Done</button>
+    <button class="btn sm" data-act="pj" data-op="toggleUrgent" title="U">! Urgent</button>
+    <select class="input sm" style="width:auto" data-pj-due title="Deadline"><option value="">Deadline…</option><option value="0">Today</option><option value="1">Tomorrow</option><option value="7">In a week</option><option value="none">No deadline</option></select>
+    <button class="btn sm icon" data-act="pj" data-op="outdent" title="Move out a level (⇧Tab)">${ic('left')}</button>
+    <button class="btn sm icon" data-act="pj" data-op="indent" title="Move in a level (Tab)">${ic('right')}</button>
+    <button class="btn sm icon" data-act="pj" data-op="move" data-d="-1" title="Move up (⌥↑)">↑</button>
+    <button class="btn sm icon" data-act="pj" data-op="move" data-d="1" title="Move down (⌥↓)">↓</button>
+    <button class="btn sm" data-act="pj" data-op="copy" title="⌘C">Copy</button>
+    <button class="btn sm" data-act="pj" data-op="duplicate" title="⌘D">Duplicate</button>
+    <button class="btn sm danger" data-act="pj" data-op="delete" title="Delete">${ic('trash')}</button>
+    <span class="grow"></span><button class="btn sm" data-act="pj-clear" title="Esc">Clear</button></div>`;
+}
+const ghostBtn = (label, attrs, cls = '') => `<button class="ghost-add ${cls}" ${attrs} title="${esc(label)}">${ic('plus')}${cls.includes('mini') ? '' : `<span>${esc(label)}</span>`}</button>`;
+
 function projectDetailView(p) {
   const pr = M.projectProgress(p), mode = projMode(), collapsed = projCollapsed(p.id);
   const tabs = [['outline', 'Outline'], ['gantt', 'Gantt'], ['map', 'Map']];
   const legend = `<div class="plegend small"><span><i style="background:var(--red)"></i>Overdue</span><span><i style="background:var(--orange)"></i>Due today</span>
     <span><i style="background:var(--green)"></i>Done</span><span><i style="background:${color(p.color)}"></i>On track</span><span>◆ Deadline</span><span><i style="background:var(--red);width:2px"></i>Today</span>
-    <span class="grow"></span><span class="muted">Click a row to edit it.</span></div>`;
+    <span class="grow"></span><span class="muted">Click to pick (⌘/⇧ for several). The dashed + boxes add subtasks.</span></div>`;
   let body;
   if (mode === 'gantt' || mode === 'timeline') body = `${legend}<div class="card pad">${ganttChart([p], collapsed, { single: true })}</div>${projectSelected(p, collapsed)}`;
   else if (mode === 'map') body = `${legend}<div class="card pad">${projectMap(p, collapsed)}</div>${projectSelected(p, collapsed)}`;
   else body = projectOutline(p, collapsed);
   return `<div class="header" style="padding-bottom:4px"><a class="btn ghost sm" href="/app/projects">${ic('left')} Projects</a><span class="grow"></span>
+      <button class="btn ghost sm" data-act="pj-undo" title="Undo (⌘Z)" ${proj.undo.length ? '' : 'disabled'}>Undo</button>
+      <button class="btn ghost sm" data-act="pj-redo" title="Redo (⇧⌘Z)" ${proj.redo.length ? '' : 'disabled'}>Redo</button>
+      <button class="btn ghost sm" data-act="pj-keys" title="Keyboard shortcuts (?)">Shortcuts</button>
       <div class="seg">${tabs.map(([k, l]) => `<button class="${mode === k || (k === 'gantt' && mode === 'timeline') ? 'on' : ''}" data-act="project-mode" data-mode="${k}">${l}</button>`).join('')}</div>
       <button class="btn ghost sm" data-act="project-archive" data-project="${esc(p.id)}">${p.archived ? 'Unarchive' : 'Archive'}</button>
       <button class="btn ghost sm danger" data-act="project-delete" data-project="${esc(p.id)}" title="Delete project">${ic('trash')}</button></div>
@@ -2182,22 +2365,30 @@ function projectDetailView(p) {
           ${dateField('Deadline', p.due, `data-pdate="due" data-project="${esc(p.id)}"`, { status: M.deadlineStatus(p.due, M.projectDone(p)) })}
           <span class="small muted">${pr.total ? `${pr.done} of ${pr.total} done` : 'Add subtasks below'}</span></div></div>
         ${pr.total ? ring(pr.done, pr.total, 64, 8, `proj-${p.id}`) : ''}</div>
+      ${projPickBar()}
       ${body}
     </div>`;
 }
 
 function projectOutline(p, collapsed) {
   const rows = M.projectRows(p, collapsed);
-  return `<div class="card poutline" style="--pc:${color(p.color)}">${rows.length ? rows.map(r => projectRow(p, r, collapsed)).join('')
+  const parts = [], open = [];
+  for (const r of rows) {
+    while (open.length && open.at(-1).depth >= r.depth) { const g = open.pop(); parts.push(`<div class="prow pghost" style="--depth:${g.depth + 1}">${ghostBtn(`Add to “${g.title || 'this'}”`, `data-act="pj-add" data-parent="${esc(g.id)}"`)}</div>`); }
+    parts.push(projectRow(p, r, collapsed));
+    if ((r.item.items || []).length && !collapsed.has(r.item.id)) open.push({ id: r.item.id, depth: r.depth, title: r.item.title });
+  }
+  while (open.length) { const g = open.pop(); parts.push(`<div class="prow pghost" style="--depth:${g.depth + 1}">${ghostBtn(`Add to “${g.title || 'this'}”`, `data-act="pj-add" data-parent="${esc(g.id)}"`)}</div>`); }
+  return `<div class="card poutline" style="--pc:${color(p.color)}">${rows.length ? parts.join('')
       : '<div class="muted" style="padding:10px 4px">No subtasks yet. Add the first one below, then use + on a row to break it down further.</div>'}
       <form class="prow padd" data-form="project-add" data-project="${esc(p.id)}">${ic('plus')}<input id="padd-${esc(p.id)}" placeholder="Add a subtask — press Return" autocomplete="off"></form></div>
-    <div class="small muted">Use + on a row to add a subtask inside it, and the arrows to move it in or out a level. A subtask with subtasks is done when they all are.</div>`;
+    <div class="small muted">Return adds the next subtask, Tab moves it in a level, Shift-Tab out. Click a row’s edge to pick it (⌘ or Shift for several, or Shift-drag a box), then change them all from the bar. Press ? for every shortcut.</div>`;
 }
 
 function projectRow(p, r, collapsed, { selectedView = false } = {}) {
   const i = r.item, kids = (i.items || []).length > 0, done = M.itemDone(i), pr = M.itemProgress(i), pid = esc(p.id), iid = esc(i.id);
   const d = `data-project="${pid}" data-item="${iid}"`;
-  return `<div class="prow ${done ? 'done' : ''} ${selectedView ? 'sel' : ''}" style="--depth:${selectedView ? 0 : r.depth}">
+  return `<div class="prow ${done ? 'done' : ''} ${selectedView ? 'sel' : ''} ${!selectedView && projPicked(i.id) ? 'picked' : ''}" data-pick="${iid}" style="--depth:${selectedView ? 0 : r.depth}">
     <button class="pcollapse ${kids ? '' : 'hide'}" data-act="project-collapse" ${d}>${collapsed.has(i.id) ? '▸' : '▾'}</button>
     <button class="checkbtn" style="${done ? 'color:var(--green)' : ''}" data-act="project-done" ${d} title="${kids ? (done ? 'Mark everything inside not done' : 'Mark everything inside done') : done ? 'Mark not done' : 'Mark done'}">${ic(done ? 'checked' : 'circle')}</button>
     <input id="pi-${iid}" class="ptext ${r.depth === 0 ? 'top' : ''}" value="${esc(i.title)}" placeholder="Subtask" data-pfield="item-title" ${d} autocomplete="off">
@@ -2219,7 +2410,8 @@ function projectRow(p, r, collapsed, { selectedView = false } = {}) {
 
 /** Under the timeline and map: edit whatever was clicked. */
 function projectSelected(p, collapsed) {
-  const r = ui.projSelected && M.projectRows(p, collapsed).find(x => x.item.id === ui.projSelected);
+  const one = proj.picked.size === 1 ? [...proj.picked][0] : null;
+  const r = one && M.projectRows(p, collapsed).find(x => x.item.id === one);
   return r ? `<div class="card"><div class="small muted" style="padding-top:6px">Selected${r.parentId ? ` · in ${esc(M.findItem(p, r.parentId)?.item.title || '')}` : ''}</div>${projectRow(p, r, collapsed, { selectedView: true })}</div>` : '';
 }
 
@@ -2229,7 +2421,20 @@ function projectSelected(p, collapsed) {
  */
 function ganttChart(projects, collapsed, { single = false } = {}) {
   const RH = 30, HEAD = 36, today = M.dateKey(new Date());
-  const lines = projects.flatMap(p => [{ p }, ...(collapsed.has(p.id) ? [] : M.projectRows(p, collapsed).map(r => ({ p, r })))]);
+  const lines = projects.flatMap(p => {
+    if (collapsed.has(p.id)) return [{ p }];
+    const rows = M.projectRows(p, collapsed);
+    if (!single) return [{ p }, ...rows.map(r => ({ p, r }))];
+    const out = [{ p }], open = [];
+    for (const r of rows) {
+      while (open.length && open.at(-1).depth >= r.depth) { const g = open.pop(); out.push({ p, ghost: g.id, depth: g.depth + 1 }); }
+      out.push({ p, r });
+      if ((r.item.items || []).length && !collapsed.has(r.item.id)) open.push({ id: r.item.id, depth: r.depth });
+    }
+    while (open.length) { const g = open.pop(); out.push({ p, ghost: g.id, depth: g.depth + 1 }); }
+    out.push({ p, ghost: null, depth: 0 });
+    return out;
+  });
   const keys = [today, ...projects.flatMap(p => [M.projectStartKey(p), p.due, ...M.projectRows(p).flatMap(r => [r.start, r.due])])].filter(Boolean).sort();
   const lo = M.addDays(M.parseKey(keys[0]), -1), hi = M.addDays(M.parseKey(keys[keys.length - 1]), 3);
   const days = Math.max(14, Math.round((hi - lo) / 86_400_000));
@@ -2251,6 +2456,7 @@ function ganttChart(projects, collapsed, { single = false } = {}) {
   }
   lines.forEach((l, i) => {
     const y = HEAD + i * RH;
+    if ('ghost' in l) return;
     if (!l.r) {
       const p = l.p, pc = color(p.color), pr = M.projectProgress(p), due = p.due || M.projectRows(p).map(r => r.due).filter(Boolean).sort().pop();
       svg += `<rect x="0" y="${y}" width="${W}" height="${RH}" fill="${pc}" fill-opacity="0.07"/>`;
@@ -2264,7 +2470,7 @@ function ganttChart(projects, collapsed, { single = false } = {}) {
     const c = done ? 'var(--green)' : st === 'overdue' ? 'var(--red)' : st === 'today' || r.item.urgent ? 'var(--orange)' : pc;
     if (!r.due) { svg += `<circle cx="${x(r.start) + DW / 2}" cy="${y + RH / 2}" r="3" class="tl-dot"/>`; return; }
     const b = bar(r.start, r.due, y, 8, c, r.item.due ? 0.24 : 0.1, M.itemProgress(r.item), r.conflict);
-    svg += `<g class="tl-row" data-act="${single ? 'project-select' : 'gantt-open'}" data-project="${esc(p.id)}" data-item="${esc(r.item.id)}"><rect x="0" y="${y}" width="${W}" height="${RH}" fill="transparent" ${ui.projSelected === r.item.id ? 'stroke="var(--accent)" stroke-opacity=".6"' : ''}/>${b.svg}
+    svg += `<g class="tl-row" data-act="${single ? 'project-select' : 'gantt-open'}" data-project="${esc(p.id)}" data-item="${esc(r.item.id)}"><rect x="0" y="${y}" width="${W}" height="${RH}" fill="transparent" ${projPicked(r.item.id) ? 'stroke="var(--accent)" stroke-opacity=".6"' : ''}/>${b.svg}
       ${r.item.due ? `${diamond(b.x1 - DW / 2, y + RH / 2, 6, c)}<text x="${b.x1 - DW / 2 + 9}" y="${y + RH / 2 + 3.5}" class="tl-date" fill="${c}">${esc(M.shortDay(r.item.due))}</text>` : ''}</g>`;
   });
   if (single && projects[0]?.due) {
@@ -2273,11 +2479,12 @@ function ganttChart(projects, collapsed, { single = false } = {}) {
   }
   const tx = x(today) + DW / 2;
   svg += `<line x1="${tx}" y1="${HEAD - 14}" x2="${tx}" y2="${H}" stroke="var(--red)" stroke-width="1.5"/><circle cx="${tx}" cy="${HEAD - 14}" r="3.5" fill="var(--red)"/>`;
-  const labels = lines.map(({ p, r }) => {
+  const labels = lines.map(({ p, r, ghost, depth }) => {
+    if (ghost !== undefined) return `<div class="tl-label" style="padding-left:${depth * 14 + 18}px">${ghostBtn(ghost ? 'Add inside' : 'Add subtask', `data-act="pj-add" ${ghost ? `data-parent="${esc(ghost)}"` : ''}`)}</div>`;
     if (!r) return `<div class="tl-label tl-proj" style="--pc:${color(p.color)}" data-act="gantt-fold" data-project="${esc(p.id)}" title="Fold or unfold">
       <span class="muted tiny">${collapsed.has(p.id) ? '▸' : '▾'}</span><span class="pbar"></span><span class="ellipsis">${esc(p.title || 'Untitled project')}</span></div>`;
     const done = M.itemDone(r.item), kids = (r.item.items || []).length;
-    return `<div class="tl-label ${ui.projSelected === r.item.id ? 'sel' : ''} ${done ? 'done' : ''}" style="padding-left:${r.depth * 14 + 18}px" data-act="${single ? 'project-select' : 'gantt-open'}" data-project="${esc(p.id)}" data-item="${esc(r.item.id)}">
+    return `<div class="tl-label ${projPicked(r.item.id) ? 'sel' : ''} ${done ? 'done' : ''}" style="padding-left:${r.depth * 14 + 18}px" data-act="${single ? 'project-select' : 'gantt-open'}" data-project="${esc(p.id)}" data-item="${esc(r.item.id)}">
       <span class="${done ? 'green' : 'muted'}">${done ? '✓' : kids ? '<b>○</b>' : '○'}</span><span class="ellipsis ${r.depth === 0 ? 'top' : ''}">${esc(r.item.title || 'Untitled')}</span>
       ${r.item.urgent && !done ? '<span class="red" title="Urgent">!</span>' : ''}</div>`;
   }).join('');
@@ -2304,13 +2511,14 @@ function projectMap(p, collapsed) {
         ${p.due ? `<div class="tiny">Due ${esc(M.shortDay(p.due))} · ${esc(M.dueRelative(p.due))}</div>` : ''}</div>`;
     }
     const i = n.item, done = M.itemDone(i), pr = M.itemProgress(i), st = M.deadlineStatus(i.due, done), kids = (i.items || []).length;
-    const border = ui.projSelected === i.id ? 'var(--accent)' : st === 'overdue' || st === 'today' ? PROJ_STATUS_COLOR[st] : '';
+    const border = projPicked(i.id) ? 'var(--accent)' : st === 'overdue' || st === 'today' ? PROJ_STATUS_COLOR[st] : '';
     return `<div class="map-node ${done ? 'done' : ''}" style="left:${at.x}px;top:${at.y}px;width:${NW}px;${border ? `border-color:${border};` : ''}" data-act="project-select" data-item="${esc(i.id)}">
       <div class="row" style="gap:5px"><span class="${done ? 'green' : 'muted'}">${done ? '✓' : kids ? '<b>○</b>' : '○'}</span><span class="ellipsis grow">${esc(i.title || 'Untitled')}</span>${i.urgent && !done ? '<b class="red" title="Urgent">!</b>' : ''}${collapsed.has(i.id) && kids ? `<span class="tiny muted">+${kids}</span>` : ''}</div>
       <div class="row" style="gap:6px">${kids ? `<span class="pmini grow" style="--pc:${pc}"><span style="width:${pr.done / pr.total * 100}%"></span></span><span class="tiny muted">${pr.done}/${pr.total}</span>` : '<span class="grow"></span>'}
         ${i.due ? dueChip(i.due, { done, compact: true }) : ''}</div></div>`;
   }).join('');
-  return `<div class="map-scroll"><div class="map" style="width:${W}px;height:${H}px"><svg width="${W}" height="${H}">${edges}</svg>${nodes}</div></div>`;
+  const ghosts = lay.nodes.map(n => { const at = pos.get(n.id); return `<span style="position:absolute;left:${at.x + NW + 8}px;top:${at.y - 11}px">${ghostBtn('Add a subtask inside', `data-act="pj-add" ${n.item ? `data-parent="${esc(n.item.id)}"` : ''}`, 'mini')}</span>`; }).join('');
+  return `<div class="map-scroll"><div class="map" style="width:${W + 40}px;height:${H}px"><svg width="${W}" height="${H}">${edges}</svg>${nodes}${ghosts}</div></div>`;
 }
 
 const PROJECT_TODAY_CHOICES = [[-1, 'Only urgent ones'], [0, 'Due today'], [1, 'Due by tomorrow'], [2, 'Due within 2 days'], [3, 'Due within 3 days'], [7, 'Due within a week']];
@@ -2347,7 +2555,7 @@ function projectUpcomingSection() {
     <div class="card">${list.map(d => projectDeadlineRow(d, { upcoming: true })).join('')}</div></div>`;
 }
 
-const projectEdit = (el, fn) => store.editProject(el.dataset.project || ui.projectId, fn);
+const projectEdit = (el, fn, key) => projEdit(el.dataset.project || ui.projectId, fn, key);
 
 
 // ---------- Study ----------
@@ -2928,7 +3136,7 @@ const actions = {
     ui.projCollapsed.set(key, set); render();
   },
   'gantt-fold-all': el => { projCollapsed('all'); ui.projCollapsed.set('all', new Set(el.dataset.fold === '1' ? store.activeProjects.map(p => p.id) : [])); render(); },
-  'gantt-open': el => { ui.projSelected = el.dataset.item; store.setDevice('projectMode', 'gantt'); navigate(`projects/${el.dataset.project}`); ui.projSelected = el.dataset.item; render(); },
+  'gantt-open': el => { store.setDevice('projectMode', 'gantt'); navigate(`projects/${el.dataset.project}`); proj.picked = new Set([el.dataset.item]); proj.anchor = el.dataset.item; render(); },
   'project-mode': el => { store.setDevice('projectMode', el.dataset.mode); render(); },
   'project-color': el => projectEdit(el, p => { p.color = el.dataset.color; }),
   'project-archive': el => projectEdit(el, p => { if (p.archived) delete p.archived; else p.archived = true; }),
@@ -2958,10 +3166,16 @@ const actions = {
     const before = structuredClone(store.projects.get(el.dataset.project));
     const gone = M.findItem(before, el.dataset.item)?.item;
     projectEdit(el, p => { M.removeItem(p, el.dataset.item); });
-    if (ui.projSelected === el.dataset.item) ui.projSelected = null;
+    proj.picked.delete(el.dataset.item);
     toast(`Deleted “${gone?.title || 'subtask'}”${gone?.items?.length ? ` and ${plural(M.itemProgress(gone).total, 'piece')} inside` : ''}`, { icon: 'trash', undo: () => store.upsertProject(before) });
   },
-  'project-select': el => { ui.projSelected = ui.projSelected === el.dataset.item ? null : el.dataset.item; render(); },
+  'project-select': (el, e) => projClick(el.dataset.item, e),
+  'pj': el => { const op = el.dataset.op; op === 'move' ? projOps.move(Number(el.dataset.d)) : projOps[op](); },
+  'pj-clear': () => { proj.picked = new Set(); render(); },
+  'pj-add': el => projAdd(el.dataset.parent || null),
+  'pj-undo': () => projUndo(proj.undo, proj.redo),
+  'pj-redo': () => projUndo(proj.redo, proj.undo),
+  'pj-keys': () => openModal({ type: 'pj-keys' }),
   'pick-date': el => {
     const input = el.parentElement.querySelector('input[type=date]');
     try { input.showPicker(); } catch { input.focus(); input.click(); }
@@ -3289,8 +3503,8 @@ document.addEventListener('input', e => {
   if (el.dataset.noteField) { const n = store.notes.get(el.dataset.id); if (n) store.upsertNote({ ...n, [el.dataset.noteField]: el.value }); return; }
   if (el.dataset.bind === 'cardSearch') { ui.cardSearch = el.value; render(); return; }
   if (el.dataset.bind === 'noteSearch') { ui.noteSearch = el.value; render(); return; }
-  if (el.dataset.pfield === 'title') { projectEdit(el, p => { p.title = el.value; }); return; }
-  if (el.dataset.pfield === 'item-title') { projectEdit(el, p => M.updateItem(p, el.dataset.item, i => { i.title = el.value; })); return; }
+  if (el.dataset.pfield === 'title') { projectEdit(el, p => { p.title = el.value; }, 'ptitle'); return; }
+  if (el.dataset.pfield === 'item-title') { projectEdit(el, p => M.updateItem(p, el.dataset.item, i => { i.title = el.value; }), `t-${el.dataset.item}`); return; }
   const bind = el.dataset.bind;
   if (bind === 'todoSearch') { ui.todo.search = el.value; render(); }
   if (bind === 'reflSearch') { ui.reflSearch = el.value; render(); }
@@ -3308,6 +3522,7 @@ function setProjectDate(el, value) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.pjDue !== undefined) { const v = el.value; if (v) projOps.setDue(v === 'none' ? null : M.dateKey(M.addDays(new Date(), Number(v)))); return; }
   if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
   if (el.dataset.selMove !== undefined) {
     const n = Number(el.value); if (!n) return;
@@ -3548,21 +3763,8 @@ document.addEventListener('keydown', e => {
   }
   // Habit editor: Return in the "add a step" box adds the step instead of saving the habit.
   if (e.target.dataset?.edit === 'step-new' && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); actions['step-add'](e.target); return; }
-  // Project outline: Return adds the next subtask, Tab / Shift-Tab move a row in or out a level.
-  const pf = e.target.dataset?.pfield === 'item-title' ? e.target : null;
-  if (pf && (e.key === 'Enter' || e.key === 'Tab') && !e.isComposing) {
-    e.preventDefault();
-    const pid = pf.dataset.project, id = pf.dataset.item;
-    if (e.key === 'Enter') {
-      const n = M.newProjectItem();
-      store.editProject(pid, p => M.insertItem(p, n, M.findItem(p, id)?.parent?.id ?? null, id));
-      setTimeout(() => document.getElementById(`pi-${n.id}`)?.focus(), 0);
-    } else {
-      store.editProject(pid, p => (e.shiftKey ? M.outdentItem : M.indentItem)(p, id));
-      setTimeout(() => document.getElementById(`pi-${id}`)?.focus(), 0);
-    }
-    return;
-  }
+  // Projects: see PROJECT_KEYS.
+  if (ui.route === 'projects' && ui.projectId && !ui.modal && !e.isComposing && projKey(e)) { e.preventDefault(); return; }
   const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
   if (!typing && !ui.modal && store.user && !e.metaKey && !e.ctrlKey && !e.altKey) {
     const k = e.key.toLowerCase();

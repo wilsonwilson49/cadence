@@ -826,3 +826,15 @@ table.rules tr.on td:first-child b { color: var(--accent); }
 .week-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; margin: 0 0 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent, #0a84ff) 12%, transparent); }
 .chip.picked, .block.picked { outline: 2.5px solid var(--accent, #0a84ff); outline-offset: 1px; z-index: 5; }
 .sel-band { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--accent, #0a84ff); background: color-mix(in srgb, var(--accent, #0a84ff) 14%, transparent); border-radius: 3px; }
+.prow.picked { background: color-mix(in srgb, var(--accent, #0a84ff) 16%, transparent); border-radius: 6px; }
+.prow.pghost { min-height: 0; padding-top: 1px; padding-bottom: 1px; }
+.ghost-add { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 11px; color: var(--muted); background: transparent; border: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 6px; padding: 2px 8px; cursor: pointer; opacity: .75; margin-left: 46px; }
+.tl-label .ghost-add, .map .ghost-add { margin-left: 0; }
+.ghost-add.mini { padding: 3px; }
+.ghost-add .i { width: 11px; height: 11px; }
+.ghost-add:hover { color: var(--accent, #0a84ff); border-color: var(--accent, #0a84ff); opacity: 1; }
+.proj-bar { margin: 0; }
+table.keys td { padding: 3px 10px 3px 0; vertical-align: top; }
+kbd { font: 600 12px ui-monospace, monospace; background: var(--line); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.ghost-add { white-space: nowrap; flex: none; }
+.ghost-add.mini { width: 20px; height: 20px; justify-content: center; padding: 0; }
