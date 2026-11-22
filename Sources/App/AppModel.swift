@@ -63,6 +63,7 @@ final class AppModel: ObservableObject {
     private(set) lazy var screenTime = ScreenTimeTracker(model: self)
     private(set) lazy var focus = FocusEngine(model: self)
     private(set) lazy var study = StudyEngine(model: self)
+    private(set) lazy var nag = NagEngine(model: self)
 
     @Published var screen: Screen = .home { didSet { if screen != .week { weekSelection = [:]; weekSelecting = false } } }
     /// Week calendar: tasks picked for changing all at once (by occurrence id), and whether a plain click picks.
@@ -110,6 +111,7 @@ final class AppModel: ObservableObject {
         google.restore()
         engine.start()
         screenTime.start()
+        nag.start()
         _ = study   // resumes a study session that was running when Cadence quit
         LoginItem.applyDefault()
         sync.start()
@@ -250,6 +252,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
             .environmentObject(m.engine).environmentObject(m.sync)
             .environmentObject(m.calendly).environmentObject(m.importer)
             .environmentObject(m.focus).environmentObject(m.screenTime).environmentObject(m.study)
+            .tint(Theme.accent)
     }
 
     // MARK: Running in the background

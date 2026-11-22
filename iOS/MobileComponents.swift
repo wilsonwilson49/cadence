@@ -130,7 +130,7 @@ struct Ring: View {
         ZStack {
             Circle().stroke(Color.primary.opacity(0.08), lineWidth: line)
             Circle().trim(from: 0, to: frac)
-                .stroke(AngularGradient(colors: [.orange, .pink, .purple], center: .center), style: StrokeStyle(lineWidth: line, lineCap: .round))
+                .stroke(Theme.accent, style: StrokeStyle(lineWidth: line, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.spring(duration: 0.6), value: frac)
             if showsLeft && total > 0 && left == 0 {
@@ -198,7 +198,7 @@ struct ReflectionSheet: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
                     .frame(height: 180)
                 HStack {
-                    ProgressView(value: Double(Swift.min(count, min)), total: Double(min)).tint(count >= min ? .green : .pink)
+                    ProgressView(value: Double(Swift.min(count, min)), total: Double(min)).tint(count >= min ? .green : Theme.accent)
                     Text("\(count) / \(min) words").font(.caption.monospacedDigit()).foregroundStyle(count >= min ? .green : .secondary)
                 }
             }
@@ -348,6 +348,21 @@ struct EditorSheet: View {
                                 if on { task.reminderOffsets.insert(off) } else { task.reminderOffsets.remove(off) }
                             }))
                         }
+                    }
+                }
+                if !task.isEvent {
+                    Section {
+                        Picker("Keep after me", selection: Binding(get: { task.nagLevel }, set: { task.nag = $0 == .normal ? nil : $0.rawValue })) {
+                            ForEach(NagLevel.allCases) { Text($0.title).tag($0) }
+                        }
+                        if task.nagLevel != .normal {
+                            Picker("Comes back every", selection: Binding(get: { task.nagMinutes }, set: { task.nagEvery = $0 == 10 ? nil : $0 })) {
+                                ForEach(NagLevel.everyChoices, id: \.self) { m in Text(m == 60 ? "hour" : "\(m) min").tag(m) }
+                            }
+                        }
+                    } header: { Text("For things you'd rather put off") } footer: {
+                        Text(task.nagLevel == .normal ? task.nagLevel.detail
+                             : "On iPhone it's a notification that keeps coming back. The pop-ups and app blocking happen on the Mac and the web.")
                     }
                 }
                 Section("Color") {

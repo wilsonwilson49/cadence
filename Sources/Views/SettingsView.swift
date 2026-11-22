@@ -18,14 +18,19 @@ struct SettingsView: View {
     @State private var runInBackground = WindowManager.runsInBackground
     @State private var loginError: String?
     @State private var showSecret = false
+    @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
+    @State private var newSite = ""
+    @State private var newApp = ""
 
     var body: some View {
         Form {
+            appearanceSection
             syncSection
             notificationsSection
             ringSection
             sidebarSection
             nudgeSection
+            toughLoveSection
             checkInSection
             reflectionSection
             startupSection
@@ -41,6 +46,83 @@ struct SettingsView: View {
     }
 
     // MARK: Sections
+
+    private var appearanceSection: some View {
+        Section {
+            Picker("Theme", selection: $appearance) { ForEach(AppearanceMode.allCases) { Text($0.title).tag($0.rawValue) } }
+                .onChange(of: appearance) { _, v in (AppearanceMode(rawValue: v) ?? .dark).apply() }
+        } header: { Text("Appearance") } footer: { Text("This Mac only. Dark is the default.") }
+    }
+
+    private static let siteSuggestions = ["youtube.com", "instagram.com", "tiktok.com", "reddit.com", "x.com", "facebook.com", "netflix.com", "twitch.tv"]
+
+    private func addSite(_ raw: String) {
+        var d = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let host = URL(string: d.contains("://") ? d : "https://" + d)?.host { d = host }
+        if d.hasPrefix("www.") { d = String(d.dropFirst(4)) }
+        guard !d.isEmpty, d.contains("."), !store.settings.blockedSites.contains(d) else { return }
+        store.settings.blockedSites.append(d)
+    }
+
+    /// For people who put things off: what gets blocked, and when.
+    private var toughLoveSection: some View {
+        Section {
+            Toggle("Block distracting apps and sites during focus and study sessions", isOn: $store.settings.blockDuringFocus)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Distracting apps").font(.callout.weight(.medium))
+                FlowRow(store.settings.distractingApps.map { app in
+                    AnyView(HStack(spacing: 3) {
+                        Text(app)
+                        Button { store.settings.distractingApps.removeAll { $0 == app } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
+                    }.font(.callout).padding(.horizontal, 8).padding(.vertical, 2)
+                     .background(RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.12))))
+                })
+                HStack {
+                    TextField("App name, e.g. Discord", text: $newApp).onSubmit(addApp)
+                    Button("Add", action: addApp).disabled(newApp.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Menu("Running apps") {
+                        ForEach(runningApps, id: \.self) { n in Button(n) { newApp = n; addApp() } }
+                    }.fixedSize()
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Blocked websites").font(.callout.weight(.medium))
+                FlowRow(store.settings.blockedSites.map { site in
+                    AnyView(HStack(spacing: 3) {
+                        Text(site)
+                        Button { store.settings.blockedSites.removeAll { $0 == site } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
+                    }.font(.callout).padding(.horizontal, 8).padding(.vertical, 2)
+                     .background(RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.12))))
+                })
+                HStack {
+                    TextField("Website, e.g. youtube.com", text: $newSite).onSubmit { addSite(newSite); newSite = "" }
+                    Button("Add") { addSite(newSite); newSite = "" }.disabled(newSite.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Menu("Suggestions") {
+                        ForEach(Self.siteSuggestions.filter { !store.settings.blockedSites.contains($0) }, id: \.self) { d in Button(d) { addSite(d) } }
+                    }.fixedSize()
+                }
+            }
+            HStack {
+                Button("Try blocking for a minute") { model.nag.blocker.testUntil = Date().addingTimeInterval(60) }
+                Button("Preview a pushy pop-up") { model.nag.preview(.pushy) }
+                Button("Preview the strict cover") { model.nag.preview(.strict) }
+            }
+        } header: { Text("Tough love") } footer: {
+            Text("A task set to Strict (in its editor, under “For things you'd rather put off”) blocks these until it's checked off. Blocked apps are hidden as soon as they come to the front. Websites are blocked in Safari, Chrome, Arc, Brave, Edge, Vivaldi and Opera (not Firefox); the first time, macOS asks whether Cadence may control the browser.")
+        }
+    }
+
+    private var runningApps: [String] {
+        NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }.compactMap(\.localizedName)
+            .filter { n in n != "Cadence" && !store.settings.distractingApps.contains { $0.lowercased() == n.lowercased() } }.sorted()
+    }
+
+    private func addApp() {
+        let a = newApp.trimmingCharacters(in: .whitespacesAndNewlines)
+        newApp = ""
+        guard !a.isEmpty, !store.settings.distractingApps.contains(where: { $0.lowercased() == a.lowercased() }) else { return }
+        store.settings.distractingApps.append(a)
+    }
 
     private var syncSection: some View {
         Section {

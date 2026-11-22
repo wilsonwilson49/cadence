@@ -376,7 +376,7 @@ struct ProjectMap: View {
             }
             .foregroundStyle(.white)
             .padding(9)
-            .background(RoundedRectangle(cornerRadius: 10).fill(project.color.color.gradient))
+            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(project.color.color))
         }
     }
 }

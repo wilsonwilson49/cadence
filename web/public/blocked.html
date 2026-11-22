@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blocked · Cadence</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/css/legal.css">
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('cadence:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
+  </script>
+  <style>
+    main { text-align: center; padding-top: 12vh; }
+    .lock { color: #e4685f; }
+    h1 { border: 0; margin-top: 8px; }
+    .why { color: var(--muted); font-size: 17px; }
+    .btn { display: inline-block; margin-top: 22px; padding: 8px 18px; border-radius: 3px; background: #3a61ad; color: #fff; font-weight: 600; }
+    .btn:hover { text-decoration: none; filter: brightness(1.1); }
+  </style>
+</head>
+<body>
+<header><div class="bar"><img src="/icon-192.png" alt=""><b>Cadence</b></div></header>
+<main>
+  <svg class="lock" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  <h1 id="title">This site is blocked</h1>
+  <p class="why" id="why">Cadence is keeping you on task.</p>
+  <a class="btn" href="/app/today">Open today's list</a>
+  <p class="why" style="font-size:14px;margin-top:28px">Blocking is set in the Cadence Mac app, under Settings › Tough love.</p>
+</main>
+<script>
+  // The Mac app sends blocked tabs here: /blocked?site=youtube.com&why=until you finish “Essay”
+  const q = new URLSearchParams(location.search);
+  const site = q.get('site'), why = q.get('why');
+  if (site) document.getElementById('title').textContent = `${site} is blocked`;
+  if (why) document.getElementById('why').textContent = `Blocked ${why}.`;
+</script>
+</body>
+</html>

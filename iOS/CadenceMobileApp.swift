@@ -7,6 +7,21 @@ import Combine
 struct CadenceMobileApp: App {
     @StateObject private var model = MobileModel.shared
     @Environment(\.scenePhase) private var phase
+    @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
+
+    init() {
+        // Large titles in the book serif, like the Mac and web apps' headings.
+        let nav = UINavigationBarAppearance()
+        nav.configureWithDefaultBackground()
+        if let d = UIFont.preferredFont(forTextStyle: .largeTitle).fontDescriptor.withDesign(.serif)?.withSymbolicTraits([]) {
+            nav.largeTitleTextAttributes = [.font: UIFont(descriptor: d, size: 32)]
+        }
+        if let d = UIFont.preferredFont(forTextStyle: .headline).fontDescriptor.withDesign(.serif) {
+            nav.titleTextAttributes = [.font: UIFont(descriptor: d, size: 18)]
+        }
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -16,7 +31,8 @@ struct CadenceMobileApp: App {
                 .environmentObject(model.sync)
                 .environmentObject(model.focus)
                 .environmentObject(model.study)
-                .tint(.pink)
+                .tint(Theme.accent)
+                .preferredColorScheme((AppearanceMode(rawValue: appearance) ?? .dark).colorScheme)
         }
         .onChange(of: phase) { _, p in model.scenePhaseChanged(p) }
     }
@@ -188,6 +204,25 @@ final class MobileModel: ObservableObject {
                     requests.append(UNNotificationRequest(identifier: "\(occ.id)|\(off)", content: c,
                                                           trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
                 }
+            }
+        }
+        // Things set to keep after you: the reminder comes back every few minutes until it's checked off
+        // (planned for the next few hours; replanned whenever the app runs or anything changes).
+        for occ in store.todayChecklist() where occ.task.nagLevel != .normal && !occ.isResolved {
+            let every = Double(occ.task.nagMinutes * 60)
+            var fire = max(store.nagStart(occ, now: now), now.addingTimeInterval(30))
+            var n = 0
+            while n < 8 && fire < now.addingTimeInterval(4 * 3600) {
+                let c = UNMutableNotificationContent()
+                c.title = "Still not done: \(occ.task.title)"
+                c.body = "It keeps coming back every \(occ.task.nagMinutes) min until it's checked off."
+                c.sound = .default
+                c.userInfo = ["occ": occ.id]
+                c.interruptionLevel = occ.task.nagLevel == .strict ? .timeSensitive : .active
+                let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: fire)
+                requests.append(UNNotificationRequest(identifier: "nag-\(occ.id)|\(n)", content: c,
+                                                      trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+                fire = fire.addingTimeInterval(every); n += 1
             }
         }
         // Your own reminders (More › Reminders), for the same days.

@@ -207,6 +207,13 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var habit: HabitInfo?
     /// Urgent: an until-done item that isn't due yet still goes on today's list and in today's progress ring.
     var urgent: Bool?
+    /// For things you'd rather put off: keeps after you until it's checked off. "persistent" (the reminder
+    /// comes back), "pushy" (a window in the middle of the screen, again and again) or "strict" (it covers the
+    /// screen, putting it off needs a reason, and the Mac blocks distracting apps and sites until it's done).
+    /// nil = a normal reminder. Same values on the web.
+    var nag: String?
+    /// How often it comes back, in minutes (default 10).
+    var nagEvery: Int?
     /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
     var steps: [HabitStep]?
     /// Occurrence key → the steps checked off that time.
@@ -478,6 +485,10 @@ struct AppSettings: Codable {
     // Habits tracker, focus and screen time (synced with the web)
     var habitScorecard: [ScoreItem] = []
     var distractingApps: [String] = []
+    /// Websites blocked (on the Mac) while a strict task is overdue, and during focus and study sessions if
+    /// blockDuringFocus is on. Domains, e.g. "youtube.com" (subdomains count).
+    var blockedSites: [String] = []
+    var blockDuringFocus = false
     var screenLimitMinutes = 0
     var distractingLimitMinutes = 0
     var focusMinutes = 25
@@ -522,6 +533,8 @@ struct AppSettings: Codable {
         taskPresets = c.value(.taskPresets, d.taskPresets)
         habitScorecard = c.value(.habitScorecard, d.habitScorecard)
         distractingApps = c.value(.distractingApps, d.distractingApps)
+        blockedSites = c.value(.blockedSites, d.blockedSites)
+        blockDuringFocus = c.value(.blockDuringFocus, d.blockDuringFocus)
         screenLimitMinutes = c.value(.screenLimitMinutes, d.screenLimitMinutes)
         distractingLimitMinutes = c.value(.distractingLimitMinutes, d.distractingLimitMinutes)
         focusMinutes = c.value(.focusMinutes, d.focusMinutes)
@@ -557,6 +570,8 @@ struct SyncedSettings: Codable, Equatable {
     var taskPresets: [TaskPreset]
     var habitScorecard: [ScoreItem]
     var distractingApps: [String]
+    var blockedSites: [String]
+    var blockDuringFocus: Bool
     var screenLimitMinutes: Int
     var distractingLimitMinutes: Int
     var focusMinutes: Int
@@ -578,6 +593,7 @@ struct SyncedSettings: Codable, Equatable {
         hiddenCalendars = s.hiddenCalendars
         taskPresets = s.taskPresets
         habitScorecard = s.habitScorecard; distractingApps = s.distractingApps
+        blockedSites = s.blockedSites; blockDuringFocus = s.blockDuringFocus
         screenLimitMinutes = s.screenLimitMinutes; distractingLimitMinutes = s.distractingLimitMinutes
         focusMinutes = s.focusMinutes; focusLengths = s.focusLengths; projectTodayDays = s.projectTodayDays; ringShowsLeft = s.ringShowsLeft; syncGoogleTasks = s.syncGoogleTasks
     }
@@ -607,6 +623,8 @@ struct SyncedSettings: Codable, Equatable {
         taskPresets = c.value(.taskPresets, taskPresets)
         habitScorecard = c.value(.habitScorecard, habitScorecard)
         distractingApps = c.value(.distractingApps, distractingApps)
+        blockedSites = c.value(.blockedSites, blockedSites)
+        blockDuringFocus = c.value(.blockDuringFocus, blockDuringFocus)
         screenLimitMinutes = c.value(.screenLimitMinutes, screenLimitMinutes)
         distractingLimitMinutes = c.value(.distractingLimitMinutes, distractingLimitMinutes)
         focusMinutes = c.value(.focusMinutes, focusMinutes)
@@ -629,6 +647,7 @@ struct SyncedSettings: Codable, Equatable {
         s.hiddenCalendars = hiddenCalendars
         s.taskPresets = taskPresets
         s.habitScorecard = habitScorecard; s.distractingApps = distractingApps
+        s.blockedSites = blockedSites; s.blockDuringFocus = blockDuringFocus
         s.screenLimitMinutes = screenLimitMinutes; s.distractingLimitMinutes = distractingLimitMinutes
         s.focusMinutes = focusMinutes; s.focusLengths = focusLengths; s.projectTodayDays = projectTodayDays; s.ringShowsLeft = ringShowsLeft; s.syncGoogleTasks = syncGoogleTasks
     }

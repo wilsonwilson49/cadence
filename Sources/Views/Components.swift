@@ -10,15 +10,18 @@ struct ScreenHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.title2.bold())
-                if let subtitle { Text(subtitle).foregroundStyle(.secondary) }
+                Text(title).font(Theme.serif(25))
+                if let subtitle { Text(subtitle).font(.callout).foregroundStyle(.secondary) }
             }
             Spacer()
             trailing
         }
-        .padding(.horizontal, 22)
         .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.bottom, 8)
+        // A rule under the page title, like the top of an article.
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.rule).frame(height: 1) }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 4)
     }
 }
 
@@ -34,8 +37,8 @@ struct Card<Content: View>: View {
         content
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Color.primary.opacity(0.12)))
     }
 }
 
@@ -46,11 +49,13 @@ struct SectionTitle: View {
     var body: some View {
         HStack(spacing: 6) {
             if let symbol { Image(systemName: symbol).foregroundStyle(.secondary) }
-            Text(text).font(.headline)
-            if let count { Text("\(count)").font(.caption.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
-                .background(Capsule().fill(Color.secondary.opacity(0.15))) }
+            Text(text).font(Theme.serif(17))
+            if let count { Text("\(count)").font(.caption.weight(.semibold)).monospacedDigit().padding(.horizontal, 5).padding(.vertical, 1)
+                .background(RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.15))) }
             Spacer()
         }
+        .padding(.bottom, 3)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.rule).frame(height: 1) }
     }
 }
 
@@ -221,6 +226,11 @@ struct ChecklistRow: View {
                     if let plan = occ.task.planSummary, !compact {
                         Label(plan, systemImage: occ.task.isUntilDone ? "flame" : "repeat").lineLimit(1)
                     }
+                    if occ.task.nagLevel != .normal && !occ.isResolved {
+                        Label(occ.task.nagLevel.title, systemImage: occ.task.nagLevel.symbol)
+                            .foregroundStyle(occ.task.nagLevel == .strict ? .red : .orange)
+                            .help("Keeps after you until it's checked off: \(occ.task.nagLevel.detail)")
+                    }
                     if occ.task.isPastDue { Text("Past due").foregroundStyle(.red).fontWeight(.medium) }
                     if occ.isOverdue { Text("Overdue").foregroundStyle(.red).fontWeight(.medium) }
                     if occ.task.source == "calendly" { Label("Calendly", systemImage: "person.2") }
@@ -381,7 +391,7 @@ struct ReflectionForm: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
-                    .background(Circle().fill(missed ? Color.red.gradient : occurrence.task.color.color.gradient))
+                    .background(Circle().fill(missed ? Color.red : occurrence.task.color.color))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(missed ? "Why didn't it happen?" : "Reflect to complete").font(.title3.bold())
                     Text("\(occurrence.task.title) · \(occurrence.day.formatted(.dateTime.weekday(.wide).month().day()))")

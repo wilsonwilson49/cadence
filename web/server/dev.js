@@ -26,7 +26,7 @@ createServer(async (req, res) => {
   }
   if (rel === '/') rel = '/index.html';
   else if (rel === '/app' || rel.startsWith('/app/')) rel = '/app.html';
-  else if (rel === '/privacy' || rel === '/terms') rel += '.html';
+  else if (rel === '/privacy' || rel === '/terms' || rel === '/blocked') rel += '.html';
   const file = join(PUBLIC, rel);
   try {
     if (!file.startsWith(PUBLIC) || !(await stat(file)).isFile()) throw new Error();

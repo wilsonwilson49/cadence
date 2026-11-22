@@ -36,7 +36,7 @@ struct HomeView: View {
                     tile(.todo, "\(store.tasks.filter { $0.archived != true }.count)", overdue > 0 ? "\(overdue) overdue" : "all your tasks", .orange)
                     tile(.habits, "\(store.tasks.filter { $0.isHabit && $0.archived != true }.count)", bestStreak > 0 ? "best streak \(bestStreak) days" : "build one today", .green)
                     tile(.reflections, "\(store.reflections.count)", store.reflectionStreak > 0 ? "\(store.reflectionStreak)-day streak" : "your record", .indigo)
-                    tile(.focus, "Level \(Focus.level(points: focusPoints).level)", "\(focusPoints) points", .pink)
+                    tile(.focus, "Level \(Focus.level(points: focusPoints).level)", "\(focusPoints) points", Theme.accent)
                     tile(.screentime, screenToday > 0 ? durationString(seconds: screenToday) : "—", screenToday > 0 ? "today on your Mac" : "turn it on", .cyan)
                     tile(.booking, durationText(BookingView.plans(store: store, google: google, busy: []).reduce(0) { $0 + $1.total }), "open in the next 7 days", .green)
                     tile(.settings, sync.isSignedIn ? "Synced" : "Local", google.isConnected ? "Google connected" : "reminders & sync", .gray)
@@ -69,7 +69,7 @@ struct HomeView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(greeting(now) + (sync.username.map { ", \($0)" } ?? "")).font(.title3).foregroundStyle(.secondary)
-                Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day())).font(.largeTitle.bold())
+                Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day())).font(Theme.serif(32))
                 Text(total == 0 ? "Nothing on your checklist today." : open == 0 ? "Everything is checked off. Nice work." : "\(open) thing\(open == 1 ? "" : "s") left today.")
                     .foregroundStyle(.secondary)
             }

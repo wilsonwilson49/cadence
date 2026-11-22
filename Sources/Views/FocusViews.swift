@@ -34,14 +34,14 @@ struct FocusView: View {
         return HStack(spacing: 14) {
             Text("\(lv.level)").font(.system(size: 24, weight: .heavy)).foregroundStyle(.white)
                 .frame(width: 52, height: 52)
-                .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient(colors: [.pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.solid))
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Level \(lv.level)").font(.headline)
                     Spacer()
                     Text("\(points) points · \(lv.span - lv.into) to level \(lv.level + 1)").font(.caption).foregroundStyle(.secondary)
                 }
-                ProgressView(value: Double(lv.into), total: Double(lv.span)).tint(.pink)
+                ProgressView(value: Double(lv.into), total: Double(lv.span)).tint(Theme.accent)
                 Text("\(Focus.streak(sessions))-day focus streak · \(week) points this week · best session: \(sessions.map(\.finished).max() ?? 0) done")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -57,7 +57,7 @@ struct FocusView: View {
         return HStack(alignment: .top, spacing: 24) {
             ZStack {
                 Circle().stroke(Color.primary.opacity(0.08), lineWidth: 12)
-                Circle().trim(from: 0, to: frac).stroke(final ? Color.orange : Color.pink, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                Circle().trim(from: 0, to: frac).stroke(final ? Color.orange : Theme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90)).animation(.linear(duration: 1), value: frac)
                 VStack(spacing: 2) {
                     Text(focus.clock).font(.system(size: 44, weight: .bold).monospacedDigit()).foregroundStyle(final ? Color.orange : .primary)
@@ -134,7 +134,7 @@ struct FocusView: View {
                             focus.start(minutes: minutes, picked: open.map(\.id).filter(selected.contains))
                             picks = nil
                         } label: { Label("Start \(Focus.label(minutes)) focus", systemImage: "scope") }
-                        .buttonStyle(.borderedProminent).tint(.pink)
+                        .buttonStyle(.borderedProminent).tint(Theme.solid)
                         .disabled(selected.isEmpty)
                     }
                 }
@@ -145,7 +145,7 @@ struct FocusView: View {
     private func result(_ r: FocusSession) -> some View {
         let unreflected = r.finishedIds.compactMap(focus.occurrence).filter { !$0.isResolved }
         return HStack(alignment: .top, spacing: 16) {
-            Text("\(r.finished)").font(.system(size: 44, weight: .heavy).monospacedDigit()).foregroundStyle(.pink)
+            Text("\(r.finished)").font(.system(size: 44, weight: .heavy).monospacedDigit()).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.headline)
                 Text("\(r.focusPercent)% focused (\(durationString(seconds: r.distractingSeconds + r.awaySeconds)) away or distracted) · ×\(String(format: "%g", Focus.multiplier(r.focusPercent))) · +\(r.points) points")
@@ -167,8 +167,8 @@ struct FocusView: View {
             Button { focus.result = nil } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.pink.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.pink.opacity(0.3)))
+        .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.accent.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.accent.opacity(0.3)))
     }
 
     private func history(_ sessions: [FocusSession]) -> some View {
@@ -249,7 +249,7 @@ struct ScreenTimeView: View {
                         tile(total > 0 ? durationString(seconds: total) : "—", "today\(s.screenLimitMinutes > 0 ? " · limit \(durationString(seconds: s.screenLimitMinutes * 60))" : "")",
                              "desktopcomputer", .cyan, over: s.screenLimitMinutes > 0 && total > s.screenLimitMinutes * 60)
                         tile(total > 0 ? durationString(seconds: distracting) : "—", "distracting\(s.distractingLimitMinutes > 0 ? " · limit \(durationString(seconds: s.distractingLimitMinutes * 60))" : "")",
-                             "exclamationmark.triangle", .pink, over: s.distractingLimitMinutes > 0 && distracting > s.distractingLimitMinutes * 60)
+                             "exclamationmark.triangle", .red, over: s.distractingLimitMinutes > 0 && distracting > s.distractingLimitMinutes * 60)
                         tile(durationString(seconds: focusToday), "in focus sessions today", "scope", .green)
                         let tracked = week.filter { $0.1 > 0 }
                         tile(tracked.isEmpty ? "—" : durationString(seconds: tracked.reduce(0) { $0 + $1.1 } / tracked.count), "daily average (7 days)", "calendar", .indigo)
@@ -264,7 +264,7 @@ struct ScreenTimeView: View {
                                             ZStack(alignment: .bottom) {
                                                 RoundedRectangle(cornerRadius: 5).fill(Color.cyan.opacity(0.5))
                                                     .frame(height: max(2, 140 * CGFloat(t) / CGFloat(maxDay)))
-                                                RoundedRectangle(cornerRadius: 5).fill(Color.pink)
+                                                RoundedRectangle(cornerRadius: 5).fill(Color.red)
                                                     .frame(height: t > 0 ? 140 * CGFloat(dis) / CGFloat(maxDay) : 0)
                                             }
                                             .frame(height: 140, alignment: .bottom)
@@ -293,13 +293,13 @@ struct ScreenTimeView: View {
                                             GeometryReader { g in
                                                 ZStack(alignment: .leading) {
                                                     Capsule().fill(Color.primary.opacity(0.07))
-                                                    Capsule().fill(dis ? Color.pink : .cyan)
+                                                    Capsule().fill(dis ? Color.red : .cyan)
                                                         .frame(width: g.size.width * CGFloat(a.seconds) / CGFloat(max(1, todayApps[0].seconds)))
                                                 }
                                             }
                                             .frame(height: 8)
                                             Text(durationString(seconds: a.seconds)).font(.caption.monospacedDigit()).frame(width: 60, alignment: .trailing)
-                                            Text("distracting").font(.caption2).foregroundStyle(.pink).opacity(dis ? 1 : 0)
+                                            Text("distracting").font(.caption2).foregroundStyle(.red).opacity(dis ? 1 : 0)
                                         }
                                         .contentShape(Rectangle())
                                     }
@@ -359,7 +359,7 @@ struct ScreenTimeView: View {
                             Button { toggleDistracting(app) } label: { Image(systemName: "xmark").font(.caption2) }.buttonStyle(.borderless)
                         }
                         .padding(.leading, 10).padding(.trailing, 6).padding(.vertical, 3)
-                        .background(Capsule().fill(Color.pink.opacity(0.12))))
+                        .background(Capsule().fill(Color.red.opacity(0.12))))
                     })
                     HStack {
                         TextField("App name, e.g. YouTube", text: $newApp).frame(width: 220).onSubmit(addApp)

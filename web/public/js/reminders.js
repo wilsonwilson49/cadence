@@ -12,6 +12,10 @@ export class Reminders {
     this.lastCheckIn = 0;
     this.fired = new Set(JSON.parse(sessionStorage.getItem('cadence:fired') || '[]'));
     this.hiddenSince = document.hidden ? Date.now() : null;
+    // Things set to keep after you: when each comes back (by occurrence id), how often it has, and why it was put off.
+    this.nagNext = new Map();
+    this.nagCount = new Map();
+    this.putOff = new Map();
   }
 
   get enabled() { return store.device('browserReminders', true); }
@@ -19,6 +23,7 @@ export class Reminders {
 
   start() {
     setInterval(() => this.tick(), 15_000);
+    setInterval(() => this.nagTick(), 5_000);
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.hiddenSince = Date.now(); return; }
       const away = this.hiddenSince ? Date.now() - this.hiddenSince : 0;
@@ -66,6 +71,45 @@ export class Reminders {
     if (channels.has('sound')) chime();
     if (channels.has('banner')) this.ui.banner(content);
     if (channels.has('checkIn')) this.ui.checkIn(content.title);
+  }
+
+  /** Open items set to Persistent, Pushy or Strict that are past their start. */
+  nagging(now = new Date()) {
+    return store.todayChecklist().filter(o => M.nagLevel(o.task) !== 'normal' && !o.resolved
+      && M.nagStart(o, store.settings.untimedReminderMinutes, now) <= now);
+  }
+
+  nagTick() {
+    if (!store.user || !this.enabled) return;
+    const now = new Date(), items = this.nagging(now);
+    if (this.ui.nagShowing()) { this.ui.nagRefresh(items); return; }
+    for (const o of items) {
+      const due = this.nagNext.get(o.id) ?? +M.nagStart(o, store.settings.untimedReminderMinutes, now);
+      if (+now < due) continue;
+      if (!this.ui.canInterrupt() && M.nagLevel(o.task) !== 'persistent') return;   // wait until the open dialog is closed
+      this.nagNext.set(o.id, +now + M.nagMinutes(o.task) * 60_000);
+      const n = (this.nagCount.get(o.id) || 0) + 1;
+      this.nagCount.set(o.id, n);
+      const level = M.nagLevel(o.task);
+      const title = `Still not done: ${o.task.title}`;
+      if (level === 'persistent') {
+        this.deliver({ kind: 'task', title, tag: `nag-${o.id}`, occurrence: o, tint: '#e3a23e',
+          body: n === 1 ? 'This one keeps reminding you until it’s checked off.' : `Reminder ${n}. It’ll keep coming back every ${M.nagMinutes(o.task)} min until it’s checked off.` },
+          ['notification', 'banner', 'sound']);
+      } else {
+        this.ui.nag(o, level, n, this.putOff.get(o.id) || []);
+        // Reaches you in another tab too.
+        if (document.hidden) this.deliver({ kind: 'task', title, tag: `nag-${o.id}`, occurrence: o, body: 'Open Cadence to check it off or put it off.' }, ['notification', 'sound']);
+        else chime();
+      }
+      break;
+    }
+  }
+
+  /** "Not now": back in `minutes`; a reason (strict) is kept for the day. */
+  snoozeNag(o, minutes, reason = '') {
+    this.nagNext.set(o.id, Date.now() + minutes * 60_000);
+    if (reason.trim()) this.putOff.set(o.id, [...(this.putOff.get(o.id) || []), { at: new Date(), reason: reason.trim() }]);
   }
 
   tick() {

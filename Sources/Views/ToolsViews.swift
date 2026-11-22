@@ -34,7 +34,7 @@ struct FlashcardsView: View {
                         let due = (course.map { [$0] } ?? courses).reduce(0) { $0 + $1.dueCards().count }
                         HStack(spacing: 14) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(due)").font(.system(size: 34, weight: .bold).monospacedDigit())
+                                Text("\(due)").font(Theme.serif(34).monospacedDigit())
                                 Text(due == 1 ? "card due today" : "cards due today").foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -42,7 +42,7 @@ struct FlashcardsView: View {
                                 .buttonStyle(.borderedProminent).controlSize(.large).disabled(due == 0)
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.pink.opacity(0.08)))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent.opacity(0.08)))
                         if let c = course ?? UUID(uuidString: addTo).flatMap(store.course) ?? courses.first {
                             Card {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -112,7 +112,7 @@ private struct CardRow: View {
             Divider()
             TextField("Back", text: bind(\.back), axis: .vertical).textFieldStyle(.plain).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             Text(card.isDue() ? "due" : "in \(Calendar.current.dateComponents([.day], from: Date().startOfDay, to: DateKey.date(card.due) ?? Date()).day ?? 0)d")
-                .font(.caption.monospacedDigit()).foregroundStyle(card.isDue() ? .pink : .secondary).frame(width: 44, alignment: .trailing)
+                .font(.caption.monospacedDigit()).foregroundStyle(card.isDue() ? Theme.accent : .secondary).frame(width: 44, alignment: .trailing)
             Button { store.editCourse(courseID) { $0.cards.removeAll { $0.id == card.id } } } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless).foregroundStyle(.secondary)
         }

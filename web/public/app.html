@@ -9,9 +9,13 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#e2558c">
+  <meta name="theme-color" content="#101317">
   <link rel="stylesheet" href="/css/app.css">
   <script type="module" src="/js/app.js"></script>
+  <script>
+    // Theme before first paint, so there's no flash. Dark unless this device chose otherwise.
+    try { document.documentElement.dataset.theme = localStorage.getItem('cadence:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
+  </script>
 </head>
 <body>
   <svg xmlns="http://www.w3.org/2000/svg" style="display:none">

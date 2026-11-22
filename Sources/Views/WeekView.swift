@@ -466,7 +466,7 @@ private struct SpanBar: View {
             if days > 1 { Text("\(days) days").font(.system(size: 10)).foregroundStyle(.secondary) }
         }
         .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(LinearGradient(colors: [color.opacity(0.28), color.opacity(0.12)], startPoint: .leading, endPoint: .trailing))
+        .background(color.opacity(0.2))
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: before ? 0 : 6, bottomLeadingRadius: before ? 0 : 6,
                                           bottomTrailingRadius: after ? 0 : 6, topTrailingRadius: after ? 0 : 6))
         .overlay(UnevenRoundedRectangle(topLeadingRadius: before ? 0 : 6, bottomLeadingRadius: before ? 0 : 6,

@@ -202,7 +202,7 @@ private struct ProjectDetail: View {
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     TextField("Project name", text: Binding(get: { project.title }, set: { v in editor.edit("ptitle") { $0.title = v } }))
-                        .textFieldStyle(.plain).font(.largeTitle.bold())
+                        .textFieldStyle(.plain).font(Theme.serif(32))
                     HStack(spacing: 10) {
                         Menu {
                             ForEach(TaskColor.allCases) { c in

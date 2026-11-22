@@ -16,6 +16,10 @@
       "destination": "/terms.html"
     },
     {
+      "source": "/blocked",
+      "destination": "/blocked.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

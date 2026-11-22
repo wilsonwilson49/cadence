@@ -43,6 +43,12 @@ const ringPrev = new Map(); // ring key -> last drawn fraction, so rings animate
 
 const reminders = new Reminders({
   banner: content => showBanner(content),
+  // Pushy and strict reminders: a dialog (strict covers the page). Never on top of an editor you're typing in.
+  nag: (occ, level, count, putOff) => { if (ui.modal) closeModal(); openModal({ type: 'nag', occ, level, count, putOff }); },
+  nagShowing: () => ui.modal?.type === 'nag',
+  canInterrupt: () => !ui.modal || ['checkin', 'detail'].includes(ui.modal.type),
+  // Checked off somewhere else (another tab, the Mac): the dialog goes away.
+  nagRefresh: items => { if (ui.modal?.type === 'nag' && !items.some(o => o.id === ui.modal.occ.id)) closeModal(); },
   checkIn: title => openModal({ type: 'checkin', title, reflecting: null }),
   openChecklist: occ => {
     if (occ && !occ.resolved) beginReflection(occ);
@@ -204,6 +210,10 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (M.isUntilDone(t) && !compact && !o.resolved) meta.push(`<span>${ic('flame')}${esc(M.carryLabel(t, o.day))}</span>`);
   const plan = M.planSummary(t);
   if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
+  if (M.nagLevel(t) !== 'normal' && !o.resolved) {
+    const [, label, desc] = M.NAG_LEVELS.find(x => x[0] === M.nagLevel(t));
+    meta.push(`<span class="${M.nagLevel(t) === 'strict' ? 'red' : 'orange'}" title="Keeps after you until it’s checked off. ${esc(desc)}">${ic(M.nagLevel(t) === 'strict' ? 'lock' : 'bell')}${label}</span>`);
+  }
   if (M.pastDue(t)) meta.push(`<span class="red"><b>Past due</b></span>`);
   if (o.overdue) meta.push('<span class="red"><b>Overdue</b></span>');
   if (t.source === 'calendly') meta.push(`<span>${ic('people')}Calendly</span>`);
@@ -308,7 +318,7 @@ function homeView() {
         return tile('habits', 'habit', 'Habits', hs.length, best ? `best streak ${best} days` : 'build one today', '#30d158'); })()}
       ${tile('reflections', 'quote', 'Reflections', store.reflections.size, store.reflectionStreak ? `${store.reflectionStreak}-day streak` : 'your record', '#5e5ce6')}
       ${(() => { const pts = store.focusSessions.reduce((n, s) => n + (s.points || 0), 0); const lv = M.focusLevel(pts);
-        return tile('focus', 'target', 'Focus', `Level ${lv.level}`, `${pts} points`, '#ff375f'); })()}
+        return tile('focus', 'target', 'Focus', `Level ${lv.level}`, `${pts} points`, '#82a8ef'); })()}
       ${(() => { const today = store.screenDays(new Date()); const sec = today.reduce((n, d) => n + (d.totalSeconds || 0), 0);
         return tile('screentime', 'monitor', 'Screen time', today.length ? M.fmtDuration(sec) : '—', today.length ? 'today on your Mac' : 'tracked by the Mac app', '#5ac8fa'); })()}
       ${tile('booking', 'people', 'Open time', durLabel(openTimeDays().reduce((n, d) => n + d.total, 0)), 'free in the next 7 days', '#30d158')}
@@ -559,7 +569,7 @@ function endFocus() {
   Object.assign(focus, { running: false });
   saveFocus();
   ui.focusResult = session;
-  reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#ff375f' },
+  reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#82a8ef' },
     store.settings.defaultChannels);
   navigate('focus');
 }
@@ -674,7 +684,7 @@ function screenTimeView() {
         <div class="small muted">A website can’t see what other apps you use. In the Mac app, open Screen Time and turn on tracking: it records how long each app is in front while you’re using your Mac, and the daily totals show up here and on every device.</div></div></div>` : ''}
       <div class="stats">
         <div class="stat" style="background:${tint('#5ac8fa', .12)}"><span style="color:#5ac8fa">${ic('monitor')}</span><div><b class="${over(today.total, s.screenLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.total) : '—'}</b><span class="small muted">today${s.screenLimitMinutes ? ` · limit ${M.fmtDuration(s.screenLimitMinutes * 60)}` : ''}</span></div></div>
-        <div class="stat" style="background:${tint('#ff375f', .1)}"><span style="color:#ff375f">${ic('alert')}</span><div><b class="${over(today.distracting, s.distractingLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.distracting) : '—'}</b><span class="small muted">distracting${s.distractingLimitMinutes ? ` · limit ${M.fmtDuration(s.distractingLimitMinutes * 60)}` : ''}</span></div></div>
+        <div class="stat" style="background:${tint('#e4685f', .1)}"><span style="color:#e4685f">${ic('alert')}</span><div><b class="${over(today.distracting, s.distractingLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.distracting) : '—'}</b><span class="small muted">distracting${s.distractingLimitMinutes ? ` · limit ${M.fmtDuration(s.distractingLimitMinutes * 60)}` : ''}</span></div></div>
         <div class="stat" style="background:${tint('#30d158', .1)}"><span style="color:#30d158">${ic('target')}</span><div><b>${M.fmtDuration(store.focusSessions.filter(x => M.isToday(x.startedAt)).reduce((n, x) => n + (x.actualMinutes || 0) * 60, 0))}</b><span class="small muted">in focus sessions today</span></div></div>
         <div class="stat" style="background:${tint('#5e5ce6', .1)}"><span style="color:#5e5ce6">${ic('week')}</span><div><b>${days.some(x => x.has) ? M.fmtDuration(days.reduce((n, x) => n + x.total, 0) / Math.max(1, days.filter(x => x.has).length)) : '—'}</b><span class="small muted">daily average (7 days)</span></div></div></div>
       ${days.some(x => x.has) ? `<div class="card pad"><div class="section-title" style="margin:0 0 10px">${ic('week')}Last 7 days</div>
@@ -1073,6 +1083,45 @@ function bookingView() {
 }
 
 // ---------- Settings ----------
+/** Pushy and strict reminders. Strict covers the page and putting it off takes a reason. */
+function nagDialog(m) {
+  const o = m.occ, t = o.task, strict = m.level === 'strict', every = M.nagMinutes(t);
+  const since = o.day < M.startOfDay(new Date()) ? `Overdue since ${M.fmtDay(o.day, { weekday: 'long', month: 'short', day: 'numeric' })}`
+    : o.start ? `Was due at ${M.fmtTime(o.start)}` : t.dueDate ? `Due ${M.fmtDay(new Date(t.dueDate), { weekday: 'long', month: 'short', day: 'numeric' })}` : 'On today’s list';
+  const putOff = m.putOff || [];
+  return `<div class="dialog nag ${strict ? 'strict' : ''}"><div class="body">
+    <div class="nag-ic ${strict ? 'red' : 'orange'}">${ic(strict ? 'lock' : 'alert')}</div>
+    <div class="nag-kicker">Still not done</div>
+    <h2 class="nag-title">${esc(t.title)}</h2>
+    <div class="muted">${esc(since)} · reminder ${m.count}${m.count > 1 ? `, every ${every} min` : ''}</div>
+    ${putOff.length ? `<div class="nag-log"><b>Put off ${putOff.length} time${putOff.length === 1 ? '' : 's'} today:</b>${putOff.slice(-3).map(p => `<div>${M.fmtTime(p.at)} — “${esc(p.reason)}”</div>`).join('')}</div>` : ''}
+    ${strict ? '<div class="small muted">In the Cadence Mac app, your distracting apps and blocked websites stay blocked until this is done.</div>' : ''}
+    <div class="row nag-actions"><button class="btn primary" data-act="nag-done" autofocus>${ic('check')} Check it off…</button><button class="btn" data-act="nag-open">Open Today</button></div>
+    ${strict ? `<div class="nag-why"><label class="field"><span>Not now? Say why, in a few words.</span>
+        <input class="input" id="nagWhy" value="${esc(m.why || '')}" placeholder="e.g. at dinner with family, back at 8" autocomplete="off"></label>
+        <div class="row"><select class="input" id="nagMin" style="width:auto">${[10, 15, 30, 60].map(x => `<option value="${x}" ${(m.minutes || 15) === x ? 'selected' : ''}>${x === 60 ? '1 hour' : `${x} min`}</option>`).join('')}</select>
+        <button class="btn" data-act="nag-snooze">Put it off</button>${m.error ? `<span class="error">${esc(m.error)}</span>` : ''}</div></div>`
+      : `<div class="row nag-actions"><span class="small muted">Not now:</span>${[5, 10, 30, 60].map(x => `<button class="btn sm" data-act="nag-snooze" data-min="${x}">${x === 60 ? '1 hour' : `${x} min`}</button>`).join('')}</div>`}
+  </div></div>`;
+}
+
+/** Settings › Tough love: a domain from whatever was typed ("https://www.youtube.com/watch…" → "youtube.com"). */
+function addBlockedSite(raw) {
+  let d = String(raw || '').trim().toLowerCase();
+  try { d = new URL(d.includes('://') ? d : `https://${d}`).hostname; } catch { return; }
+  d = d.replace(/^www\./, '');
+  const list = store.settings.blockedSites || [];
+  if (!d.includes('.') || list.includes(d)) return;
+  store.updateSettings({ blockedSites: [...list, d] }); render();
+}
+
+/** Dark / light / match the system. Stored on this device and applied before first paint (see app.html). */
+const currentTheme = () => { try { return localStorage.getItem('cadence:theme') || 'dark'; } catch { return 'dark'; } };
+function setTheme(t) {
+  try { localStorage.setItem('cadence:theme', t); } catch { /* private mode: still applies for this visit */ }
+  document.documentElement.dataset.theme = t;
+}
+
 function settingsView() {
   const s = store.settings, g = store.google;
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
@@ -1084,6 +1133,21 @@ function settingsView() {
   return `<div class="header"><div class="grow"><h1>Settings</h1><div class="sub">Settings marked “this device” stay on this browser; everything else syncs with the Mac app.</div></div></div>
   <div class="page settings">
     ${ui.flash ? `<div class="callout"><span class="big">${ic('check')}</span><div class="grow">${esc(ui.flash)}</div><button class="btn ghost sm" data-act="clear-flash">${ic('x')}</button></div>` : ''}
+    <div><h3>Appearance</h3><div class="card">
+      <div class="srow"><div>Theme<div class="small muted">This device. Dark is the default.</div></div>
+        <select class="input" data-theme-pick>${[['dark', 'Dark'], ['light', 'Light'], ['system', 'Match the system']].map(([v, l]) => `<option value="${v}" ${currentTheme() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    </div></div>
+
+    <div><h3>Tough love</h3><div class="card">
+      <div class="srow"><div class="grow">For things you’d rather put off<div class="small muted">In a task’s editor, set <b>Persistent</b>, <b>Pushy</b> or <b>Strict</b> and it keeps after you until it’s checked off. Strict covers the screen and asks why when you put it off.</div></div></div>
+      <div class="srow">${tog('blockDuringFocus', 'Block distracting apps and sites during focus and study sessions (Mac app)', s.blockDuringFocus)}</div>
+      <div class="srow" style="flex-wrap:wrap"><div class="grow">Blocked websites<div class="small muted">The Cadence Mac app blocks these in Safari, Chrome, Arc, Brave, Edge, Vivaldi and Opera while a strict task is overdue (and during focus sessions if that’s on). A browser tab can’t block other sites, so this needs the Mac app.</div>
+        <div class="chips" style="margin-top:8px">${(s.blockedSites || []).map(x => `<span class="chip-x">${esc(x)}<button data-act="site-remove" data-site="${esc(x)}" title="Remove">${ic('x')}</button></span>`).join('') || '<span class="small muted">None yet.</span>'}</div>
+        <form class="row" data-form="site-add" style="margin-top:8px"><input class="input" id="siteNew" placeholder="e.g. youtube.com" style="max-width:240px" autocomplete="off"><button class="btn">Add</button>
+          <select class="input" data-site-suggest style="width:auto"><option value="">Suggestions…</option>${['youtube.com', 'instagram.com', 'tiktok.com', 'reddit.com', 'x.com', 'facebook.com', 'netflix.com', 'twitch.tv'].filter(x => !(s.blockedSites || []).includes(x)).map(x => `<option>${x}</option>`).join('')}</select></form></div></div>
+      <div class="srow"><div class="small muted">Blocked apps are the ones marked distracting on the Screen Time page.</div><a class="btn sm" href="/app/screentime">Screen Time</a></div>
+    </div></div>
+
     <div><h3>Account & sync</h3><div class="card">
       <div class="srow"><div>Signed in as <b>${esc(store.user.username)}</b><div class="small muted">You stay signed in on this browser until you sign out.</div></div><button class="btn" data-act="sign-out">${ic('logout')} Sign out</button></div>
       <div class="srow"><div>Sync<div class="small muted">Changes sync a moment after you make them, and every 20 seconds.</div></div>${syncControl('big')}</div>
@@ -1239,7 +1303,7 @@ function closeModal() { ui.modal = null; renderModal(); render(); }
 function renderModal() {
   const root = $('#modal');
   const m = ui.modal;
-  if (!m) { root.innerHTML = ''; return; }
+  if (!m) { root.innerHTML = ''; ui.modalHTML = null; return; }
   let html = '';
   if (m.type === 'reflection') html = reflectionDialog(m.occ, 'reflection', m.mode);
   else if (m.type === 'checkin') html = m.reflecting ? reflectionDialog(m.reflecting, 'checkin', m.reflectMode) : checkInDialog(m);
@@ -1262,6 +1326,7 @@ function renderModal() {
     <div class="foot" style="flex-wrap:wrap"><button class="btn" data-act="close">Cancel</button><span class="grow"></span>
       <button class="btn" data-act="google-hide">Hide in Cadence</button>
       <button class="btn primary" style="background:var(--red)" data-act="google-delete" ${m.working ? 'disabled' : ''}>${m.working ? 'Deleting…' : 'Delete from Google too'}</button></div></div>`;
+  else if (m.type === 'nag') html = nagDialog(m);
   else if (m.type === 'pj-keys') html = `<div class="dialog sm"><div class="body"><h2>Keyboard shortcuts</h2>
       <table class="keys">${PROJECT_KEYS.map(([k, v]) => `<tr><td><kbd>${esc(k)}</kbd></td><td class="muted">${esc(v)}</td></tr>`).join('')}</table>
       <div class="small muted" style="margin-top:10px">No shortcuts needed: the + boxes add subtasks, the bar above the list changes picked ones, and each row has its own buttons. On Windows, use Ctrl for ⌘.</div></div>
@@ -1272,7 +1337,25 @@ function renderModal() {
     <div class="foot"><span class="grow"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="sel-checkoff-go">Check off</button></div></div>`;
   else if (m.type === 'confirm') html = `<div class="dialog sm"><div class="body"><h2>${esc(m.title)}</h2><div class="muted">${esc(m.text)}</div></div>
     <div class="foot">${m.alt ? `<button class="btn danger" data-act="confirm-alt">${esc(m.alt)}</button>` : ''}<span class="grow"></span><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-yes">${esc(m.yes)}</button></div></div>`;
-  root.innerHTML = `<div class="overlay ${ui.modalFresh ? 'opening' : ''}" data-act="overlay">${html}</div>`;
+  // The popup is redrawn whenever the app refreshes (sync, the minute tick, any change). Rebuilding the whole
+  // overlay each time replayed its fade and made the backdrop and dialog flicker over the page. So: nothing
+  // changes when nothing changed, and otherwise only the dialog's contents are swapped, keeping scroll and focus.
+  const overlay = root.firstElementChild;
+  if (overlay && !ui.modalFresh) {
+    if (html === ui.modalHTML) return;
+    ui.modalHTML = html;
+    const scrollEl = overlay.querySelector('.dialog .body'), scrollTop = scrollEl?.scrollTop ?? 0;
+    const active = document.activeElement, focusId = overlay.contains(active) ? active.id : null;
+    const sel = focusId && 'selectionStart' in active ? [active.selectionStart, active.selectionEnd] : null;
+    overlay.innerHTML = html;
+    const body = overlay.querySelector('.dialog .body'); if (body) body.scrollTop = scrollTop;
+    if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); if (sel) try { el.setSelectionRange(...sel); } catch { /* not text */ } } }
+    animateRings();
+    return;
+  }
+  ui.modalHTML = html;
+  const cover = m.type === 'nag' && m.level === 'strict';
+  root.innerHTML = `<div class="overlay ${ui.modalFresh ? 'opening' : ''} ${cover ? 'cover' : ''}" data-act="overlay">${html}</div>`;
   ui.modalFresh = false;
   animateRings();
   const focus = root.querySelector('[autofocus]');
@@ -1304,7 +1387,7 @@ function checkInDialog(m) {
   const items = store.countedToday(), done = items.filter(o => o.done).length, left = items.filter(o => !o.resolved).length;
   const upcoming = scheduleOn(new Date()).filter(e => !e.allDay && e.end > new Date()).map(e => ({ title: e.title, startDate: e.start, colorHex: e.color }));
   return `<div class="dialog"><div class="body">
-    <div class="row" style="gap:14px"><span class="badge-icon" style="width:46px;height:46px;background:linear-gradient(135deg,#ffb340,#ff7a00)">${ic('sun')}</span>
+    <div class="row" style="gap:14px"><span class="badge-icon" style="width:46px;height:46px;background:var(--orange)">${ic('sun')}</span>
       <div class="grow"><h2>${esc(m.title)}</h2><div class="muted">${M.fmtDay(new Date())} · ${!items.length ? 'nothing scheduled' : done === items.length ? 'all done' : left ? `${left} left` : 'all settled'}</div></div>
       ${todayRing(done, items.length, 54, 6, 'checkin')}</div>
     ${done && done === items.length ? `<div class="green">${ic('check')} Everything is checked off. Nice work.</div>` : ''}
@@ -1895,6 +1978,10 @@ function editorDialog(m) {
       ${!m.hasTime ? `<div class="small muted">Tasks without a time remind at ${M.fmtTimeMinutes(store.settings.untimedReminderMinutes)} on the day.</div>` : ''}` : ''}
       ${d.source ? `<div class="small muted">Imported from ${d.source === 'calendly' ? 'Calendly' : 'Google Calendar'}. Its title and time update on each import.</div>` : ''}
     </div>
+    ${M.isEvent(d) ? '' : `<div class="fieldset"><div class="legend">For things you’d rather put off</div>
+      <div class="seg wide">${M.NAG_LEVELS.map(([k, l]) => `<button type="button" class="${M.nagLevel(d) === k ? 'on' : ''}" data-act="edit-nag" data-nag="${k}">${l}</button>`).join('')}</div>
+      <div class="small muted">${esc(M.NAG_LEVELS.find(x => x[0] === M.nagLevel(d))[2])}</div>
+      ${M.nagLevel(d) !== 'normal' ? `<label class="field"><span>Comes back every</span><select class="input" data-edit="nagEvery" style="width:auto">${M.NAG_EVERY.map(x => `<option value="${x}" ${M.nagMinutes(d) === x ? 'selected' : ''}>${x === 60 ? 'hour' : `${x} min`}</option>`).join('')}</select></label>` : ''}</div>`}
     <div class="fieldset"><div class="legend">Color</div><div class="swatches">${Object.entries(M.COLORS).map(([k, v]) => `<button type="button" class="swatch ${d.color === k ? 'on' : ''}" style="background:${v}" data-act="edit-color" data-color="${k}" title="${k}"></button>`).join('')}</div></div>
     ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !d.source
       ? `<label class="check"><input type="checkbox" data-edit="addToGTasks" ${m.addToGTasks ? 'checked' : ''}>${ic('list')} Also add to Google Tasks</label>` : ''}
@@ -1960,6 +2047,7 @@ function readEditorInputs() {
   if (notify && !notify.checked) m.draft.channels = [];
   else if (root.querySelector('[data-edit="channel"]')) m.draft.channels = [...root.querySelectorAll('[data-edit="channel"]:checked')].map(e => e.value);
   else if (notify?.checked) m.draft.channels = [...store.settings.defaultChannels];
+  if (val('nagEvery')) { const v = Number(val('nagEvery').value); if (v && v !== 10) m.draft.nagEvery = v; else delete m.draft.nagEvery; }
   if (val('addToGoogle')) m.addToGoogle = val('addToGoogle').checked;
   if (val('syncGoogle')) m.syncGoogle = val('syncGoogle').checked;
   if (val('addToGTasks')) m.addToGTasks = val('addToGTasks').checked;
@@ -1975,7 +2063,7 @@ async function saveEditor() {
   t.recurrence.end = m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} };
   if (t.recurrence.frequency === 'weekly' && !t.recurrence.weekdays.length) t.recurrence.weekdays = [M.weekday(M.parseKey(m.date))];
   if (t.recurrence.frequency !== 'weekly') t.recurrence.weekdays = [];
-  if (M.isEvent(t)) delete t.mode;
+  if (M.isEvent(t)) { delete t.mode; delete t.nag; delete t.nagEvery; }
   // Habits keep their Atomic Habits notes (trimmed); tasks and events don't have any.
   // Habit steps: drop empty ones (and add one still typed in the box).
   const steps = [...(t.steps || []), ...(m.stepNew?.trim() ? [{ id: M.uuid(), title: m.stepNew }] : [])]
@@ -2694,7 +2782,7 @@ function studyStats() {
   const today = store.studyMinutes(new Date()), week = [...Array(7)].reduce((n, _, i) => n + store.studyMinutes(M.addDays(new Date(), -i)), 0);
   const tile = (v, l, i, hue, href) => `<${href ? `a href="${href}"` : 'div'} class="stat" style="background:${tint(hue, .1)};${href ? 'text-decoration:none;color:inherit' : ''}"><span style="color:${hue}">${ic(i)}</span><div><b>${v}</b><span class="small muted">${l}</span></div></${href ? 'a' : 'div'}>`;
   return `<div class="stats4">${tile(M.fmtDuration(today * 60), 'studied today', 'clock', '#5e5ce6')}${tile(M.fmtDuration(week * 60), 'in the last 7 days', 'week', '#0a84ff')}
-    ${tile(store.studyStreak, 'day streak', 'flame', '#ff9f0a')}${tile(store.dueCardCount, 'flashcards due', 'cards', '#ff375f', '/app/flashcards')}</div>`;
+    ${tile(store.studyStreak, 'day streak', 'flame', '#ff9f0a')}${tile(store.dueCardCount, 'flashcards due', 'cards', '#82a8ef', '/app/flashcards')}</div>`;
 }
 
 /** This session's copy of the chosen preset (saved one, or a built-in "tpl:<name>"): change any length before starting. */
@@ -2962,6 +3050,7 @@ function customRemindersView() {
 const remNew = over => { const r = store.upsertCustomReminder(M.newCustomReminder(over)); ui.remSel = r.id; render(); };
 
 const actions = {
+  'site-remove': el => { store.updateSettings({ blockedSites: (store.settings.blockedSites || []).filter(x => x !== el.dataset.site) }); render(); },
   'sel-toggle': () => { ui.weekSelecting = !ui.weekSelecting; if (!ui.weekSelecting) ui.weekSel = new Map(); render(); },
   'sel-done': () => { ui.weekSelecting = false; ui.weekSel = new Map(); render(); },
   'sel-clear': () => { ui.weekSel = new Map(); render(); },
@@ -3337,7 +3426,18 @@ const actions = {
   'confirm-yes': () => { const fn = ui.modal.fn; closeModal(); fn(); },
   'confirm-alt': () => { const fn = ui.modal.altFn; closeModal(); fn?.(); },
   close: el => { const then = el.dataset.then; closeModal(); if (then) navigate(then); },
-  overlay: (el, e) => { if (e.target === el && ui.modal?.type !== 'editor') closeModal(); },
+  overlay: (el, e) => { if (e.target === el && !['editor', 'nag'].includes(ui.modal?.type)) closeModal(); },
+  'nag-done': () => { const o = ui.modal.occ; reminders.snoozeNag(o, 5); closeModal(); beginReflection(o); },
+  'nag-open': () => { const o = ui.modal.occ; reminders.snoozeNag(o, M.nagMinutes(o.task)); closeModal(); navigate('today'); },
+  'nag-snooze': el => {
+    const m = ui.modal, o = m.occ;
+    if (m.level === 'strict') {
+      m.why = $('#nagWhy')?.value || ''; m.minutes = Number($('#nagMin')?.value) || 15;
+      if (M.countWords(m.why) < 4) { m.error = 'Say why in at least 4 words.'; renderModal(); setTimeout(() => $('#nagWhy')?.focus(), 0); return; }
+      reminders.snoozeNag(o, m.minutes, m.why);
+    } else reminders.snoozeNag(o, Number(el.dataset.min) || 10);
+    closeModal();
+  },
   'checkin-back': () => { ui.modal.reflecting = null; renderModal(); },
   'check-in': () => reminders.checkIn('Daily check-in', { manual: true }),
   detail: el => openModal({ type: 'detail', item: el.dataset.item }),
@@ -3440,6 +3540,7 @@ const actions = {
   },
   'edit-weekdays': () => { readEditorInputs(); ui.modal.draft.recurrence.weekdays = [2, 3, 4, 5, 6]; renderModal(); },
   'edit-color': el => { readEditorInputs(); ui.modal.draft.color = el.dataset.color; renderModal(); },
+  'edit-nag': el => { readEditorInputs(); const d = ui.modal.draft; if (el.dataset.nag === 'normal') { delete d.nag; delete d.nagEvery; } else d.nag = el.dataset.nag; renderModal(); },
 };
 
 // Single click on a week block opens details; double click adds a task at that moment.
@@ -3522,6 +3623,8 @@ function setProjectDate(el, value) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
+  if (el.dataset.themePick !== undefined) { setTheme(el.value); return; }
+  if (el.dataset.siteSuggest !== undefined) { if (el.value) addBlockedSite(el.value); return; }
   if (el.dataset.pjDue !== undefined) { const v = el.value; if (v) projOps.setDue(v === 'none' ? null : M.dateKey(M.addDays(new Date(), Number(v)))); return; }
   if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
   if (el.dataset.selMove !== undefined) {
@@ -3647,6 +3750,7 @@ document.addEventListener('submit', async e => {
     setTimeout(() => $('#cardFront')?.focus(), 0);
     return;
   }
+  if (kind === 'site-add') { addBlockedSite($('#siteNew')?.value); setTimeout(() => $('#siteNew')?.focus(), 0); return; }
   if (kind === 'project-add') {
     const input = form.querySelector('input'), title = input.value.trim();
     if (title) store.editProject(form.dataset.project, p => M.insertItem(p, M.newProjectItem({ title })));
@@ -3775,7 +3879,7 @@ document.addEventListener('keydown', e => {
     if (k === 'c') { e.preventDefault(); reminders.checkIn('Daily check-in', { manual: true }); return; }
     if (k === 's') { e.preventDefault(); syncUI.manual = true; store.sync(); return; }
   }
-  if (e.key === 'Escape' && ui.modal && ui.modal.type !== 'editor') closeModal();
+  if (e.key === 'Escape' && ui.modal && !['editor', 'nag'].includes(ui.modal.type)) closeModal();
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.id === 'reflText' && !$('#reflSubmit').disabled) $('#reflSubmit').click();
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.closest('[data-form="editor"]')) { e.preventDefault(); saveEditor(); }
 });

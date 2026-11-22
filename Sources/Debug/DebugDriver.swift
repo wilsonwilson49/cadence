@@ -42,6 +42,10 @@ enum DebugDriver {
                                                              items: [ProjectItem(title: "Pick dates"), ProjectItem(title: "Book flights", due: DateKey.string(Date().adding(days: 10)))])]
         }
         if let s = LaunchOptions.value("-screen"), let screen = Screen(rawValue: s) { model.screen = screen }
+        // -nagPreview pushy|strict: shows that reminder window (for screenshots).
+        if let l = LaunchOptions.value("-nagPreview"), let level = NagLevel(rawValue: l) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { model.nag.preview(level) }
+        }
         // -weekSelect: Week calendar in Select mode with today's tasks picked.
         if LaunchOptions.args.contains("-weekSelect") {
             model.screen = .week; model.weekSelecting = true

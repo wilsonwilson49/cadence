@@ -550,7 +550,7 @@ private struct StudyStats: View {
             tile("\(durationString(seconds: week * 60))", "in the last 7 days", "calendar", .blue)
             tile("\(store.studyStreak)", store.studyStreak == 1 ? "day streak" : "day streak", "flame", .orange)
             Button { model.screen = .flashcards } label: {
-                tile("\(store.dueCardCount)", "flashcards due", "rectangle.on.rectangle.angled", .pink)
+                tile("\(store.dueCardCount)", "flashcards due", "rectangle.on.rectangle.angled", Theme.accent)
             }
             .buttonStyle(.plain)
         }
@@ -683,7 +683,7 @@ private struct CourseEditor: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 TextField("Preset name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } }))
-                    .textFieldStyle(.plain).font(.title.bold())
+                    .textFieldStyle(.plain).font(Theme.serif(26))
                 Menu {
                     ForEach(TaskColor.allCases) { col in Button(col.rawValue.capitalized) { edit { $0.color = col } } }
                 } label: { Circle().fill(c.color.color).frame(width: 16, height: 16) }

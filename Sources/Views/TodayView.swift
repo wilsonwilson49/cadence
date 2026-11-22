@@ -29,7 +29,7 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(greeting).font(.title3).foregroundStyle(.secondary)
                         Text(today.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                            .font(.largeTitle.bold())
+                            .font(Theme.serif(32))
                         Text(statusLine(done: done, settled: settled, total: total))
                             .foregroundStyle(.secondary)
                     }

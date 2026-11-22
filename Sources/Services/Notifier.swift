@@ -175,7 +175,7 @@ struct BannerView: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(content.tint.gradient))
+                .background(Circle().fill(content.tint))
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text("CADENCE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)

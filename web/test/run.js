@@ -195,5 +195,21 @@ check(fmtFocusLength(45) === '45 min' && fmtFocusLength(90) === '1h 30m' && fmtF
 const gtask = await taskFromGoogleTask({ id: 'abc', listId: 'L1', title: 'Return books', notes: 'n', due: '2026-11-02' });
 check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && isUntilDone(gtask) && gtask.source === 'gtasks' && gtask.sourceCalendar === 'L1'
   && dateKey(gtask.dueDate) === '2026-11-02' && !gtask.channels.length && calendarKeyOf(gtask) === 'gtasks', 'google tasks: mapping');
+// Things you'd rather put off: levels, interval, and when they start keeping after you.
+{
+  const M2 = await import('../public/js/model.js');
+  const now = new Date(2026, 10, 21, 15, 0);
+  const base = { id: 'n1', title: 'Essay', startDate: new Date(2026, 10, 21).toISOString(), recurrence: { frequency: 'none', interval: 1, weekdays: [] }, reminderOffsets: [0], channels: [] };
+  check(M2.nagLevel({ nag: 'strict' }) === 'strict' && M2.nagLevel({ nag: 'bogus' }) === 'normal' && M2.nagLevel({}) === 'normal', 'nag: levels');
+  check(M2.nagMinutes({}) === 10 && M2.nagMinutes({ nagEvery: 3 }) === 3, 'nag: interval defaults to 10 min');
+  const timed = { task: { ...base, timeMinutes: 14 * 60 }, day: new Date(2026, 10, 21) };
+  check(+M2.nagStart(timed, 540, now) === +new Date(2026, 10, 21, 14, 0), 'nag: starts at the task time');
+  const untimed = { task: base, day: new Date(2026, 10, 21) };
+  check(+M2.nagStart(untimed, 540, now) === +new Date(2026, 10, 21, 9, 0), 'nag: untimed starts at the reminder time');
+  const overdue = { task: base, day: new Date(2026, 10, 18) };
+  check(+M2.nagStart(overdue, 540, now) === +new Date(2026, 10, 18), 'nag: overdue already started');
+  const until = { task: { ...base, mode: 'untilDone', timeMinutes: 600 }, day: new Date(2026, 10, 18) };
+  check(+M2.nagStart(until, 540, now) === +new Date(2026, 10, 21, 10, 0), 'nag: until-done starts at its time each day');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

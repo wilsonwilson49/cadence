@@ -211,7 +211,7 @@ struct HabitsScreen: View {
                                     Text(Calendar.current.veryShortWeekdaySymbols[Calendar.current.component(.weekday, from: d) - 1]).font(.system(size: 9)).foregroundStyle(.secondary)
                                     Text(d.formatted(.dateTime.day())).font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(d.isToday ? .white : .primary)
-                                        .frame(width: 20, height: 16).background(Capsule().fill(d.isToday ? Color.pink : .clear))
+                                        .frame(width: 20, height: 16).background(Capsule().fill(d.isToday ? Theme.solid : .clear))
                                 }
                                 .frame(width: 24, height: 30)
                             }
@@ -318,8 +318,8 @@ struct WeekScreen: View {
                         ForEach(occs.filter(\.isEvent)) { MobileEventRow(occ: $0) }
                     } header: {
                         HStack {
-                            Text(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())).foregroundStyle(day.isToday ? Color.pink : .secondary)
-                            if day.isToday { Text("Today").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Color.pink)) }
+                            Text(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())).foregroundStyle(day.isToday ? Theme.accent : .secondary)
+                            if day.isToday { Text("Today").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Theme.solid)) }
                         }
                     }
                 }
@@ -362,10 +362,10 @@ struct FocusScreen: View {
                 Section {
                     HStack(spacing: 14) {
                         Text("\(lv.level)").font(.title.weight(.heavy)).foregroundStyle(.white).frame(width: 50, height: 50)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(LinearGradient(colors: [.pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.solid))
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Level \(lv.level) · \(points) points").font(.headline)
-                            ProgressView(value: Double(lv.into), total: Double(lv.span)).tint(.pink)
+                            ProgressView(value: Double(lv.into), total: Double(lv.span)).tint(Theme.accent)
                             Text("\(Focus.streak(sessions))-day streak · \(lv.span - lv.into) to level \(lv.level + 1)").font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -400,7 +400,7 @@ struct FocusScreen: View {
         Section {
             ZStack {
                 Circle().stroke(Color.primary.opacity(0.08), lineWidth: 14)
-                Circle().trim(from: 0, to: frac).stroke(focus.secondsLeft < 300 ? Color.orange : .pink, style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                Circle().trim(from: 0, to: frac).stroke(focus.secondsLeft < 300 ? Color.orange : Theme.accent, style: StrokeStyle(lineWidth: 14, lineCap: .round))
                     .rotationEffect(.degrees(-90)).animation(.linear(duration: 1), value: frac)
                 VStack {
                     Text(focus.clock).font(.system(size: 48, weight: .bold).monospacedDigit())
@@ -452,7 +452,7 @@ struct FocusScreen: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     ForEach(lengths, id: \.self) { m in
-                        Button(Focus.label(m)) { minutes = m }.buttonStyle(.bordered).tint(minutes == m ? .pink : .gray)
+                        Button(Focus.label(m)) { minutes = m }.buttonStyle(.bordered).tint(minutes == m ? Theme.accent : .gray)
                             .contextMenu {
                                 Button("Remove \(Focus.label(m))", systemImage: "trash", role: .destructive) {
                                     store.settings.focusLengths.removeAll { $0 == m }
@@ -491,7 +491,7 @@ struct FocusScreen: View {
                     picks = s
                 } label: {
                     HStack {
-                        Image(systemName: selected.contains(o.id) ? "checkmark.square.fill" : "square").foregroundStyle(selected.contains(o.id) ? Color.pink : .secondary)
+                        Image(systemName: selected.contains(o.id) ? "checkmark.square.fill" : "square").foregroundStyle(selected.contains(o.id) ? Theme.accent : .secondary)
                         Text(o.task.title).foregroundStyle(.primary)
                         Spacer()
                         Text(o.isHabit ? "habit" : o.isUntilDone ? "until done" : "today").font(.caption).foregroundStyle(.secondary)
@@ -610,8 +610,12 @@ struct ReflectionsScreen: View {
 struct SettingsScreen: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var model: MobileModel
+    @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
     var body: some View {
         Form {
+            Section {
+                Picker("Theme", selection: $appearance) { ForEach(AppearanceMode.allCases) { Text($0.title).tag($0.rawValue) } }
+            } header: { Text("Appearance") } footer: { Text("This iPhone only. Dark is the default.") }
             Section {
                 Picker("Ring shows", selection: $store.settings.ringShowsLeft) {
                     Text("What's left").tag(true); Text("What's done").tag(false)

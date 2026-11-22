@@ -19,6 +19,7 @@ struct CadenceApp: App {
                 .environmentObject(AppModel.shared.focus)
                 .environmentObject(AppModel.shared.screenTime)
                 .environmentObject(AppModel.shared.study)
+                .tint(Theme.accent)
         } label: {
             MenuBarLabel(store: store, focus: AppModel.shared.focus, study: AppModel.shared.study)
         }
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.launchedAtLogin = event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         NSApp.setActivationPolicy(.regular)
+        AppearanceMode.current.apply()
         AppModel.shared.start()
         // Reminders run on a timer; keep App Nap from delaying it while Cadence has no window open.
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep],

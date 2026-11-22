@@ -266,6 +266,27 @@ struct TaskEditor: View {
                     }
                 }
 
+                if !task.isEvent {
+                    Section {
+                        Picker("Keep after me", selection: Binding(get: { task.nagLevel }, set: { task.nag = $0 == .normal ? nil : $0.rawValue })) {
+                            ForEach(NagLevel.allCases) { l in Label(l.title, systemImage: l.symbol).tag(l) }
+                        }
+                        .pickerStyle(.segmented)
+                        Text(task.nagLevel.detail).font(.caption).foregroundStyle(.secondary)
+                        if task.nagLevel != .normal {
+                            Picker("Comes back every", selection: Binding(get: { task.nagMinutes }, set: { task.nagEvery = $0 == 10 ? nil : $0 })) {
+                                ForEach(NagLevel.everyChoices, id: \.self) { m in Text(m == 60 ? "hour" : "\(m) min").tag(m) }
+                            }
+                            Button("Preview") { model.nag.preview(task.nagLevel) }.help("Shows what it will look like, without starting it")
+                        }
+                    } header: { Text("For things you'd rather put off") } footer: {
+                        if task.nagLevel == .strict {
+                            Text("Blocks the apps on your distracting list (Screen Time) and the websites in Settings › Tough love, until this is checked off.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 Section("Color") {
                     HStack(spacing: 10) {
                         ForEach(TaskColor.allCases) { c in

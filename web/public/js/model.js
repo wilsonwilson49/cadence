@@ -513,6 +513,9 @@ export const DEFAULT_SETTINGS = {
   habitScorecard: [],
   // Focus & screen time: apps you count as distracting (names as the Mac shows them) and daily limits (0 = off).
   distractingApps: [],
+  // Websites the Mac app blocks while a strict task is overdue (and during focus/study sessions if blockDuringFocus).
+  blockedSites: [],
+  blockDuringFocus: false,
   screenLimitMinutes: 0,
   distractingLimitMinutes: 0,
   focusMinutes: 25,
@@ -961,3 +964,21 @@ export function nextReminderFire(r, now = new Date()) {
 export const newCustomReminder = (over = {}) => ({ id: uuid(), title: 'New reminder', body: '', kind: 'times', times: [540], weekdays: [],
   everyMinutes: 60, fromMinutes: 540, toMinutes: 1020, at: iso(addMinutes(new Date(), 60)), enabled: true,
   channels: ['notification', 'banner'], createdAt: iso(new Date()), ...over });
+
+
+// ---------- for things you'd rather put off (same as NagLevel in Swift) ----------
+export const NAG_LEVELS = [
+  ['normal', 'Normal', 'One reminder at the times you choose.'],
+  ['persistent', 'Persistent', 'The reminder comes back every few minutes until it’s checked off.'],
+  ['pushy', 'Pushy', 'A window opens in the middle of the screen, again and again.'],
+  ['strict', 'Strict', 'Covers the screen, putting it off asks why, and the Mac app blocks your distracting apps and sites until it’s done.'],
+];
+export const NAG_EVERY = [3, 5, 10, 15, 20, 30, 60];
+export const nagLevel = t => (['persistent', 'pushy', 'strict'].includes(t?.nag) ? t.nag : 'normal');
+export const nagMinutes = t => Math.max(1, Number(t?.nagEvery) || 10);
+/** When a task starts keeping after you: its time on its day, or the untimed reminder time. Overdue ones already have. */
+export function nagStart(o, untimedMinutes = 540, now = new Date()) {
+  if (o.day < startOfDay(now) && !isUntilDone(o.task)) return o.day;
+  const day = isUntilDone(o.task) ? startOfDay(now) : o.day;
+  return dayAt(day, o.task.timeMinutes ?? untimedMinutes);
+}

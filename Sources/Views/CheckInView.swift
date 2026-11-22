@@ -38,7 +38,7 @@ struct CheckInView: View {
                     .font(.system(size: 22))
                     .foregroundStyle(.white)
                     .frame(width: 46, height: 46)
-                    .background(Circle().fill(Color.orange.gradient))
+                    .background(Circle().fill(Color.orange))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(reason).font(.title2.bold())
                     Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) + " · "
