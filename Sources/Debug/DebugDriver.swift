@@ -50,6 +50,15 @@ enum DebugDriver {
             try? AppIconArt.export(to: dir, family: family)
             exit(0)
         }
+        // -firefoxProbe [pid] [outfile]: whether Firefox's address bar can be read (only the host is printed), then quits.
+        if let i = LaunchOptions.args.firstIndex(of: "-firefoxProbe") {
+            let rest = LaunchOptions.args.dropFirst(i + 1).prefix { !$0.hasPrefix("-") }
+            let pid = rest.first.flatMap { pid_t($0) }
+            let out = FirefoxControl.probe(pid: pid)
+            if let file = rest.dropFirst(pid == nil ? 0 : 1).first { try? out.write(toFile: file, atomically: true, encoding: .utf8) }
+            print(out)
+            exit(0)
+        }
         // -keepAliveTest on|off (with -stayRunningTest and a renamed bundle ID): turns the launch agent on or off.
         if let v = LaunchOptions.value("-keepAliveTest") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { try? StayRunning.setKeepAlive(v == "on") }

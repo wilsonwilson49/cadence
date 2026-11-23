@@ -119,6 +119,7 @@ struct SettingsView: View {
                         ForEach(Self.siteSuggestions.filter { !store.settings.blockedSites.contains($0) }, id: \.self) { d in Button(d) { addSite(d) } }
                     }.fixedSize()
                 }
+                if FirefoxControl.installed { firefoxAccess }
             }
             HStack {
                 Button("Try blocking for a minute") { model.nag.blocker.testUntil = Date().addingTimeInterval(60) }
@@ -126,7 +127,25 @@ struct SettingsView: View {
                 Button("Preview the strict cover") { model.nag.preview(.strict) }
             }
         } header: { Text("Tough love") } footer: {
-            Text("A task set to Strict (in its editor, under “For things you'd rather put off”) blocks these until it's checked off. Blocked apps are hidden as soon as they come to the front. Websites are blocked in Safari, Chrome, Arc, Brave, Edge, Vivaldi and Opera (not Firefox); the first time, macOS asks whether Cadence may control the browser.")
+            Text("A task set to Strict (in its editor, under “For things you'd rather put off”) blocks these until it's checked off. Blocked apps are hidden as soon as they come to the front. Websites are blocked in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera and Firefox. The first time, macOS asks whether Cadence may control the browser. Firefox can't be controlled that way, so it needs Cadence turned on in System Settings › Privacy & Security › Accessibility, and a blocked Firefox tab is closed and replaced by the blocked page (⌘⇧T brings it back afterwards).")
+        }
+    }
+
+    /// Firefox needs Accessibility access (see FirefoxControl). Rechecked every couple of seconds, so it turns
+    /// green as soon as the switch in System Settings is on.
+    private var firefoxAccess: some View {
+        TimelineView(.periodic(from: .now, by: 2)) { _ in
+            if FirefoxControl.allowed {
+                Label("Firefox: ready", systemImage: "checkmark.circle.fill")
+                    .font(.app(.caption)).foregroundStyle(.green)
+            } else {
+                HStack(spacing: 8) {
+                    Label("Firefox needs Accessibility access before Cadence can block sites in it.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.app(.caption)).foregroundStyle(.orange)
+                    Button("Allow…") { FirefoxControl.askForAccess(); FirefoxControl.openAccessibilitySettings() }
+                        .controlSize(.small)
+                }
+            }
         }
     }
 

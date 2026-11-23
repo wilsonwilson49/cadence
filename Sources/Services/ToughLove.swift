@@ -296,7 +296,7 @@ final class DistractionBlocker {
     private var denied: Set<String> = []
     private var warnedDenied: Set<String> = []
 
-    /// Browsers whose current tab can be read and redirected with AppleScript (Firefox can't).
+    /// Browsers whose current tab can be read and redirected with AppleScript (Firefox can't: see FirefoxControl).
     private static let browsers: [String: Bool] = [   // bundle id → uses Safari's "current tab" wording
         "com.apple.Safari": true, "com.apple.SafariTechnologyPreview": true,
         "com.google.Chrome": false, "com.google.Chrome.canary": false, "com.brave.Browser": false,
@@ -322,15 +322,44 @@ final class DistractionBlocker {
             showHUD("\(name) is blocked \(reason).")
             return
         }
-        guard let id = app.bundleIdentifier, let safari = Self.browsers[id], !denied.contains(id) else { return }
+        guard let id = app.bundleIdentifier else { return }
         let sites = model.store.settings.blockedSites.map { $0.lowercased().trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard !sites.isEmpty else { return }
+        if FirefoxControl.handles(id) { checkFirefox(app, sites: sites, reason: reason); return }
+        guard let safari = Self.browsers[id], !denied.contains(id) else { return }
         let tab = safari ? "current tab of front window" : "active tab of front window"
         guard let url = run("tell application id \"\(id)\" to if (count of windows) > 0 then get URL of \(tab)", browser: id),
-              let host = URL(string: url)?.host?.lowercased() else { return }
-        guard let site = sites.first(where: { host == $0 || host.hasSuffix("." + $0) || host == "www." + $0 }) else { return }
+              let host = URL(string: url)?.host?.lowercased(), let site = Self.match(host, sites) else { return }
         let page = blockedPage(site: site, reason: reason)
         _ = run("tell application id \"\(id)\" to set URL of \(tab) to \"\(page)\"", browser: id)
+        showHUD("\(site) is blocked \(reason).")
+    }
+
+    private static func match(_ host: String, _ sites: [String]) -> String? {
+        sites.first { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// Firefox can't be scripted like the others (see FirefoxControl): its address bar is read through Accessibility,
+    /// and a blocked tab is closed and replaced by the blocked page.
+    private var firefoxBusyUntil = Date.distantPast
+    private var askedFirefoxAccess = false
+
+    private func checkFirefox(_ app: NSRunningApplication, sites: [String], reason: String) {
+        guard FirefoxControl.allowed else {
+            if !askedFirefoxAccess {
+                askedFirefoxAccess = true
+                model.notifier.deliver(AlertContent(kind: .nudge, title: "Cadence can't block sites in Firefox yet",
+                                                    body: "Turn Cadence on in System Settings › Privacy & Security › Accessibility.",
+                                                    symbol: "lock.slash", tint: .orange), channels: [.notification, .banner])
+                FirefoxControl.askForAccess()
+            }
+            return
+        }
+        // Give Firefox a moment after closing a tab, so the next check doesn't close the one behind it.
+        guard Date() >= firefoxBusyUntil, let host = FirefoxControl.currentHost(pid: app.processIdentifier),
+              let site = Self.match(host, sites), let page = URL(string: blockedPage(site: site, reason: reason)) else { return }
+        firefoxBusyUntil = Date().addingTimeInterval(2.5)
+        FirefoxControl.replaceFrontTab(pid: app.processIdentifier, appURL: app.bundleURL, with: page)
         showHUD("\(site) is blocked \(reason).")
     }
 
