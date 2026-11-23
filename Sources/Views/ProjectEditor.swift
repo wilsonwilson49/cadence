@@ -277,7 +277,7 @@ struct ProjectPickBar: View {
     var body: some View {
         let n = editor.picked.count
         HStack(spacing: 6) {
-            Text("\(n) picked").font(.callout.weight(.semibold))
+            Text("\(n) picked").font(.verdana(.callout).weight(.semibold))
             Button { editor.toggleDone() } label: { Label("Done", systemImage: "checkmark.circle") }.help("Done / not done (Space)")
             Button { editor.toggleUrgent() } label: { Label("Urgent", systemImage: "exclamationmark.circle") }.help("Urgent on or off (U)")
             Menu {
@@ -319,14 +319,14 @@ struct ProjectKeysButton: View {
             .help("Keyboard shortcuts (⌘/)")
             .popover(isPresented: $editor.showKeys) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Keyboard shortcuts").font(.headline)
+                    Text("Keyboard shortcuts").font(.verdana(.headline))
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
                         ForEach(ProjectEditor.shortcuts, id: \.0) { k, v in
-                            GridRow { Text(k).font(.callout.monospaced().weight(.semibold)); Text(v).font(.callout).foregroundStyle(.secondary) }
+                            GridRow { Text(k).font(.callout.monospaced().weight(.semibold)); Text(v).font(.verdana(.callout)).foregroundStyle(.secondary) }
                         }
                     }
                     Text("No shortcuts needed: the + boxes add subtasks, the bar above the list changes picked ones, and right-click has the rest.")
-                        .font(.caption).foregroundStyle(.secondary).frame(width: 380, alignment: .leading)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary).frame(width: 380, alignment: .leading)
                 }
                 .padding(16)
             }

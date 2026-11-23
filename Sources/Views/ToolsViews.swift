@@ -34,7 +34,7 @@ struct FlashcardsView: View {
                         let due = (course.map { [$0] } ?? courses).reduce(0) { $0 + $1.dueCards().count }
                         HStack(spacing: 14) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(due)").font(Theme.serif(34).monospacedDigit())
+                                Text("\(due)").font(Theme.heading(34).monospacedDigit())
                                 Text(due == 1 ? "card due today" : "cards due today").foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -112,7 +112,7 @@ private struct CardRow: View {
             Divider()
             TextField("Back", text: bind(\.back), axis: .vertical).textFieldStyle(.plain).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             Text(card.isDue() ? "due" : "in \(Calendar.current.dateComponents([.day], from: Date().startOfDay, to: DateKey.date(card.due) ?? Date()).day ?? 0)d")
-                .font(.caption.monospacedDigit()).foregroundStyle(card.isDue() ? Theme.accent : .secondary).frame(width: 44, alignment: .trailing)
+                .font(.verdana(.caption).monospacedDigit()).foregroundStyle(card.isDue() ? Theme.accent : .secondary).frame(width: 44, alignment: .trailing)
             Button { store.editCourse(courseID) { $0.cards.removeAll { $0.id == card.id } } } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless).foregroundStyle(.secondary)
         }
@@ -139,11 +139,11 @@ struct CardReview: View {
             }
             if let (cid, kid) = queue.first, let course = store.course(cid), let card = course.cards.first(where: { $0.id == kid }) {
                 VStack(spacing: 16) {
-                    Text(course.title).font(.caption.weight(.semibold)).foregroundStyle(course.color.color)
-                    Text(card.front).font(.title2.weight(.semibold)).multilineTextAlignment(.center)
+                    Text(course.title).font(.verdana(.caption).weight(.semibold)).foregroundStyle(course.color.color)
+                    Text(card.front).font(.verdana(.title2).weight(.semibold)).multilineTextAlignment(.center)
                     if shown {
                         Divider()
-                        Text(card.back.isEmpty ? "(no answer written)" : card.back).font(.title3).multilineTextAlignment(.center)
+                        Text(card.back.isEmpty ? "(no answer written)" : card.back).font(.verdana(.title3)).multilineTextAlignment(.center)
                             .foregroundStyle(card.back.isEmpty ? .secondary : .primary)
                     }
                 }
@@ -161,7 +161,7 @@ struct CardReview: View {
                         }
                     }
                     .controlSize(.large)
-                    Text("Keys 1–4 also work.").font(.caption).foregroundStyle(.secondary)
+                    Text("Keys 1–4 also work.").font(.verdana(.caption)).foregroundStyle(.secondary)
                 } else {
                     Button { shown = true } label: { Text("Show answer").frame(maxWidth: .infinity) }
                         .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut(.space, modifiers: [])
@@ -169,8 +169,8 @@ struct CardReview: View {
             } else {
                 Card {
                     VStack(spacing: 8) {
-                        Image(systemName: "checkmark.seal.fill").font(.largeTitle).foregroundStyle(.green)
-                        Text(reviewed == 0 ? "Nothing due." : "All done: \(reviewed) reviewed.").font(.headline)
+                        Image(systemName: "checkmark.seal.fill").font(.verdana(.largeTitle)).foregroundStyle(.green)
+                        Text(reviewed == 0 ? "Nothing due." : "All done: \(reviewed) reviewed.").font(.verdana(.headline))
                         Button("Back to cards") { done() }
                     }
                     .frame(maxWidth: .infinity)
@@ -215,11 +215,11 @@ struct NotesView: View {
                         ForEach(notes) { n in
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
-                                    if n.pinned == true { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.orange) }
-                                    Text(n.displayTitle).font(.callout.weight(.medium)).lineLimit(1)
+                                    if n.pinned == true { Image(systemName: "pin.fill").font(.verdana(.caption2)).foregroundStyle(.orange) }
+                                    Text(n.displayTitle).font(.verdana(.callout).weight(.medium)).lineLimit(1)
                                 }
                                 Text((n.updatedAt ?? n.createdAt).formatted(.dateTime.month(.abbreviated).day()) + "  " + n.body.replacingOccurrences(of: "\n", with: " ").prefix(60))
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    .font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
                             }
                             .tag(n.id)
                             .contextMenu {
@@ -236,7 +236,7 @@ struct NotesView: View {
                     NoteEditor(note: n).id(n.id)
                 } else {
                     VStack(spacing: 8) {
-                        Image(systemName: "note.text").font(.largeTitle).foregroundStyle(.secondary)
+                        Image(systemName: "note.text").font(.verdana(.largeTitle)).foregroundStyle(.secondary)
                         Text(store.notes.isEmpty ? "No notes yet." : "Pick a note.").foregroundStyle(.secondary)
                         Button("New note") { newNote() }
                     }
@@ -263,10 +263,10 @@ private struct NoteEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Title", text: $title).textFieldStyle(.plain).font(.title2.bold())
+            TextField("Title", text: $title).textFieldStyle(.plain).font(.verdana(.title2).bold())
                 .onChange(of: title) { _, v in save { $0.title = v } }
             TextEditor(text: $text)
-                .font(.body)
+                .font(.verdana(.body))
                 .scrollContentBackground(.hidden)
                 .onChange(of: text) { _, v in save { $0.body = v } }
         }

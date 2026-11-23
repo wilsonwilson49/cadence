@@ -20,6 +20,7 @@ struct CadenceApp: App {
                 .environmentObject(AppModel.shared.screenTime)
                 .environmentObject(AppModel.shared.study)
                 .tint(Theme.accent)
+                .font(.verdana(.body))
         } label: {
             MenuBarLabel(store: store, focus: AppModel.shared.focus, study: AppModel.shared.study)
         }

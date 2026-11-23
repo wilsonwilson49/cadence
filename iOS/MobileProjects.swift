@@ -50,8 +50,8 @@ struct ProjectsScreen: View {
                 HStack {
                     RoundedRectangle(cornerRadius: 2).fill(p.color.color).frame(width: 4, height: 30)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(p.title.isEmpty ? "Untitled project" : p.title).font(.headline).foregroundStyle(.primary)
-                        Text(pr.total == 0 ? "No subtasks yet" : "\(pr.done) of \(pr.total) done").font(.caption).foregroundStyle(.secondary)
+                        Text(p.title.isEmpty ? "Untitled project" : p.title).font(.verdana(.headline)).foregroundStyle(.primary)
+                        Text(pr.total == 0 ? "No subtasks yet" : "\(pr.done) of \(pr.total) done").font(.verdana(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     if let d = p.due { DueChip(due: d, done: p.isDone) }
@@ -102,7 +102,7 @@ struct ProjectScreen: View {
         List {
             Section {
                 TextField("Project name", text: Binding(get: { project.title }, set: { v in edit { $0.title = v } }), axis: .vertical)
-                    .font(.title2.bold())
+                    .font(.verdana(.title2).bold())
                 HStack(spacing: 8) {
                     Menu {
                         ForEach(TaskColor.allCases) { c in Button(c.rawValue.capitalized) { edit { $0.color = c } } }
@@ -111,7 +111,7 @@ struct ProjectScreen: View {
                     chip(p.due.map { "Due \(shortDay($0))" } ?? "Deadline", symbol: "flag.fill", set: p.due != nil,
                          status: DeadlineStatus.of(due: p.due, done: p.isDone)) { dateEdit = DateEdit(item: nil, field: "due") }
                     Spacer()
-                    Text(pr.total == 0 ? "" : "\(pr.done)/\(pr.total)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    Text(pr.total == 0 ? "" : "\(pr.done)/\(pr.total)").font(.verdana(.caption).monospacedDigit()).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
                 if pr.total > 0 { ProgressView(value: Double(pr.done), total: Double(pr.total)).tint(p.color.color) }
@@ -165,7 +165,7 @@ struct ProjectScreen: View {
 
     private func chip(_ text: String, symbol: String, set: Bool, status: DeadlineStatus = .none, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 4) { Image(systemName: symbol).font(.system(size: 9)); Text(text) }.font(.caption.weight(.semibold)).fixedSize()
+            HStack(spacing: 4) { Image(systemName: symbol).font(.system(size: 9)); Text(text) }.font(.verdana(.caption).weight(.semibold)).fixedSize()
                 .foregroundStyle(!set ? Color.secondary : status == .later || status == .none ? Color.primary : status.color)
                 .padding(.horizontal, 8).padding(.vertical, 4)
                 .background(Capsule().fill((!set || status == .later || status == .none ? Color.secondary : status.color).opacity(set ? 0.15 : 0.1)))
@@ -177,12 +177,12 @@ struct ProjectScreen: View {
         return HStack(spacing: 8) {
             if kids && !flat {
                 Button { if collapsed.contains(i.id) { collapsed.remove(i.id) } else { collapsed.insert(i.id) } } label: {
-                    Image(systemName: collapsed.contains(i.id) ? "chevron.right" : "chevron.down").font(.caption2.weight(.bold)).frame(width: 12)
+                    Image(systemName: collapsed.contains(i.id) ? "chevron.right" : "chevron.down").font(.verdana(.caption2).weight(.bold)).frame(width: 12)
                 }
                 .foregroundStyle(.secondary)
             } else if !flat { Color.clear.frame(width: 12) }
             Button { edit { p in p.update(i.id) { $0.setDone(!i.isDone) } } } label: {
-                Image(systemName: i.isDone ? "checkmark.circle.fill" : kids ? "circle.dashed" : "circle").font(.title3)
+                Image(systemName: i.isDone ? "checkmark.circle.fill" : kids ? "circle.dashed" : "circle").font(.verdana(.title3))
                     .foregroundStyle(i.isDone ? Color.green : .secondary)
             }
             VStack(alignment: .leading, spacing: 3) {
@@ -200,8 +200,8 @@ struct ProjectScreen: View {
                     } else if let d = r.due {
                         Button { dateEdit = DateEdit(item: i.id, field: "due") } label: { DueChip(due: d, done: i.isDone, inherited: true, compact: true) }
                     }
-                    if r.conflict { Image(systemName: "exclamationmark.triangle.fill").font(.caption2).foregroundStyle(.red) }
-                    if kids { Text("\(pr.done)/\(pr.total)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
+                    if r.conflict { Image(systemName: "exclamationmark.triangle.fill").font(.verdana(.caption2)).foregroundStyle(.red) }
+                    if kids { Text("\(pr.done)/\(pr.total)").font(.verdana(.caption2).monospacedDigit()).foregroundStyle(.secondary) }
                 }
                 .buttonStyle(.borderless)
             }
@@ -325,7 +325,7 @@ struct MobileProjectSections: View {
             }
         } label: {
             Text("On today: \(mobileProjectTodayChoices.first { $0.0 == store.settings.projectTodayDays }?.1.lowercased() ?? "due today")")
-                .font(.caption).textCase(nil)
+                .font(.verdana(.caption)).textCase(nil)
         }
     }
 
@@ -334,7 +334,7 @@ struct MobileProjectSections: View {
         return HStack(spacing: 10) {
             if d.item != nil {
                 Button { store.toggleProjectItem(d) } label: {
-                    Image(systemName: done ? "checkmark.circle.fill" : "circle").font(.title3).foregroundStyle(done ? d.project.color.color : .secondary)
+                    Image(systemName: done ? "checkmark.circle.fill" : "circle").font(.verdana(.title3)).foregroundStyle(done ? d.project.color.color : .secondary)
                 }
                 .buttonStyle(.borderless)
             } else {
@@ -348,7 +348,7 @@ struct MobileProjectSections: View {
                         Text("URGENT").font(.system(size: 9, weight: .heavy)).foregroundStyle(.red)
                     }
                 }
-                Text(([d.project.title] + d.path).joined(separator: " › ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(([d.project.title] + d.path).joined(separator: " › ")).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             if let due = d.due { DueChip(due: due, done: done, compact: true) }

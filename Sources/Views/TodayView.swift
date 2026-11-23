@@ -27,9 +27,9 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .center, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(greeting).font(.title3).foregroundStyle(.secondary)
+                        Text(greeting).font(.verdana(.title3)).foregroundStyle(.secondary)
                         Text(today.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                            .font(Theme.serif(32))
+                            .font(Theme.heading(32))
                         Text(statusLine(done: done, settled: settled, total: total))
                             .foregroundStyle(.secondary)
                     }
@@ -41,10 +41,10 @@ struct TodayView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor).font(.title3)
+                    Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor).font(.verdana(.title3))
                     TextField("Quick add to today — press Return", text: $quickAdd)
                         .textFieldStyle(.plain)
-                        .font(.body)
+                        .font(.verdana(.body))
                         .onSubmit(addQuick)
                     if !quickAdd.isEmpty {
                         Button("Add", action: addQuick).controlSize(.small)
@@ -71,11 +71,11 @@ struct TodayView: View {
                     Card {
                         if daily.isEmpty {
                             HStack(spacing: 10) {
-                                Image(systemName: "sun.max").font(.title2).foregroundStyle(.orange)
+                                Image(systemName: "sun.max").font(.verdana(.title2)).foregroundStyle(.orange)
                                 VStack(alignment: .leading) {
                                     Text(ongoing.isEmpty ? "Nothing scheduled for today." : "Nothing else scheduled for today.")
                                     Text("Add a task above, or press ⌘N for one with a time and repeat schedule.")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                                 }
                             }
                             .padding(.vertical, 6)
@@ -98,7 +98,7 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
                             SectionTitle(text: "Until done", symbol: "flame", count: ongoing.count)
-                            Text("stays on your list until you check it off or mark it “didn't do it”").font(.caption).foregroundStyle(.secondary)
+                            Text("stays on your list until you check it off or mark it “didn't do it”").font(.verdana(.caption)).foregroundStyle(.secondary)
                         }
                         Card { VStack(spacing: 0) { rows(ongoing) } }
                     }
@@ -107,7 +107,7 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
                             SectionTitle(text: "Due later", symbol: "calendar.badge.clock", count: later.count)
-                            Text("not counted in today's progress · mark one urgent to work on it today").font(.caption).foregroundStyle(.secondary)
+                            Text("not counted in today's progress · mark one urgent to work on it today").font(.verdana(.caption)).foregroundStyle(.secondary)
                             Spacer()
                             ProjectTodayMenu()
                         }
@@ -117,7 +117,7 @@ struct TodayView: View {
                                 HStack {
                                     ChecklistRow(occ: occ)
                                     if let d = occ.deadline {
-                                        Text("due \(d.formatted(.dateTime.weekday(.abbreviated))) \(timeString(d))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                        Text("due \(d.formatted(.dateTime.weekday(.abbreviated))) \(timeString(d))").font(.verdana(.caption).monospacedDigit()).foregroundStyle(.secondary)
                                     }
                                     Button { store.setUrgent(occ.task.id, true) } label: { Label("Urgent", systemImage: "exclamationmark.circle") }
                                         .controlSize(.small).help("Put it on today's list and in today's progress")
@@ -131,14 +131,14 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
                             SectionTitle(text: "Upcoming", symbol: "calendar.badge.clock", count: upcoming.count)
-                            Text("one-off tasks in the next 30 days · not counted today").font(.caption).foregroundStyle(.secondary)
+                            Text("one-off tasks in the next 30 days · not counted today").font(.verdana(.caption)).foregroundStyle(.secondary)
                         }
                         Card { VStack(spacing: 0) {
                             ForEach(Array(upcoming.enumerated()), id: \.element.id) { i, occ in
                                 if i > 0 { Divider().padding(.leading, 42) }
                                 HStack {
                                     ChecklistRow(occ: occ, showDate: true)
-                                    Text(dueRelative(DateKey.string(occ.day))).font(.caption).foregroundStyle(.secondary)
+                                    Text(dueRelative(DateKey.string(occ.day))).font(.verdana(.caption)).foregroundStyle(.secondary)
                                 }
                             }
                         } }
@@ -149,7 +149,7 @@ struct TodayView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Checking an item off asks for a reflection of at least \(store.settings.minReflectionWords) words. They're saved under Reflections.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -189,16 +189,16 @@ struct TodayView: View {
     private var remindersCard: some View {
         let s = store.settings
         return HStack(spacing: 14) {
-            Image(systemName: "bell.and.waves.left.and.right").font(.title2).foregroundStyle(.indigo)
+            Image(systemName: "bell.and.waves.left.and.right").font(.verdana(.title2)).foregroundStyle(.indigo)
             VStack(alignment: .leading, spacing: 2) {
                 Text(s.nudgeEnabled
                      ? "Checklist reminder every \(s.nudgeIntervalMinutes) min while you're at your Mac"
                      : "Recurring checklist reminders are off")
-                    .font(.callout.weight(.medium))
+                    .font(.verdana(.callout).weight(.medium))
                 Text(s.nudgeEnabled
                      ? "Next one around \(timeString(engine.nextNudge)). You'll also get a check-in whenever the Mac wakes or unlocks."
                      : "Turn them on in Settings.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             Spacer()
             Button("Check in now") { engine.triggerCheckIn(reason: .manual) }

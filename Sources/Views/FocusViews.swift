@@ -37,13 +37,13 @@ struct FocusView: View {
                 .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.solid))
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Level \(lv.level)").font(.headline)
+                    Text("Level \(lv.level)").font(.verdana(.headline))
                     Spacer()
-                    Text("\(points) points · \(lv.span - lv.into) to level \(lv.level + 1)").font(.caption).foregroundStyle(.secondary)
+                    Text("\(points) points · \(lv.span - lv.into) to level \(lv.level + 1)").font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 ProgressView(value: Double(lv.into), total: Double(lv.span)).tint(Theme.accent)
                 Text("\(Focus.streak(sessions))-day focus streak · \(week) points this week · best session: \(sessions.map(\.finished).max() ?? 0) done")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
             }
         }
         .padding(14)
@@ -61,16 +61,16 @@ struct FocusView: View {
                     .rotationEffect(.degrees(-90)).animation(.linear(duration: 1), value: frac)
                 VStack(spacing: 2) {
                     Text(focus.clock).font(.system(size: 44, weight: .bold).monospacedDigit()).foregroundStyle(final ? Color.orange : .primary)
-                    Text("\(focus.finished.count) of \(occs.count) done").font(.caption).foregroundStyle(.secondary)
+                    Text("\(focus.finished.count) of \(occs.count) done").font(.verdana(.caption)).foregroundStyle(.secondary)
                     if focus.distractingSeconds + focus.awaySeconds > 0 {
-                        Text("\(durationString(seconds: focus.distractingSeconds)) distracted").font(.caption2).foregroundStyle(.secondary)
+                        Text("\(durationString(seconds: focus.distractingSeconds)) distracted").font(.verdana(.caption2)).foregroundStyle(.secondary)
                     }
                 }
             }
             .frame(width: 230, height: 230)
             VStack(alignment: .leading, spacing: 10) {
                 Text("Tick each one as you finish it. You'll write the reflections when time's up, so the clock is only for doing. Switching to a distracting app counts against your focus.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
                 Card {
                     VStack(spacing: 0) {
                         ForEach(occs) { o in
@@ -79,7 +79,7 @@ struct FocusView: View {
                                 CheckButton(done: on, color: o.task.color.color) { focus.toggleFinished(o.id) }
                                 Text(o.task.title).strikethrough(on).foregroundStyle(on ? .secondary : .primary)
                                 Spacer()
-                                Text(o.isHabit ? "Habit" : "Task").font(.caption).foregroundStyle(.secondary)
+                                Text(o.isHabit ? "Habit" : "Task").font(.verdana(.caption)).foregroundStyle(.secondary)
                             }
                             .padding(.vertical, 6)
                         }
@@ -118,7 +118,7 @@ struct FocusView: View {
                                 })) {
                                     HStack {
                                         Text(o.task.title).lineLimit(1)
-                                        Text(o.isHabit ? "habit" : o.isUntilDone ? "until done" : "today").font(.caption2).foregroundStyle(.secondary)
+                                        Text(o.isHabit ? "habit" : o.isUntilDone ? "until done" : "today").font(.verdana(.caption2)).foregroundStyle(.secondary)
                                     }
                                 }
                                 .toggleStyle(.checkbox)
@@ -127,7 +127,7 @@ struct FocusView: View {
                     }
                     HStack {
                         Text("Score: 10 points per task finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.verdana(.caption)).foregroundStyle(.secondary)
                         Spacer()
                         Button {
                             if minutes != store.settings.focusMinutes { store.settings.focusMinutes = minutes }
@@ -147,11 +147,11 @@ struct FocusView: View {
         return HStack(alignment: .top, spacing: 16) {
             Text("\(r.finished)").font(.system(size: 44, weight: .heavy).monospacedDigit()).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.headline)
+                Text("Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.verdana(.headline))
                 Text("\(r.focusPercent)% focused (\(durationString(seconds: r.distractingSeconds + r.awaySeconds)) away or distracted) · ×\(String(format: "%g", Focus.multiplier(r.focusPercent))) · +\(r.points) points")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
                 if !unreflected.isEmpty {
-                    Text("Write a reflection for each to check it off:").font(.caption).padding(.top, 6)
+                    Text("Write a reflection for each to check it off:").font(.verdana(.caption)).padding(.top, 6)
                     ForEach(unreflected) { o in
                         HStack {
                             Text(o.task.title).lineLimit(1)
@@ -160,7 +160,7 @@ struct FocusView: View {
                         }
                     }
                 } else if r.finished > 0 {
-                    Label("All reflected and checked off.", systemImage: "checkmark").font(.caption).foregroundStyle(.green)
+                    Label("All reflected and checked off.", systemImage: "checkmark").font(.verdana(.caption)).foregroundStyle(.green)
                 }
             }
             Spacer()
@@ -179,17 +179,17 @@ struct FocusView: View {
                     ForEach(sessions.prefix(8)) { s in
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 0) {
-                                Text(s.startedAt.formatted(.dateTime.month(.abbreviated).day())).font(.callout.monospacedDigit())
-                                Text(timeString(s.startedAt)).font(.caption).foregroundStyle(.secondary)
+                                Text(s.startedAt.formatted(.dateTime.month(.abbreviated).day())).font(.verdana(.callout).monospacedDigit())
+                                Text(timeString(s.startedAt)).font(.verdana(.caption)).foregroundStyle(.secondary)
                             }
                             .frame(width: 64, alignment: .leading)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(s.finished) of \(s.picked) done in \(s.actualMinutes) min")
                                 Text("\(s.focusPercent)% focused\(s.distractingSeconds > 0 ? " · \(durationString(seconds: s.distractingSeconds)) in distracting apps" : "") · \(s.device == "mac" ? "Mac" : "Web")")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.verdana(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text("+\(s.points)").font(.headline).foregroundStyle(.green)
+                            Text("+\(s.points)").font(.verdana(.headline)).foregroundStyle(.green)
                         }
                         .padding(.vertical, 6)
                     }
@@ -233,11 +233,11 @@ struct ScreenTimeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     if !screenTime.enabled {
                         HStack(spacing: 12) {
-                            Image(systemName: "desktopcomputer").font(.title2).foregroundStyle(.cyan)
+                            Image(systemName: "desktopcomputer").font(.verdana(.title2)).foregroundStyle(.cyan)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Turn on screen time").font(.callout.weight(.semibold))
+                                Text("Turn on screen time").font(.verdana(.callout).weight(.semibold))
                                 Text("Cadence notes which app is in front while you're using your Mac (not when it's idle, locked or asleep) and keeps a daily total per app. Only those totals sync to your account; nothing else about what you do is recorded.")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.verdana(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button("Turn On") { screenTime.enabled = true }.buttonStyle(.borderedProminent)
@@ -268,8 +268,8 @@ struct ScreenTimeView: View {
                                                     .frame(height: t > 0 ? 140 * CGFloat(dis) / CGFloat(maxDay) : 0)
                                             }
                                             .frame(height: 140, alignment: .bottom)
-                                            Text(d.formatted(.dateTime.weekday(.abbreviated))).font(.caption2).foregroundStyle(.secondary)
-                                            Text(t > 0 ? durationString(seconds: t) : "").font(.caption2)
+                                            Text(d.formatted(.dateTime.weekday(.abbreviated))).font(.verdana(.caption2)).foregroundStyle(.secondary)
+                                            Text(t > 0 ? durationString(seconds: t) : "").font(.verdana(.caption2))
                                         }
                                         .frame(maxWidth: .infinity)
                                         .help("\(durationString(seconds: t)) (\(durationString(seconds: dis)) distracting)")
@@ -283,7 +283,7 @@ struct ScreenTimeView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack(alignment: .firstTextBaseline) {
                                     SectionTitle(text: "Today by app", symbol: "list.bullet")
-                                    Text("click one to mark it distracting").font(.caption).foregroundStyle(.secondary)
+                                    Text("click one to mark it distracting").font(.verdana(.caption)).foregroundStyle(.secondary)
                                 }
                                 ForEach(todayApps.prefix(12), id: \.name) { a in
                                     let dis = screenTime.isDistracting(a.name)
@@ -298,8 +298,8 @@ struct ScreenTimeView: View {
                                                 }
                                             }
                                             .frame(height: 8)
-                                            Text(durationString(seconds: a.seconds)).font(.caption.monospacedDigit()).frame(width: 60, alignment: .trailing)
-                                            Text("distracting").font(.caption2).foregroundStyle(.red).opacity(dis ? 1 : 0)
+                                            Text(durationString(seconds: a.seconds)).font(.verdana(.caption).monospacedDigit()).frame(width: 60, alignment: .trailing)
+                                            Text("distracting").font(.verdana(.caption2)).foregroundStyle(.red).opacity(dis ? 1 : 0)
                                         }
                                         .contentShape(Rectangle())
                                     }
@@ -319,10 +319,10 @@ struct ScreenTimeView: View {
 
     private func tile(_ value: String, _ label: String, _ symbol: String, _ tint: Color, over: Bool = false) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).font(.title3).foregroundStyle(tint).frame(width: 26)
+            Image(systemName: symbol).font(.verdana(.title3)).foregroundStyle(tint).frame(width: 26)
             VStack(alignment: .leading, spacing: 0) {
-                Text(value).font(.title3.bold()).monospacedDigit().foregroundStyle(over ? Color.red : .primary)
-                Text(label).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(value).font(.verdana(.title3).bold()).monospacedDigit().foregroundStyle(over ? Color.red : .primary)
+                Text(label).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer(minLength: 0)
         }
@@ -350,13 +350,13 @@ struct ScreenTimeView: View {
                     limitPicker("Daily screen-time limit", $store.settings.screenLimitMinutes, note: "Cadence nudges you once you go past it.")
                     limitPicker("Daily limit for distracting apps", $store.settings.distractingLimitMinutes)
                     Divider()
-                    Text("Distracting apps").font(.callout.weight(.medium))
+                    Text("Distracting apps").font(.verdana(.callout).weight(.medium))
                     Text("During a focus session, Cadence nudges you back when one of these comes to the front, and time in them lowers your focus score.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                     FlowRow(store.settings.distractingApps.map { app in
                         AnyView(HStack(spacing: 4) {
                             Text(app)
-                            Button { toggleDistracting(app) } label: { Image(systemName: "xmark").font(.caption2) }.buttonStyle(.borderless)
+                            Button { toggleDistracting(app) } label: { Image(systemName: "xmark").font(.verdana(.caption2)) }.buttonStyle(.borderless)
                         }
                         .padding(.leading, 10).padding(.trailing, 6).padding(.vertical, 3)
                         .background(Capsule().fill(Color.red.opacity(0.12))))
@@ -385,7 +385,7 @@ struct ScreenTimeView: View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                if let note { Text(note).font(.verdana(.caption)).foregroundStyle(.secondary) }
             }
             Spacer()
             Picker("", selection: value) {
@@ -438,7 +438,7 @@ struct FocusLengthPicker: View {
                 }
             }
             Text("Type any length up to \(Focus.maxMinutes / 60) hours. Save it to keep it as a button; right-click a button to remove it.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         }
         .onAppear { text = String(minutes) }
         .onChange(of: minutes) { _, m in if Int(text) != m { text = String(m) } }

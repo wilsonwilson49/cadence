@@ -38,7 +38,7 @@ struct DueChip: View {
             Image(systemName: inherited ? "arrow.turn.down.right" : "flag.fill").font(.system(size: 8, weight: .bold))
             Text(compact || done ? shortDay(due) : "\(shortDay(due)) · \(dueRelative(due))")
         }
-        .font(.caption2.weight(.medium).monospacedDigit())
+        .font(.verdana(.caption2).weight(.medium).monospacedDigit())
         .foregroundStyle(inherited ? Color.secondary : st == .later || st == .none ? Color.secondary : st.color)
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(Capsule().fill((inherited || st == .later ? Color.secondary : st.color).opacity(inherited ? 0.08 : 0.14)))
@@ -136,7 +136,7 @@ struct GanttChart: View {
 
     private func labels(_ ls: [Line]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Project / subtask").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Text("Project / subtask").font(.verdana(.caption2).weight(.semibold)).foregroundStyle(.secondary)
                 .frame(height: header, alignment: .bottomLeading).padding(.leading, 4).padding(.bottom, 0)
             ForEach(ls) { line in
                 switch line {
@@ -145,7 +145,7 @@ struct GanttChart: View {
                         Image(systemName: collapsed.contains(p.id) ? "chevron.right" : "chevron.down").font(.system(size: 8, weight: .bold))
                             .foregroundStyle(.secondary).frame(width: 10)
                         RoundedRectangle(cornerRadius: 2).fill(p.color.color).frame(width: 4, height: 14)
-                        Text(p.title.isEmpty ? "Untitled project" : p.title).font(.callout.weight(.semibold)).lineLimit(1)
+                        Text(p.title.isEmpty ? "Untitled project" : p.title).font(.verdana(.callout).weight(.semibold)).lineLimit(1)
                     }
                     .padding(.leading, 2)
                     .frame(width: labelWidth, height: rowHeight, alignment: .leading)
@@ -202,7 +202,7 @@ struct GanttChart: View {
                                with: .color(.secondary.opacity(first ? 0.45 : monday ? 0.22 : 0.08)), lineWidth: 1)
                 }
                 if first || i == 0 {
-                    ctx.draw(Text(d.formatted(.dateTime.month(.abbreviated))).font(.caption2.weight(.semibold)).foregroundStyle(.secondary),
+                    ctx.draw(Text(d.formatted(.dateTime.month(.abbreviated))).font(.verdana(.caption2).weight(.semibold)).foregroundStyle(.secondary),
                              at: CGPoint(x: px + 3, y: 6), anchor: .topLeading)
                 }
                 if monday || dayW >= 22 {
@@ -339,13 +339,13 @@ struct ProjectMap: View {
                 HStack(spacing: 5) {
                     Image(systemName: item.isDone ? "checkmark.circle.fill" : item.items.isEmpty ? "circle" : "circle.dashed")
                         .font(.system(size: 11)).foregroundStyle(item.isDone ? Color.green : .secondary)
-                    Text(item.title.isEmpty ? "Untitled" : item.title).font(.caption.weight(.medium)).lineLimit(1)
+                    Text(item.title.isEmpty ? "Untitled" : item.title).font(.verdana(.caption).weight(.medium)).lineLimit(1)
                         .foregroundStyle(item.isDone ? .secondary : .primary)
                     if item.isUrgent && !item.isDone {
                         Image(systemName: "exclamationmark.circle.fill").font(.system(size: 10)).foregroundStyle(.red)
                     }
                     if collapsed.contains(item.id) && !item.items.isEmpty {
-                        Text("+\(item.items.count)").font(.caption2).foregroundStyle(.secondary)
+                        Text("+\(item.items.count)").font(.verdana(.caption2)).foregroundStyle(.secondary)
                     }
                 }
                 HStack(spacing: 6) {
@@ -367,12 +367,12 @@ struct ProjectMap: View {
         } else {
             let p = project.progress
             VStack(alignment: .leading, spacing: 4) {
-                Text(project.title.isEmpty ? "Untitled project" : project.title).font(.callout.weight(.semibold)).lineLimit(2)
+                Text(project.title.isEmpty ? "Untitled project" : project.title).font(.verdana(.callout).weight(.semibold)).lineLimit(2)
                 HStack(spacing: 6) {
                     ProgressView(value: Double(p.done), total: Double(max(1, p.total))).tint(.white)
                     Text("\(p.done)/\(p.total)").font(.system(size: 9).monospacedDigit())
                 }
-                if let d = project.due { Text("Due \(shortDay(d)) · \(dueRelative(d))").font(.caption2) }
+                if let d = project.due { Text("Due \(shortDay(d)) · \(dueRelative(d))").font(.verdana(.caption2)) }
             }
             .foregroundStyle(.white)
             .padding(9)
@@ -391,7 +391,7 @@ struct GhostAdd: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "plus").font(.system(size: compact ? 9 : 10, weight: .bold))
-                if !compact { Text(label).font(.caption) }
+                if !compact { Text(label).font(.verdana(.caption)) }
             }
             .foregroundStyle(hover ? Color.accentColor : .secondary)
             .padding(.horizontal, compact ? 5 : 8).padding(.vertical, compact ? 3 : 3)

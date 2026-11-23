@@ -52,11 +52,11 @@ struct HomeView: View {
 
     private var syncPrompt: some View {
         HStack(spacing: 14) {
-            Image(systemName: "icloud.slash").font(.title2).foregroundStyle(.orange)
+            Image(systemName: "icloud.slash").font(.verdana(.title2)).foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("This Mac isn't syncing").font(.callout.weight(.semibold))
+                Text("This Mac isn't syncing").font(.verdana(.callout).weight(.semibold))
                 Text("Sign in with your cadenceplanner.vercel.app account to share tasks and reflections with the web.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             Spacer()
             Button("Sign in") { model.screen = .settings }.buttonStyle(.borderedProminent)
@@ -68,8 +68,8 @@ struct HomeView: View {
     private func header(now: Date, open: Int, total: Int) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(greeting(now) + (sync.username.map { ", \($0)" } ?? "")).font(.title3).foregroundStyle(.secondary)
-                Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day())).font(Theme.serif(32))
+                Text(greeting(now) + (sync.username.map { ", \($0)" } ?? "")).font(.verdana(.title3)).foregroundStyle(.secondary)
+                Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day())).font(Theme.heading(32))
                 Text(total == 0 ? "Nothing on your checklist today." : open == 0 ? "Everything is checked off. Nice work." : "\(open) thing\(open == 1 ? "" : "s") left today.")
                     .foregroundStyle(.secondary)
             }
@@ -87,12 +87,12 @@ struct HomeView: View {
                 HStack(spacing: 16) {
                     ProgressRing(done: done, total: total, size: 72, lineWidth: 8, showsLeft: store.settings.ringShowsLeft)
                     VStack(alignment: .leading, spacing: 2) {
-                        Label("Today", systemImage: "sun.max").font(.headline)
+                        Label("Today", systemImage: "sun.max").font(.verdana(.headline))
                         HStack(spacing: 4) {
                             Text(total == 0 ? "A clear day" : "\(done) of \(total) done")
                             if overdue > 0 { Text("· \(overdue) overdue").foregroundStyle(.red) }
                         }
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.verdana(.callout)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(.tertiary)
@@ -105,11 +105,11 @@ struct HomeView: View {
                             Text(o.task.title).lineLimit(1)
                             Spacer()
                             Text(o.start.map(timeString) ?? (o.isOverdue ? "overdue" : "any time"))
-                                .font(.caption).foregroundStyle(o.isOverdue ? .red : .secondary)
+                                .font(.verdana(.caption)).foregroundStyle(o.isOverdue ? .red : .secondary)
                         }
-                        .font(.callout)
+                        .font(.verdana(.callout))
                     }
-                    if open.count > 4 { Text("+\(open.count - 4) more").font(.caption).foregroundStyle(.secondary) }
+                    if open.count > 4 { Text("+\(open.count - 4) more").font(.verdana(.caption)).foregroundStyle(.secondary) }
                 }
             }
             .padding(16)
@@ -130,17 +130,17 @@ struct HomeView: View {
         let next = (tasks + events).min { $0.at < $1.at }
         return Card {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Up next", systemImage: "clock").font(.headline)
+                Label("Up next", systemImage: "clock").font(.verdana(.headline))
                 if let next {
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 2).fill(next.color).frame(width: 4, height: 34)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(next.title).fontWeight(.semibold).lineLimit(1)
-                            Text((next.at.isToday ? "" : "Tomorrow · ") + timeString(next.at)).font(.caption).foregroundStyle(.secondary)
+                            Text((next.at.isToday ? "" : "Tomorrow · ") + timeString(next.at)).font(.verdana(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 } else {
-                    Text("Nothing else scheduled with a time.").font(.callout).foregroundStyle(.secondary)
+                    Text("Nothing else scheduled with a time.").font(.verdana(.callout)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -149,12 +149,12 @@ struct HomeView: View {
     private var reflectionCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Latest reflection", systemImage: "text.quote").font(.headline)
+                Label("Latest reflection", systemImage: "text.quote").font(.verdana(.headline))
                 if let r = store.reflections.max(by: { $0.createdAt < $1.createdAt }) {
-                    Text("“\(r.text)”").italic().font(.callout).lineLimit(4)
-                    Text(r.taskTitle).font(.caption).foregroundStyle(.secondary)
+                    Text("“\(r.text)”").italic().font(.verdana(.callout)).lineLimit(4)
+                    Text(r.taskTitle).font(.verdana(.caption)).foregroundStyle(.secondary)
                 } else {
-                    Text("Check something off to write your first one.").font(.callout).foregroundStyle(.secondary)
+                    Text("Check something off to write your first one.").font(.verdana(.callout)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -173,9 +173,9 @@ struct HomeView: View {
                     .frame(width: 38, height: 38)
                     .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(hue.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(screen.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text(value).font(.title3.bold()).monospacedDigit()
-                    Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(screen.title).font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                    Text(value).font(.verdana(.title3).bold()).monospacedDigit()
+                    Text(sub).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }

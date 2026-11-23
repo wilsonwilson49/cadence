@@ -52,7 +52,7 @@ struct MobileRow: View {
                         Label("\(p.done)/\(p.total)", systemImage: "checklist").foregroundStyle(p.done == p.total ? .green : .secondary)
                     }
                 }
-                .font(.caption).foregroundStyle(.secondary).labelStyle(TightLabel())
+                .font(.verdana(.caption)).foregroundStyle(.secondary).labelStyle(TightLabel())
                 if t.hasSteps && !inDayList { MobileStepList(occ: occ).padding(.top, 4) }
             }
             Spacer(minLength: 0)
@@ -98,15 +98,15 @@ struct MobileEventRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(occ.start.map(timeString) ?? "All day").font(.callout.monospacedDigit())
-                if let e = occ.end { Text(timeString(e)).font(.caption).foregroundStyle(.secondary) }
+                Text(occ.start.map(timeString) ?? "All day").font(.verdana(.callout).monospacedDigit())
+                if let e = occ.end { Text(timeString(e)).font(.verdana(.caption)).foregroundStyle(.secondary) }
             }
             .frame(width: 64, alignment: .leading)
             RoundedRectangle(cornerRadius: 2).fill(occ.task.color.color).frame(width: 3, height: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(occ.task.title).lineLimit(1)
                 Text(occ.task.source == "google" ? "Google Calendar" : occ.task.source == "calendly" ? "Calendly" : "Event")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -174,21 +174,21 @@ struct ReflectionSheet: View {
             ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    Image(systemName: target.missed ? "xmark" : "text.quote").font(.headline).foregroundStyle(.white)
+                    Image(systemName: target.missed ? "xmark" : "text.quote").font(.verdana(.headline)).foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(target.missed ? Color.red : target.occ.task.color.color))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(target.occ.task.title).font(.headline).lineLimit(2)
-                        Text(target.occ.day.formatted(.dateTime.weekday(.wide).month().day())).font(.caption).foregroundStyle(.secondary)
+                        Text(target.occ.task.title).font(.verdana(.headline)).lineLimit(2)
+                        Text(target.occ.day.formatted(.dateTime.weekday(.wide).month().day())).font(.verdana(.caption)).foregroundStyle(.secondary)
                     }
                 }
                 Text(target.missed ? "Write at least \(min) words about why you didn't or couldn't do it. It's marked as not done, not failed: this is for learning."
                                    : "Write at least \(min) words before checking this off.")
-                    .font(.callout)
+                    .font(.verdana(.callout))
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(0..<3, id: \.self) { i in
                         Label(pool[(seed + i) % pool.count], systemImage: "circle.fill").labelStyle(BulletLabel())
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(.verdana(.callout)).foregroundStyle(.secondary)
                     }
                 }
                 TextEditor(text: $text)
@@ -199,7 +199,7 @@ struct ReflectionSheet: View {
                     .frame(height: 180)
                 HStack {
                     ProgressView(value: Double(Swift.min(count, min)), total: Double(min)).tint(count >= min ? .green : Theme.accent)
-                    Text("\(count) / \(min) words").font(.caption.monospacedDigit()).foregroundStyle(count >= min ? .green : .secondary)
+                    Text("\(count) / \(min) words").font(.verdana(.caption).monospacedDigit()).foregroundStyle(count >= min ? .green : .secondary)
                 }
             }
             .padding()
@@ -251,7 +251,7 @@ struct MobileStepList: View {
                         Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? t.color.color : .secondary)
                         Text(s.title).strikethrough(on).foregroundStyle(on ? .secondary : .primary)
                     }
-                    .font(.subheadline)
+                    .font(.verdana(.subheadline))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -455,7 +455,7 @@ struct EditorSheet: View {
             TextField("When and where (at 9 PM on the couch)", text: habitText(\.cue))
             TextField("2-minute version (read one page)", text: habitText(\.twoMinute))
             TextField("Right after, I get… (a cup of tea)", text: habitText(\.reward))
-            if let s = task.habitSentence { Label(s, systemImage: "quote.opening").font(.callout).italic().foregroundStyle(.green) }
+            if let s = task.habitSentence { Label(s, systemImage: "quote.opening").font(.verdana(.callout)).italic().foregroundStyle(.green) }
         } header: {
             Text("Make it stick")
         }
@@ -499,7 +499,7 @@ struct WeekdayChips: View {
         HStack(spacing: 6) {
             ForEach(1...7, id: \.self) { wd in
                 let on = current.contains(wd)
-                Text(cal.veryShortWeekdaySymbols[wd - 1]).font(.callout.weight(.semibold))
+                Text(cal.veryShortWeekdaySymbols[wd - 1]).font(.verdana(.callout).weight(.semibold))
                     .frame(width: 34, height: 34)
                     .foregroundStyle(on ? .white : .primary)
                     .background(Circle().fill(on ? Color.accentColor : Color.secondary.opacity(0.15)))

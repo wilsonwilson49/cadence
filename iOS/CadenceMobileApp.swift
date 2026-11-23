@@ -10,15 +10,11 @@ struct CadenceMobileApp: App {
     @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
 
     init() {
-        // Large titles in the book serif, like the Mac and web apps' headings.
+        // Titles in Verdana, like the rest of the app and the Mac and web versions.
         let nav = UINavigationBarAppearance()
         nav.configureWithDefaultBackground()
-        if let d = UIFont.preferredFont(forTextStyle: .largeTitle).fontDescriptor.withDesign(.serif)?.withSymbolicTraits([]) {
-            nav.largeTitleTextAttributes = [.font: UIFont(descriptor: d, size: 32)]
-        }
-        if let d = UIFont.preferredFont(forTextStyle: .headline).fontDescriptor.withDesign(.serif) {
-            nav.titleTextAttributes = [.font: UIFont(descriptor: d, size: 18)]
-        }
+        if let f = UIFont(name: "Verdana", size: 29) { nav.largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: f)] }
+        if let f = UIFont(name: "Verdana-Bold", size: 16) { nav.titleTextAttributes = [.font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: f)] }
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
     }
@@ -32,6 +28,7 @@ struct CadenceMobileApp: App {
                 .environmentObject(model.focus)
                 .environmentObject(model.study)
                 .tint(Theme.accent)
+                .font(.verdana(.body))
                 .preferredColorScheme((AppearanceMode(rawValue: appearance) ?? .dark).colorScheme)
         }
         .onChange(of: phase) { _, p in model.scenePhaseChanged(p) }

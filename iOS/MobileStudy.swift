@@ -175,7 +175,7 @@ private struct MobileStudySetup: View {
             }
             Section {
                 Picker("Mode", selection: $mode) { ForEach(StudyMode.startable) { Text($0.title).tag($0) } }.pickerStyle(.segmented)
-                Text(mode.blurb).font(.footnote).foregroundStyle(.secondary)
+                Text(mode.blurb).font(.verdana(.footnote)).foregroundStyle(.secondary)
             }
             Section {
                 Picker("Preset", selection: $courseKey) {
@@ -271,8 +271,8 @@ private struct MobileRunningStudy: View {
             List {
                 Section {
                     VStack(spacing: 6) {
-                        Label(r.mode.title, systemImage: r.mode.symbol).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        Text(r.title).font(.title3.bold()).multilineTextAlignment(.center)
+                        Label(r.mode.title, systemImage: r.mode.symbol).font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                        Text(r.title).font(.verdana(.title3).bold()).multilineTextAlignment(.center)
                         clock(r)
                         if r.paused { Text("Paused").foregroundStyle(.orange) }
                     }
@@ -330,7 +330,7 @@ private struct MobileRunningStudy: View {
                             .foregroundStyle(i == r.index && !r.wrapUp ? Color.accentColor : .secondary)
                         Text(p.title).foregroundStyle(.primary).fontWeight(i == r.index && !r.wrapUp ? .semibold : .regular)
                         Spacer()
-                        Text(r.taskBased ? "\(p.tasks.count) tasks" : "\(p.minutes) min").font(.caption).foregroundStyle(.secondary)
+                        Text(r.taskBased ? "\(p.tasks.count) tasks" : "\(p.minutes) min").font(.verdana(.caption)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -343,7 +343,7 @@ private struct MobileRunningStudy: View {
             }
         } else if let p = r.period {
             Section {
-                if !p.blurb.isEmpty { Text(p.blurb).font(.callout).foregroundStyle(.secondary) }
+                if !p.blurb.isEmpty { Text(p.blurb).font(.verdana(.callout)).foregroundStyle(.secondary) }
                 ForEach(Array(p.tasks.enumerated()), id: \.offset) { i, t in
                     Button { study.update { $0.toggle(p, i) } } label: {
                         Label(t, systemImage: r.isChecked(p, i) ? "checkmark.square.fill" : "square").foregroundStyle(r.isChecked(p, i) ? .secondary : .primary)
@@ -386,7 +386,7 @@ struct StudyHistoryScreen: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack { Text(l.title); Spacer(); Text(durationString(seconds: l.minutes * 60)).monospacedDigit() }
                     Text([l.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()), l.mode.title, l.phase.map { "\($0.title) phase" }]
-                        .compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                        .compactMap { $0 }.joined(separator: " · ")).font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 .swipeActions { Button("Delete", role: .destructive) { store.studyLogs.removeAll { $0.id == l.id } } }
             }
@@ -409,7 +409,7 @@ struct CoursesScreen: View {
                         RoundedRectangle(cornerRadius: 2).fill(c.color.color).frame(width: 4, height: 30)
                         VStack(alignment: .leading) {
                             Text(c.title).foregroundStyle(.primary)
-                            Text("\(c.phase.title)\(c.chapter.isEmpty ? "" : " · \(c.chapter)")").font(.caption).foregroundStyle(.secondary)
+                            Text("\(c.phase.title)\(c.chapter.isEmpty ? "" : " · \(c.chapter)")").font(.verdana(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -437,7 +437,7 @@ struct CourseScreen: View {
     var body: some View {
         Form {
             Section {
-                TextField("Preset name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } })).font(.headline)
+                TextField("Preset name", text: Binding(get: { c.title }, set: { v in edit { $0.title = v } })).font(.verdana(.headline))
                 TextField("What you're on now", text: Binding(get: { c.chapter }, set: { v in edit { $0.chapter = v } }))
                 Picker("Color", selection: Binding(get: { c.color }, set: { v in edit { $0.color = v } })) {
                     ForEach(TaskColor.allCases) { Text($0.rawValue.capitalized).tag($0) }
@@ -477,11 +477,11 @@ struct CourseScreen: View {
                             MobileMinutes(label: "Length", value: Binding(get: { p.minutes }, set: { v in edit { $0.periods[i].minutes = v } }))
                         }
                         ForEach(Array(p.tasks.enumerated()), id: \.offset) { ti, t in
-                            HStack { Image(systemName: "square").foregroundStyle(.secondary); Text(t).font(.callout); Spacer()
+                            HStack { Image(systemName: "square").foregroundStyle(.secondary); Text(t).font(.verdana(.callout)); Spacer()
                                 Button { edit { $0.periods[i].tasks.remove(at: ti) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless) }
                         }
                         TextField("Add a task", text: Binding(get: { newTask[p.id] ?? "" }, set: { newTask[p.id] = $0 }))
-                            .font(.callout)
+                            .font(.verdana(.callout))
                             .onSubmit {
                                 let t = (newTask[p.id] ?? "").trimmingCharacters(in: .whitespaces)
                                 guard !t.isEmpty else { return }
@@ -526,7 +526,7 @@ struct FlashcardsScreen: View {
             Section {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("\(store.dueCardCount)").font(.largeTitle.bold().monospacedDigit())
+                        Text("\(store.dueCardCount)").font(.verdana(.largeTitle).bold().monospacedDigit())
                         Text("cards due today").foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -555,7 +555,7 @@ struct FlashcardsScreen: View {
                             ForEach(c.cards) { k in
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(k.front)
-                                    Text(k.back.isEmpty ? "(no answer)" : k.back).font(.caption).foregroundStyle(.secondary)
+                                    Text(k.back.isEmpty ? "(no answer)" : k.back).font(.verdana(.caption)).foregroundStyle(.secondary)
                                 }
                                 .badge(k.isDue() ? Text("due") : nil)
                                 .swipeActions { Button("Delete", role: .destructive) { store.editCourse(c.id) { $0.cards.removeAll { $0.id == k.id } } } }
@@ -582,11 +582,11 @@ private struct MobileCardReview: View {
         NavigationStack {
             VStack(spacing: 20) {
                 if let (cid, kid) = queue.first, let c = store.course(cid), let card = c.cards.first(where: { $0.id == kid }) {
-                    Text(c.title).font(.caption.weight(.semibold)).foregroundStyle(c.color.color)
-                    Text(card.front).font(.title2.weight(.semibold)).multilineTextAlignment(.center)
+                    Text(c.title).font(.verdana(.caption).weight(.semibold)).foregroundStyle(c.color.color)
+                    Text(card.front).font(.verdana(.title2).weight(.semibold)).multilineTextAlignment(.center)
                     if shown {
                         Divider()
-                        Text(card.back.isEmpty ? "(no answer written)" : card.back).font(.title3).multilineTextAlignment(.center)
+                        Text(card.back.isEmpty ? "(no answer written)" : card.back).font(.verdana(.title3)).multilineTextAlignment(.center)
                         Spacer()
                         HStack {
                             ForEach(Flashcard.Grade.allCases, id: \.rawValue) { g in
@@ -607,8 +607,8 @@ private struct MobileCardReview: View {
                     }
                 } else {
                     Spacer()
-                    Image(systemName: "checkmark.seal.fill").font(.largeTitle).foregroundStyle(.green)
-                    Text(reviewed == 0 ? "Nothing due." : "All done: \(reviewed) reviewed.").font(.headline)
+                    Image(systemName: "checkmark.seal.fill").font(.verdana(.largeTitle)).foregroundStyle(.green)
+                    Text(reviewed == 0 ? "Nothing due." : "All done: \(reviewed) reviewed.").font(.verdana(.headline))
                     Spacer()
                 }
             }
@@ -636,8 +636,8 @@ struct NotesScreen: View {
             ForEach(store.sortedNotes.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) || $0.body.localizedCaseInsensitiveContains(search) }) { n in
                 Button { open = n.id } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack { if n.pinned == true { Image(systemName: "pin.fill").foregroundStyle(.orange).font(.caption) }; Text(n.displayTitle).foregroundStyle(.primary) }
-                        Text(n.body.replacingOccurrences(of: "\n", with: " ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        HStack { if n.pinned == true { Image(systemName: "pin.fill").foregroundStyle(.orange).font(.verdana(.caption)) }; Text(n.displayTitle).foregroundStyle(.primary) }
+                        Text(n.body.replacingOccurrences(of: "\n", with: " ")).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 .swipeActions {
@@ -663,7 +663,7 @@ struct NoteScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Title", text: $title).font(.title2.bold())
+            TextField("Title", text: $title).font(.verdana(.title2).bold())
                 .onChange(of: title) { _, v in if loaded { save { $0.title = v } } }
             TextEditor(text: $text)
                 .onChange(of: text) { _, v in if loaded { save { $0.body = v } } }

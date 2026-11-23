@@ -178,12 +178,12 @@ struct BannerView: View {
                 .background(Circle().fill(content.tint))
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
-                    Text("CADENCE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("CADENCE").font(.verdana(.caption2).weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
-                    Text(Date(), style: .time).font(.caption2).foregroundStyle(.secondary)
+                    Text(Date(), style: .time).font(.verdana(.caption2)).foregroundStyle(.secondary)
                 }
-                Text(content.title).font(.headline).lineLimit(1)
-                Text(content.body).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                Text(content.title).font(.verdana(.headline)).lineLimit(1)
+                Text(content.body).font(.verdana(.callout)).foregroundStyle(.secondary).lineLimit(2)
                 HStack(spacing: 8) {
                     Spacer()
                     Button("Dismiss", action: onDismiss).controlSize(.small)

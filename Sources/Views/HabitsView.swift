@@ -39,14 +39,14 @@ struct HabitsView: View {
                         FlowRow(identities.map { id, n in
                             AnyView(Label { Text("I am someone who \(id)  ") + Text("\(n) vote\(n == 1 ? "" : "s")").bold().foregroundColor(.accentColor) }
                                 icon: { Image(systemName: "quote.opening") }
-                                .font(.callout).padding(.horizontal, 12).padding(.vertical, 6)
+                                .font(.verdana(.callout)).padding(.horizontal, 12).padding(.vertical, 6)
                                 .background(Capsule().fill(Color.accentColor.opacity(0.1))))
                         })
                     }
                     if list.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "arrow.triangle.2.circlepath.circle").font(.system(size: 36)).foregroundStyle(.secondary)
-                            Text("No habits yet").font(.title3.weight(.semibold))
+                            Text("No habits yet").font(.verdana(.title3).weight(.semibold))
                             Text("Start tiny: pick one thing you want to do every day, and the 2-minute version of it.").foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 30)
@@ -65,10 +65,10 @@ struct HabitsView: View {
 
     private func stat(_ value: String, _ label: String, _ symbol: String, _ tint: Color) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).font(.title3).foregroundStyle(tint).frame(width: 26)
+            Image(systemName: symbol).font(.verdana(.title3)).foregroundStyle(tint).frame(width: 26)
             VStack(alignment: .leading, spacing: 0) {
-                Text(value).font(.title3.bold()).monospacedDigit()
-                Text(label).font(.caption).foregroundStyle(.secondary)
+                Text(value).font(.verdana(.title3).bold()).monospacedDigit()
+                Text(label).font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
@@ -81,7 +81,7 @@ struct HabitsView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 SectionTitle(text: "Habit scorecard", symbol: "list.bullet.clipboard")
-                Text("what you already do, rated").font(.caption).foregroundStyle(.secondary)
+                Text("what you already do, rated").font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             Card {
                 VStack(spacing: 0) {
@@ -113,7 +113,7 @@ struct HabitsView: View {
                 }
             }
             Text("Rate each one good (+), neutral (=) or bad (–) for who you want to be. “Replace it” starts a habit that takes a bad one's place.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -133,11 +133,11 @@ struct HabitsView: View {
                 ("Make it satisfying", "Reward yourself right after, and don't break the chain: never miss twice."),
             ].enumerated()), id: \.offset) { i, law in
                 HStack(alignment: .top, spacing: 10) {
-                    Text("\(i + 1)").font(.callout.bold()).foregroundStyle(Color.accentColor)
+                    Text("\(i + 1)").font(.verdana(.callout).bold()).foregroundStyle(Color.accentColor)
                         .frame(width: 24, height: 24).background(Circle().fill(Color.accentColor.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(law.0).font(.callout.weight(.semibold))
-                        Text(law.1).font(.caption).foregroundStyle(.secondary)
+                        Text(law.0).font(.verdana(.callout).weight(.semibold))
+                        Text(law.1).font(.verdana(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                 }
@@ -179,7 +179,7 @@ private struct HabitTable: View {
                             }
                             .frame(width: 170, height: rowH, alignment: .leading)
                         }
-                        Text("Done").font(.caption).foregroundStyle(.secondary).frame(height: 18)
+                        Text("Done").font(.verdana(.caption)).foregroundStyle(.secondary).frame(height: 18)
                     }
                     ScrollView(.horizontal, showsIndicators: true) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -219,14 +219,14 @@ private struct HabitTable: View {
                     .frame(maxWidth: CGFloat(days.count) * (cellW + 3))
                     VStack(spacing: 3) {
                         HStack(spacing: 0) {
-                            Image(systemName: "flame").font(.caption).foregroundStyle(.secondary).frame(width: 34)
-                            Text("%").font(.caption).foregroundStyle(.secondary).frame(width: 40)
+                            Image(systemName: "flame").font(.verdana(.caption)).foregroundStyle(.secondary).frame(width: 34)
+                            Text("%").font(.verdana(.caption)).foregroundStyle(.secondary).frame(width: 40)
                         }
                         .frame(height: 30)
                         ForEach(habits) { t in
                             HStack(spacing: 0) {
-                                Text("\(stats[t.id]?.streak ?? 0)").font(.callout.bold()).foregroundStyle(.orange).frame(width: 34)
-                                Text(stats[t.id]?.rate.map { "\($0)%" } ?? "–").font(.caption).foregroundStyle(.secondary).frame(width: 40)
+                                Text("\(stats[t.id]?.streak ?? 0)").font(.verdana(.callout).bold()).foregroundStyle(.orange).frame(width: 34)
+                                Text(stats[t.id]?.rate.map { "\($0)%" } ?? "–").font(.verdana(.caption)).foregroundStyle(.secondary).frame(width: 40)
                             }
                             .frame(height: rowH)
                         }
@@ -273,23 +273,23 @@ private struct HabitCard: View {
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 4)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(task.title).font(.headline).lineLimit(1)
-                    Text("\(task.planSummary ?? "Every day") · \(h.styleLabel)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(task.title).font(.verdana(.headline)).lineLimit(1)
+                    Text("\(task.planSummary ?? "Every day") · \(h.styleLabel)").font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
                 VStack(spacing: 0) {
-                    Image(systemName: "flame.fill").foregroundStyle(.orange).font(.caption)
-                    Text("\(stats.streak)").font(.title3.bold()).monospacedDigit()
+                    Image(systemName: "flame.fill").foregroundStyle(.orange).font(.verdana(.caption))
+                    Text("\(stats.streak)").font(.verdana(.title3).bold()).monospacedDigit()
                     Text("best \(stats.best)").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 .help("Current streak (best \(stats.best))")
             }
             .fixedSize(horizontal: false, vertical: true)
-            if let s = task.habitSentence { Text(s).font(.callout).italic().foregroundStyle(.secondary) }
+            if let s = task.habitSentence { Text(s).font(.verdana(.callout)).italic().foregroundStyle(.secondary) }
             if h.style == "break", let app = h.app, !app.isEmpty, let used = appSecondsToday(app) {
                 let limit = (h.limitMinutes ?? 0) * 60
                 Label("\(app) today: \(durationString(seconds: used))\(limit > 0 ? " of \(durationString(seconds: limit))" : "")", systemImage: "desktopcomputer")
-                    .font(.caption).foregroundStyle(limit > 0 && used > limit ? Color.red : .secondary)
+                    .font(.verdana(.caption)).foregroundStyle(limit > 0 && used > limit ? Color.red : .secondary)
             }
             HStack(spacing: 3) {
                 ForEach(stats.grid, id: \.day) { g in
@@ -306,13 +306,13 @@ private struct HabitCard: View {
                 if let two = h.twoMinute, !two.isEmpty { Label(two, systemImage: "timer") }
                 if let r = h.reward, !r.isEmpty { Label("then \(r)", systemImage: "gift") }
             }
-            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
             if let occ, task.hasSteps {
                 StepChecklist(occ: occ) { model.beginReflection($0) }
             }
             if stats.missTwice {
                 Label("Missed last time. Never miss twice: even the 2-minute version counts today.", systemImage: "exclamationmark.circle")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.verdana(.caption)).foregroundStyle(.orange)
                     .padding(8).frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
             }
@@ -323,11 +323,11 @@ private struct HabitCard: View {
                     Button { model.beginReflection(occ, missed: true) } label: { Label("Didn't do it…", systemImage: "xmark") }
                         .controlSize(.small)
                 } else if occ?.isDone == true {
-                    Label("Done today", systemImage: "checkmark").font(.caption).foregroundStyle(.green)
+                    Label("Done today", systemImage: "checkmark").font(.verdana(.caption)).foregroundStyle(.green)
                 } else if occ?.isMissed == true {
-                    Label("Not done today", systemImage: "xmark").font(.caption).foregroundStyle(.red)
+                    Label("Not done today", systemImage: "xmark").font(.verdana(.caption)).foregroundStyle(.red)
                 } else if let next = task.nextOccurrence(onOrAfter: today.adding(days: 1)) {
-                    Text("Next: \(next.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))").font(.caption).foregroundStyle(.secondary)
+                    Text("Next: \(next.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))").font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Edit") { model.edit(task) }.buttonStyle(.borderless).controlSize(.small)

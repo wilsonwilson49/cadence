@@ -48,7 +48,7 @@ struct ReflectionsView: View {
             if store.reflections.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "text.quote").font(.system(size: 36)).foregroundStyle(.secondary)
-                    Text("No reflections yet").font(.title3.weight(.semibold))
+                    Text("No reflections yet").font(.verdana(.title3).weight(.semibold))
                     Text("Each time you check off a task you'll write a short reflection (at least \(store.settings.minReflectionWords) words). They collect here.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
                 }
@@ -59,7 +59,7 @@ struct ReflectionsView: View {
                         ForEach(groups, id: \.key) { day, items in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(day.isToday ? "Today" : day.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
-                                    .font(.headline)
+                                    .font(.verdana(.headline))
                                 ForEach(items) { r in card(r) }
                             }
                         }
@@ -79,10 +79,10 @@ struct ReflectionsView: View {
 
     private func stat(_ value: String, _ label: String, _ symbol: String, _ tint: Color) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).font(.title3).foregroundStyle(tint).frame(width: 26)
+            Image(systemName: symbol).font(.verdana(.title3)).foregroundStyle(tint).frame(width: 26)
             VStack(alignment: .leading, spacing: 0) {
-                Text(value).font(.title3.bold()).monospacedDigit()
-                Text(label).font(.caption).foregroundStyle(.secondary)
+                Text(value).font(.verdana(.title3).bold()).monospacedDigit()
+                Text(label).font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
@@ -97,17 +97,17 @@ struct ReflectionsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Circle().fill(color).frame(width: 8, height: 8)
-                    Text(r.taskTitle).font(.callout.weight(.semibold))
+                    Text(r.taskTitle).font(.verdana(.callout).weight(.semibold))
                     Label(r.isMissed ? "Didn't do it" : "Done", systemImage: r.isMissed ? "xmark" : "checkmark")
-                        .font(.caption2.weight(.semibold))
+                        .font(.verdana(.caption2).weight(.semibold))
                         .foregroundStyle(r.isMissed ? Color.red : Color.green)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Capsule().fill((r.isMissed ? Color.red : Color.green).opacity(0.14)))
                     if let d = DateKey.date(r.occurrenceKey), !d.isSameDay(r.createdAt) {
-                        Text("for \(d.formatted(.dateTime.month(.abbreviated).day()))").font(.caption).foregroundStyle(.secondary)
+                        Text("for \(d.formatted(.dateTime.month(.abbreviated).day()))").font(.verdana(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("\(r.wordCount) words · \(timeString(r.createdAt))").font(.caption).foregroundStyle(.secondary)
+                    Text("\(r.wordCount) words · \(timeString(r.createdAt))").font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 Text(r.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }

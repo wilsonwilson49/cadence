@@ -1,5 +1,5 @@
 /* Cadence house style. Dark by default (Settings › Appearance switches it).
-   Quiet and dense, closer to a reference site than an app-store page: serif headings over hairline rules,
+   Quiet and dense, closer to a reference site than an app-store page: Verdana throughout, headings over hairline rules,
    square boxes with caption bars, one blue for links and actions, and colour only where it carries meaning. */
 :root {
   --bg: #101317;
@@ -22,8 +22,7 @@
   --head-bg: #1f252d;
   --shadow: 0 8px 28px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4);
   --radius: 4px;
-  --serif: "Linux Libertine", "Georgia", "Times New Roman", Times, serif;
-  --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --sans: Verdana, Geneva, Tahoma, "DejaVu Sans", sans-serif;
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -78,7 +77,7 @@ html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 var(--sans);
+  font: 13px/1.55 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -875,19 +874,20 @@ kbd { font: 600 12px ui-monospace, monospace; background: var(--line); border-ra
 /* =====================================================================
    House style: type and boxes
    ===================================================================== */
-/* Headings are set in a book serif, the way a reference page would be; body text stays sans for density. */
+/* One typeface, Verdana, everywhere. Big headings stay at regular weight; their size and the rule under them do the work. */
 .header h1, .hero h2, .dialog h2, .auth-card h1, .ptitle-input, .fc-front, .tile-value, .ot-big, .due-num, .fr-big, .fc-time, .big-clock-text b {
-  font-family: var(--serif); font-weight: 400; letter-spacing: 0;
+  font-family: var(--sans); font-weight: 400; letter-spacing: -.01em;
 }
-.header h1 { font-size: 27px; line-height: 1.25; }
+.header h1 { font-size: 22px; line-height: 1.3; }
 .header { border-bottom: 1px solid var(--line-strong); margin: 0 24px 14px; padding: 18px 0 8px; }
 .header .sub { font-size: 13px; }
-.hero h2 { font-size: 32px; }
-.ptitle-input { font-size: 30px; }
-/* Section titles read like an encyclopaedia's: serif, with a rule running the width of the column. */
-.section-title { font-family: var(--serif); font-weight: 400; font-size: 19px; padding-bottom: 3px; border-bottom: 1px solid var(--line); margin-bottom: 9px; }
+.hero h2 { font-size: 25px; }
+.ptitle-input { font-size: 23px; }
+.dialog h2 { font-size: 17px; }
+/* Section titles: bold, with a rule running the width of the column. */
+.section-title { font-weight: 700; font-size: 14px; padding-bottom: 4px; border-bottom: 1px solid var(--line); margin-bottom: 9px; }
 .section-title .i { font-size: 15px; }
-.settings h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 3px; }
+.settings h3 { font-size: 14px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .count { border-radius: 3px; font-variant-numeric: tabular-nums; }
 
 /* Boxes: flat, hairline-bordered, square-cornered. */
@@ -898,7 +898,7 @@ kbd { font: 600 12px ui-monospace, monospace; background: var(--line); border-ra
 
 /* Sidebar: a plain contents list. The current page is marked by a bar and weight, not a coloured pill. */
 .sidebar { padding-top: 14px; }
-.brand { font-family: var(--serif); font-weight: 400; font-size: 21px; letter-spacing: .01em; }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
 .brand img { border-radius: 3px; }
 .nav-section { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--faint); padding-top: 14px; }
 .nav-item { border-radius: 0; padding: 5px 10px; border-left: 2px solid transparent; }
@@ -943,14 +943,14 @@ table.rules th { background: var(--head-bg); }
 .lv-badge { border-radius: 3px; box-shadow: none; }
 .just-done { animation-duration: .9s; }
 @media (max-width: 760px) { .header { margin: 0 16px 12px; padding-left: 0; padding-right: 0; } }
-.section-title .small, .section-title .tiny, .section-title .muted, .section-title select, .section-title label, .section-title .btn, .section-title .count { font-family: var(--sans); }
+.section-title .small, .section-title .tiny, .section-title .muted, .section-title select, .section-title label, .section-title .btn, .section-title .count { font-weight: 400; }
 .section-title { flex-wrap: wrap; row-gap: 2px; }
 
 /* ---------- For things you'd rather put off: pushy and strict reminders ---------- */
 .dialog.nag .body { align-items: center; text-align: center; gap: 10px; padding: 26px 26px 22px; }
 .nag-ic { font-size: 30px; display: inline-flex; }
 .nag-kicker { text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 600; color: var(--muted); }
-.nag-title { font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.2; margin: 0; }
+.nag-title { font-weight: 400; font-size: 23px; line-height: 1.25; margin: 0; }
 .nag-log { text-align: left; font-size: 12.5px; color: var(--muted); background: var(--bg); border: 1px solid var(--line); padding: 8px 10px; width: 100%; }
 .nag-log b { color: var(--text); font-weight: 600; display: block; margin-bottom: 2px; }
 .nag-actions { justify-content: center; flex-wrap: wrap; }
@@ -958,4 +958,4 @@ table.rules th { background: var(--head-bg); }
 /* Strict: the page is covered, above banners and toasts, until it's checked off or put off with a reason. */
 .overlay.cover { background: var(--bg); z-index: 90; }
 .overlay.cover .dialog.nag { width: min(620px, 100%); border-color: color-mix(in srgb, var(--red) 55%, var(--line-strong)); box-shadow: none; }
-.overlay.cover .nag-title { font-size: 38px; }
+.overlay.cover .nag-title { font-size: 31px; }

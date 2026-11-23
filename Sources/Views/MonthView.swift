@@ -31,7 +31,7 @@ struct MonthView: View {
                 }
                 HStack(spacing: 0) {
                     ForEach(weekdaySymbols, id: \.self) { s in
-                        Text(s.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(s.uppercased()).font(.verdana(.caption2).weight(.semibold)).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -81,14 +81,14 @@ private struct MonthCell: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(day.formatted(.dateTime.day()))
-                    .font(.callout.weight(day.isToday ? .bold : .regular))
+                    .font(.verdana(.callout).weight(day.isToday ? .bold : .regular))
                     .foregroundStyle(day.isToday ? .white : (inMonth ? .primary : .secondary))
                     .frame(width: 24, height: 24)
                     .background(Circle().fill(day.isToday ? Color.accentColor : .clear))
                 Spacer()
                 let tasks = store.checklist(on: day)
                 if !tasks.isEmpty && tasks.allSatisfy(\.isDone) {
-                    Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(.green)
+                    Image(systemName: "checkmark.seal.fill").font(.verdana(.caption)).foregroundStyle(.green)
                         .help("Everything done")
                 }
             }
@@ -143,7 +143,7 @@ struct DayPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(day.formatted(.dateTime.weekday(.wide))).foregroundStyle(.secondary)
-                Text(day.formatted(.dateTime.month(.wide).day())).font(.title2.bold())
+                Text(day.formatted(.dateTime.month(.wide).day())).font(.verdana(.title2).bold())
             }
             HStack {
                 Button { model.newTask(on: day) } label: { Label("Task", systemImage: "plus") }

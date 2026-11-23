@@ -50,11 +50,11 @@ struct BookingView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if !google.isConnected {
                         HStack(spacing: 12) {
-                            Image(systemName: "calendar.badge.exclamationmark").font(.title2).foregroundStyle(.orange)
+                            Image(systemName: "calendar.badge.exclamationmark").font(.verdana(.title2)).foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Google Calendar isn't connected").font(.callout.weight(.semibold))
+                                Text("Google Calendar isn't connected").font(.verdana(.callout).weight(.semibold))
                                 Text("Open time only accounts for what's in Cadence, and bookings are saved as Cadence events without sending invites.")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.verdana(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button("Connect in Settings") { model.screen = .settings }
@@ -76,7 +76,7 @@ struct BookingView: View {
                         Text("open this week").foregroundStyle(.secondary)
                         if loading { ProgressView().controlSize(.small) }
                         Spacer()
-                        Text(hoursSummary).font(.caption).foregroundStyle(.secondary)
+                        Text(hoursSummary).font(.verdana(.caption)).foregroundStyle(.secondary)
                         Button("Edit hours") { editingHours = true }.controlSize(.small)
                             .popover(isPresented: $editingHours, arrowEdge: .bottom) { OpenHoursEditor() }
                     }
@@ -86,7 +86,7 @@ struct BookingView: View {
                     if calendly.isConnected && !calendly.eventTypes.isEmpty { calendlyLinks }
 
                     Text("Closed items take their time out of your open time; open ones are just for info. Events you make in Cadence start out closed and tasks start out open — change it in any item's editor. “Copy open times” puts the list on your clipboard to paste into an email.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 .padding(22)
             }
@@ -118,7 +118,7 @@ struct BookingView: View {
                 RoundedRectangle(cornerRadius: 3).fill(.clear).background(OpenStripes(color: .secondary, opacity: 0.25))
             }
         }
-        .font(.caption).foregroundStyle(.secondary)
+        .font(.verdana(.caption)).foregroundStyle(.secondary)
     }
 
     private func legendItem<S: View>(_ text: String, @ViewBuilder swatch: () -> S) -> some View {
@@ -138,11 +138,11 @@ struct BookingView: View {
                         ForEach(week) { d in
                             VStack(spacing: 1) {
                                 Text(d.day.isToday ? "TODAY" : d.day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                                    .font(.caption2.weight(.semibold)).foregroundStyle(d.day.isToday ? Color.accentColor : .secondary)
-                                Text(d.day.formatted(.dateTime.day())).font(.title3.weight(.semibold))
+                                    .font(.verdana(.caption2).weight(.semibold)).foregroundStyle(d.day.isToday ? Color.accentColor : .secondary)
+                                Text(d.day.formatted(.dateTime.day())).font(.verdana(.title3).weight(.semibold))
                                     .foregroundStyle(d.day.isToday ? Color.accentColor : .primary)
                                 Text(d.total > 0 ? "\(durationText(d.total)) open" : "no open time")
-                                    .font(.caption2).foregroundStyle(d.total > 0 ? Color.green : .secondary)
+                                    .font(.verdana(.caption2)).foregroundStyle(d.total > 0 ? Color.green : .secondary)
                             }
                             .frame(width: colW)
                         }
@@ -261,13 +261,13 @@ struct BookingView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle(text: "Your Calendly links", symbol: "link")
             Text("Public links anyone can book from. Booked meetings land on your calendar automatically.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
             ForEach(calendly.eventTypes) { t in
                 HStack(spacing: 10) {
                     Circle().fill(t.color.flatMap(Color.init(hex:)) ?? .purple).frame(width: 10, height: 10)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(t.name).font(.callout.weight(.medium))
-                        Text("\(t.minutes) min · \(t.url.absoluteString)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text(t.name).font(.verdana(.callout).weight(.medium))
+                        Text("\(t.minutes) min · \(t.url.absoluteString)").font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer()
                     Button(copiedLink == t.id ? "Copied" : "Copy link") {
@@ -398,7 +398,7 @@ private struct OpenHoursEditor: View {
     var body: some View {
         let a = store.settings.availability
         VStack(alignment: .leading, spacing: 12) {
-            Text("Open hours").font(.headline)
+            Text("Open hours").font(.verdana(.headline))
             HStack(spacing: 4) {
                 ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { wd in
                     let on = a.weekdays.contains(wd)
@@ -418,9 +418,9 @@ private struct OpenHoursEditor: View {
             .fixedSize()
             Stepper("Keep \(a.bufferMinutes) min free around closed items", value: $store.settings.availability.bufferMinutes, in: 0...120, step: 5)
             if a.endMinutes <= a.startMinutes {
-                Label("The end is before the start, so there's no open time.", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                Label("The end is before the start, so there's no open time.", systemImage: "exclamationmark.triangle").font(.verdana(.caption)).foregroundStyle(.orange)
             }
-            Text("Changes apply right away and sync to your other devices.").font(.caption).foregroundStyle(.secondary)
+            Text("Changes apply right away and sync to your other devices.").font(.verdana(.caption)).foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(width: 340)
@@ -510,7 +510,7 @@ private struct BookingSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Book open time").font(.title3.bold())
+                Text("Book open time").font(.verdana(.title3).bold())
                 Label("\(request.start.formatted(.dateTime.weekday(.wide).month(.wide).day())) · open \(timeString(request.start))–\(timeString(request.rangeEnd))",
                       systemImage: "calendar.badge.clock")
                     .foregroundStyle(.secondary)
@@ -530,10 +530,10 @@ private struct BookingSheet: View {
                 if google.isConnected {
                     Toggle("Add a Google Meet link", isOn: $addMeet)
                     Text("Saved to Google Calendar as a closed event. If you add an email, Google sends them an invitation.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                 } else {
                     Text("Google Calendar isn't connected, so this is saved as a Cadence event only (no invitation).")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 if let error { Text(error).foregroundStyle(.red) }
             }

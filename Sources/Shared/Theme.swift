@@ -6,7 +6,7 @@ import UIKit
 #endif
 
 // The house style, shared by the Mac and iPhone apps (the web app's tokens in app.css match it):
-// dark by default, serif headings over hairline rules, square boxes, one blue for links and actions.
+// dark by default, Verdana throughout, headings over hairline rules, square boxes, one blue for links and actions.
 
 /// Dark (the default), light, or whatever the system is set to. Stored per device.
 enum AppearanceMode: String, CaseIterable, Identifiable {
@@ -25,6 +25,22 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
     #endif
 }
 
+extension Font {
+    /// Verdana at the size of a system text style (a little smaller than SF, since Verdana runs large),
+    /// scaling with the text size setting on iPhone. Used everywhere text used a system style.
+    static func verdana(_ style: Font.TextStyle) -> Font {
+        #if os(macOS)
+        let sizes: [Font.TextStyle: CGFloat] = [.largeTitle: 24, .title: 20, .title2: 16, .title3: 14, .headline: 12, .body: 12,
+                                                .callout: 11.5, .subheadline: 10.5, .footnote: 10, .caption: 10, .caption2: 9.5]
+        #else
+        let sizes: [Font.TextStyle: CGFloat] = [.largeTitle: 30, .title: 25, .title2: 20, .title3: 18, .headline: 15.5, .body: 15.5,
+                                                .callout: 14.5, .subheadline: 13.5, .footnote: 12.5, .caption: 11.5, .caption2: 10.5]
+        #endif
+        let f = Font.custom("Verdana", size: sizes[style] ?? 12, relativeTo: style)
+        return style == .headline ? f.weight(.bold) : f
+    }
+}
+
 enum Theme {
     /// Links, selection, focus rings: a soft blue on dark, a reference-page blue on light.
     static let accent = adaptive(dark: (0.51, 0.66, 0.94), light: (0.20, 0.40, 0.80))
@@ -34,8 +50,8 @@ enum Theme {
     static let rule = Color.primary.opacity(0.14)
     static let radius: CGFloat = 4
 
-    /// Book-serif headings.
-    static func serif(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .serif) }
+    /// Headings, in Verdana like everything else. Verdana runs large, so sizes are scaled down a little.
+    static func heading(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .custom("Verdana", size: (size * 0.88).rounded()).weight(weight) }
 
     private static func adaptive(dark: (Double, Double, Double), light: (Double, Double, Double)) -> Color {
         #if os(macOS)

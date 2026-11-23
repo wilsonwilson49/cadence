@@ -69,12 +69,12 @@ struct SettingsView: View {
         Section {
             Toggle("Block distracting apps and sites during focus and study sessions", isOn: $store.settings.blockDuringFocus)
             VStack(alignment: .leading, spacing: 6) {
-                Text("Distracting apps").font(.callout.weight(.medium))
+                Text("Distracting apps").font(.verdana(.callout).weight(.medium))
                 FlowRow(store.settings.distractingApps.map { app in
                     AnyView(HStack(spacing: 3) {
                         Text(app)
                         Button { store.settings.distractingApps.removeAll { $0 == app } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
-                    }.font(.callout).padding(.horizontal, 8).padding(.vertical, 2)
+                    }.font(.verdana(.callout)).padding(.horizontal, 8).padding(.vertical, 2)
                      .background(RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.12))))
                 })
                 HStack {
@@ -86,12 +86,12 @@ struct SettingsView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("Blocked websites").font(.callout.weight(.medium))
+                Text("Blocked websites").font(.verdana(.callout).weight(.medium))
                 FlowRow(store.settings.blockedSites.map { site in
                     AnyView(HStack(spacing: 3) {
                         Text(site)
                         Button { store.settings.blockedSites.removeAll { $0 == site } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
-                    }.font(.callout).padding(.horizontal, 8).padding(.vertical, 2)
+                    }.font(.verdana(.callout)).padding(.horizontal, 8).padding(.vertical, 2)
                      .background(RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.12))))
                 })
                 HStack {
@@ -149,15 +149,15 @@ struct SettingsView: View {
                     .keyboardShortcut(.defaultAction)
                 }
                 .disabled(sync.draftUsername.isEmpty || syncPassword.isEmpty || sync.isSigningIn)
-                if case .error(let m) = sync.status { Text(m).font(.caption).foregroundStyle(.red) }
+                if case .error(let m) = sync.status { Text(m).font(.verdana(.caption)).foregroundStyle(.red) }
                 Text("Use the same username and password as on cadenceplanner.vercel.app (or create an account here). You stay signed in on this Mac until you sign out.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
             }
         } header: {
             Text("Sync with Cadence Web")
         } footer: {
             Text("Tasks, completions, reflections and shared settings sync both ways about every minute and a few seconds after each change. Google sign-in and calendar picks stay on each device.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -177,10 +177,10 @@ struct SettingsView: View {
                 }
             }
             Text("To make macOS notifications stay on screen until you act on them, set Cadence's style to “Persistent” in System Settings › Notifications. Cadence's own on-screen banners always stay until dismissed.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Default alert style for new tasks").font(.callout.weight(.medium))
+                Text("Default alert style for new tasks").font(.verdana(.callout).weight(.medium))
                 ChannelToggles(channels: $store.settings.defaultChannels, showDetail: true)
             }
             Picker("Tasks without a time remind at", selection: $store.settings.untimedReminderMinutes) {
@@ -218,11 +218,11 @@ struct SettingsView: View {
                     sidebarHidden = h.sorted().joined(separator: ",")
                 })) {
                     Text(g.name)
-                    Text(g.screens.map(\.title).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+                    Text(g.screens.map(\.title).joined(separator: ", ")).font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
             }
             Text("Hidden sections are only hidden on this Mac. Click a section's heading in the sidebar to fold it.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Sidebar")
         }
@@ -235,7 +235,7 @@ struct SettingsView: View {
                 ForEach(projectTodayChoices, id: \.0) { Text($0.1).tag($0.0) }
             }
             Text("Click the ring on Today to switch quickly. Urgent items always count today. Syncs to your iPhone and the web.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Today's progress ring")
         }
@@ -250,11 +250,11 @@ struct SettingsView: View {
                 }
                 Toggle("Skip when everything is already done", isOn: $store.settings.nudgeOnlyWhenIncomplete)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Alert style").font(.callout.weight(.medium))
+                    Text("Alert style").font(.verdana(.callout).weight(.medium))
                     ChannelToggles(channels: $store.settings.nudgeChannels)
                 }
                 Text("Paused while the screen is locked or asleep. Next reminder around \(timeString(engine.nextNudge)).")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.verdana(.caption)).foregroundStyle(.secondary)
             }
         } header: {
             Text("Recurring checklist reminder")
@@ -268,7 +268,7 @@ struct SettingsView: View {
             Toggle("When the screen is unlocked", isOn: $store.settings.checkInOnUnlock)
             Toggle("Only if something is still unchecked", isOn: $store.settings.checkInOnlyWhenIncomplete)
             VStack(alignment: .leading, spacing: 6) {
-                Text("Alert style").font(.callout.weight(.medium))
+                Text("Alert style").font(.verdana(.callout).weight(.medium))
                 ChannelToggles(channels: $store.settings.checkInChannels)
             }
         } header: {
@@ -282,7 +282,7 @@ struct SettingsView: View {
                 Text("Minimum reflection length: \(store.settings.minReflectionWords) words")
             }
             Text("Every checklist item needs a reflection before it can be checked off. The minimum can't go below 20 words.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Reflections")
         }
@@ -293,16 +293,16 @@ struct SettingsView: View {
             Toggle("Open Cadence automatically when I log in (on by default)", isOn: Binding(get: { loginItemOn }, set: setLoginItem))
             if SMAppService.mainApp.status == .requiresApproval {
                 Text("macOS needs your approval in System Settings › General › Login Items.")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.verdana(.caption)).foregroundStyle(.orange)
             }
-            if let loginError { Text(loginError).font(.caption).foregroundStyle(.red) }
+            if let loginError { Text(loginError).font(.verdana(.caption)).foregroundStyle(.red) }
             Toggle("Run in the background", isOn: Binding(get: { runInBackground }, set: { runInBackground = $0; WindowManager.runsInBackground = $0 }))
             Text(runInBackground
                  ? "When you close the window, Cadence leaves the Dock and keeps running in the menu bar, so reminders, nudges and check-ins keep coming. When it starts at login it opens quietly. Open it any time from the menu bar icon."
                  : "Cadence stays in the Dock when you close the window. It keeps running either way; quit it from the menu bar icon.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
             Text("Recommended: turn on both, since reminders only fire while Cadence is running.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Startup")
         }
@@ -320,7 +320,7 @@ struct SettingsView: View {
                 }
                 if google.viaServer {
                     Text("Using the Google connection from your Cadence account, so it's the same on the web and every device. Disconnecting here disconnects it everywhere.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary)
                 }
                 Toggle("Show Google events in Cadence calendars", isOn: $store.settings.showGoogleEvents)
                 if google.viaServer {
@@ -329,7 +329,7 @@ struct SettingsView: View {
                     } else {
                         HStack {
                             Text("Google Tasks: your Google connection is from before Cadence supported it. Connect again on the website to add it.")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.verdana(.caption)).foregroundStyle(.secondary)
                             Spacer()
                             Link("Open website settings", destination: URL(string: "\(SyncService.defaultServer)/app/settings")!)
                         }
@@ -341,13 +341,13 @@ struct SettingsView: View {
                 }
                 if !google.calendars.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Calendars to show and check for busy times").font(.callout.weight(.medium))
+                        Text("Calendars to show and check for busy times").font(.verdana(.callout).weight(.medium))
                         ForEach(google.calendars) { cal in
                             Toggle(isOn: calendarBinding(cal)) {
                                 HStack(spacing: 6) {
                                     Circle().fill(cal.colorHex.flatMap(Color.init(hex:)) ?? .blue).frame(width: 9, height: 9)
                                     Text(cal.summary)
-                                    if cal.primary { Text("primary").font(.caption).foregroundStyle(.secondary) }
+                                    if cal.primary { Text("primary").font(.verdana(.caption)).foregroundStyle(.secondary) }
                                 }
                             }
                         }
@@ -368,17 +368,17 @@ struct SettingsView: View {
                             .disabled(!sync.isSignedIn)
                     }
                 }
-                .font(.callout)
+                .font(.verdana(.callout))
                 DisclosureGroup("Advanced: use this Mac's own Google client") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("One-time setup (about 5 minutes):").font(.callout.weight(.medium))
+                    Text("One-time setup (about 5 minutes):").font(.verdana(.callout).weight(.medium))
                     Text("1. Open Google Cloud Console, create a project, and enable the **Google Calendar API**.")
                     Text("2. Under **OAuth consent screen**, choose External and add your Google account as a test user.")
                     Text("3. Under **Credentials**, create an **OAuth client ID** with application type **Desktop app**.")
                     Text("4. Paste the Client ID and Client secret below, then Connect.")
                     Link("Open Google Cloud Console", destination: URL(string: "https://console.cloud.google.com/apis/credentials")!)
                 }
-                .font(.callout)
+                .font(.verdana(.callout))
                 TextField("Client ID", text: $store.settings.googleClientID, prompt: Text("…apps.googleusercontent.com")).multilineTextAlignment(.leading)
                 HStack {
                     if showSecret {
@@ -402,7 +402,7 @@ struct SettingsView: View {
                 }
             }
             if let err = google.lastError {
-                Text(err).font(.caption).foregroundStyle(.red)
+                Text(err).font(.verdana(.caption)).foregroundStyle(.red)
             }
         } header: {
             Text("Google Calendar")
@@ -432,7 +432,7 @@ struct SettingsView: View {
                 }
             } else {
                 Text("In Calendly, open **Integrations › API & Webhooks**, generate a **Personal Access Token**, and paste it here. Your booked meetings will show up on your checklist (without notifications), and your booking links appear on the Booking page.")
-                    .font(.callout)
+                    .font(.verdana(.callout))
                 Link("Open Calendly API settings", destination: URL(string: "https://calendly.com/integrations/api_webhooks")!)
                 HStack {
                     SecureField("Personal Access Token", text: $calendlyToken).multilineTextAlignment(.leading)
@@ -441,7 +441,7 @@ struct SettingsView: View {
                         .disabled(calendlyToken.trimmingCharacters(in: .whitespaces).isEmpty || calendly.isWorking)
                 }
             }
-            if let e = calendly.lastError { Text(e).font(.caption).foregroundStyle(.red) }
+            if let e = calendly.lastError { Text(e).font(.verdana(.caption)).foregroundStyle(.red) }
         } header: {
             Text("Calendly")
         }
@@ -460,10 +460,10 @@ struct SettingsView: View {
                 .disabled(importer.isImporting || !(google.isConnected || calendly.isConnected))
                 if importer.isImporting { ProgressView().controlSize(.small) }
                 Spacer()
-                if let s = importer.lastSummary { Text(s).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                if let s = importer.lastSummary { Text(s).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(2) }
             }
             Text("Imported items never notify you (you can turn notifications on for any single one in its editor). Deleting one hides it for good. Google Calendar is re-checked every 2 minutes (and when Cadence comes to the front), so edits, moves and deletions there show up here quickly; Calendly every 30 minutes.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Calendar imports")
         }
@@ -478,7 +478,7 @@ struct SettingsView: View {
                 HStack(spacing: 10) {
                     Circle().fill(p.color.color).frame(width: 10, height: 10)
                     TextField("Name", text: $p.name).labelsHidden().frame(maxWidth: 200).multilineTextAlignment(.leading)
-                    Text(p.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Text(p.summary).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(2)
                     Spacer()
                     Button(role: .destructive) { store.settings.taskPresets.removeAll { $0.id == p.id } } label: {
                         Image(systemName: "trash")
@@ -491,7 +491,7 @@ struct SettingsView: View {
             Text("Task presets")
         } footer: {
             Text("Saved combinations of conditions (repeat, keep until done, due date, reminders, color…). Pick one at the top of the New Task window, or save the current one there with “Save as preset”.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -511,7 +511,7 @@ struct SettingsView: View {
             Text("Open hours")
         } footer: {
             Text("When you're normally free to be booked. Booking shows what's left of these hours after your closed tasks and events.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.verdana(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -526,7 +526,7 @@ struct SettingsView: View {
                 Link("Privacy Policy", destination: URL(string: "https://cadenceplanner.vercel.app/privacy")!)
                 Link("Terms of Service", destination: URL(string: "https://cadenceplanner.vercel.app/terms")!)
             }
-            .font(.caption)
+            .font(.verdana(.caption))
         } header: {
             Text("Data")
         }

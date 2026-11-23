@@ -10,8 +10,8 @@ struct ScreenHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Theme.serif(25))
-                if let subtitle { Text(subtitle).font(.callout).foregroundStyle(.secondary) }
+                Text(title).font(Theme.heading(25))
+                if let subtitle { Text(subtitle).font(.verdana(.callout)).foregroundStyle(.secondary) }
             }
             Spacer()
             trailing
@@ -49,8 +49,8 @@ struct SectionTitle: View {
     var body: some View {
         HStack(spacing: 6) {
             if let symbol { Image(systemName: symbol).foregroundStyle(.secondary) }
-            Text(text).font(Theme.serif(17))
-            if let count { Text("\(count)").font(.caption.weight(.semibold)).monospacedDigit().padding(.horizontal, 5).padding(.vertical, 1)
+            Text(text).font(Theme.heading(15.5, .bold))
+            if let count { Text("\(count)").font(.verdana(.caption).weight(.semibold)).monospacedDigit().padding(.horizontal, 5).padding(.vertical, 1)
                 .background(RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.15))) }
             Spacer()
         }
@@ -126,7 +126,7 @@ struct ChannelToggles: View {
                 Label {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(ch.label)
-                        if showDetail { Text(ch.detail).font(.caption).foregroundStyle(.secondary) }
+                        if showDetail { Text(ch.detail).font(.verdana(.caption)).foregroundStyle(.secondary) }
                     }
                 } icon: { Image(systemName: ch.symbol) }
             }
@@ -245,7 +245,7 @@ struct ChecklistRow: View {
                         Label("\(p.done)/\(p.total) steps", systemImage: "checklist").foregroundStyle(p.done == p.total ? .green : .secondary)
                     }
                 }
-                .font(.caption)
+                .font(.verdana(.caption))
                 .foregroundStyle(.secondary)
                 .labelStyle(CompactLabelStyle())
                 if occ.task.hasSteps && !compact {
@@ -283,7 +283,7 @@ struct StepChecklist: View {
                             .foregroundStyle(on ? t.color.color : .secondary)
                         Text(s.title).strikethrough(on).foregroundStyle(on ? .secondary : .primary).lineLimit(1)
                     }
-                    .font(.callout)
+                    .font(.verdana(.callout))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -393,7 +393,7 @@ struct ReflectionForm: View {
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(missed ? Color.red : occurrence.task.color.color))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(missed ? "Why didn't it happen?" : "Reflect to complete").font(.title3.bold())
+                    Text(missed ? "Why didn't it happen?" : "Reflect to complete").font(.verdana(.title3).bold())
                     Text("\(occurrence.task.title) · \(occurrence.day.formatted(.dateTime.weekday(.wide).month().day()))")
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -403,16 +403,16 @@ struct ReflectionForm: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(missed ? "Write at least \(minWords) words about why you didn't or couldn't do it. It's marked as not done, not failed — this is for learning. Some prompts:"
                             : "Write at least \(minWords) words before checking this off. Some prompts:")
-                    .font(.callout)
+                    .font(.verdana(.callout))
                 ForEach(promptsFor(occurrence), id: \.self) { p in
                     Label(p, systemImage: "circle.fill").labelStyle(BulletLabelStyle())
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.verdana(.callout)).foregroundStyle(.secondary)
                 }
             }
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $text)
-                    .font(.body)
+                    .font(.verdana(.body))
                     .scrollContentBackground(.hidden)
                     .padding(8)
                     .focused($focused)
@@ -548,7 +548,7 @@ struct ItemDetail: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Circle().fill(item.color).frame(width: 10, height: 10)
-                Text(item.title).font(.headline).lineLimit(2)
+                Text(item.title).font(.verdana(.headline)).lineLimit(2)
             }
             switch item {
             case .task(let occ) where occ.isEvent:
@@ -564,9 +564,9 @@ struct ItemDetail: View {
                     }
                     if !occ.task.notes.isEmpty { Text(occ.task.notes).foregroundStyle(.secondary).padding(.top, 2) }
                     Text("\(occ.task.source == "calendly" ? "From Calendly" : occ.task.source == "google" ? "From Google Calendar" : "Event") · \(occ.task.isSilent ? "no reminders" : "reminds you") · not on your checklist")
-                        .font(.caption).foregroundStyle(.secondary).padding(.top, 2)
+                        .font(.verdana(.caption)).foregroundStyle(.secondary).padding(.top, 2)
                 }
-                .font(.callout)
+                .font(.verdana(.callout))
                 HStack {
                     if let u = occ.task.externalURL.flatMap(URL.init(string:)) { Link("Open", destination: u) }
                     Button("Edit…") { dismiss(); DispatchQueue.main.async { model.edit(occ.task) } }
@@ -594,7 +594,7 @@ struct ItemDetail: View {
                         Text("“\(r.text)”").italic().foregroundStyle(.secondary).lineLimit(4).padding(.top, 4)
                     }
                 }
-                .font(.callout)
+                .font(.verdana(.callout))
                 HStack {
                     if occ.isDone {
                         Button("Mark not done") { store.uncomplete(occ); dismiss() }
@@ -625,7 +625,7 @@ struct ItemDetail: View {
                     if let loc = ev.location { Label(loc, systemImage: "mappin.and.ellipse") }
                     Label("Google Calendar", systemImage: "link").foregroundStyle(.secondary)
                 }
-                .font(.callout)
+                .font(.verdana(.callout))
                 if let link = ev.link {
                     Link("Open in Google Calendar", destination: link).controlSize(.small)
                 }
@@ -668,7 +668,7 @@ private struct QuickEdit: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("Quick edit").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text("Quick edit").font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
             TextField("Title", text: $title).textFieldStyle(.roundedBorder).onSubmit(save)
             if item.start != nil {
                 DatePicker("Starts", selection: $start, displayedComponents: fixedDays ? [.hourAndMinute] : [.date, .hourAndMinute])
@@ -680,7 +680,7 @@ private struct QuickEdit: View {
             }
             Toggle("Blocks the time (closed)", isOn: $busy).toggleStyle(.checkbox)
             if fixedDays && item.start != nil {
-                Text("It repeats, so a new time applies to every repeat.").font(.caption).foregroundStyle(.secondary)
+                Text("It repeats, so a new time applies to every repeat.").font(.verdana(.caption)).foregroundStyle(.secondary)
             }
             HStack {
                 if case .google(let e) = item {
@@ -694,7 +694,7 @@ private struct QuickEdit: View {
             }
             .controlSize(.small)
         }
-        .font(.callout)
+        .font(.verdana(.callout))
         .onAppear {
             guard !loaded else { return }
             let o = original
@@ -779,10 +779,10 @@ struct EventRow: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 0) {
                 if let s = ev.start {
-                    Text(timeString(s)).font(.callout.monospacedDigit())
-                    if let e = ev.end { Text(timeString(e)).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                    Text(timeString(s)).font(.verdana(.callout).monospacedDigit())
+                    if let e = ev.end { Text(timeString(e)).font(.verdana(.caption).monospacedDigit()).foregroundStyle(.secondary) }
                 } else {
-                    Text("All day").font(.callout)
+                    Text("All day").font(.verdana(.callout))
                 }
             }
             .frame(width: 66, alignment: .leading)
@@ -794,7 +794,7 @@ struct EventRow: View {
                     if ev.source == "google" { Label("Google", systemImage: "calendar") }
                     if let n = ev.notes { Text(n).lineLimit(1) }
                 }
-                .font(.caption).foregroundStyle(.secondary).labelStyle(CompactLabelStyle())
+                .font(.verdana(.caption)).foregroundStyle(.secondary).labelStyle(CompactLabelStyle())
             }
             Spacer()
             if let link = ev.link { Link(destination: link) { Image(systemName: "arrow.up.right.square") }.help("Open") }
@@ -889,7 +889,7 @@ struct CalendarsMenu: View {
         .help("Show or hide calendars")
         .popover(isPresented: $open, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Show on Week, Month & Booking").font(.caption).foregroundStyle(.secondary)
+                Text("Show on Week, Month & Booking").font(.verdana(.caption)).foregroundStyle(.secondary)
                 ForEach(list, id: \.key) { c in
                     Toggle(isOn: Binding(get: { google.isShown(c.key) }, set: { google.setShown(c.key, $0) })) {
                         HStack(spacing: 7) {
@@ -900,7 +900,7 @@ struct CalendarsMenu: View {
                     .toggleStyle(.checkbox)
                 }
                 Text("Hidden calendars don't count against your open time. Your checklist and reminders aren't affected.")
-                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .font(.verdana(.caption2)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(14)
             .frame(width: 260)
