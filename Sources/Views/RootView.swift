@@ -14,9 +14,9 @@ struct RootView: View {
             // List can shift where clicks land, which made the first row under each header miss.
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Image(nsImage: NSApp.applicationIconImage)
+                    Image(nsImage: AppIconArt.badge(points: 26))
                         .resizable()
-                        .frame(width: 28, height: 28)
+                        .frame(width: 26, height: 26)
                     Text("Cadence").font(.app(.title3).weight(.bold))
                     Spacer()
                 }

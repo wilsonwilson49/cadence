@@ -78,6 +78,14 @@ enum AppIconArt {
         t.lineWidth = side * 0.056; tick.setStroke(); t.stroke()
     }
 
+    /// The icon for use inside the app (sidebar): the tile edge to edge, without the Dock version's margin,
+    /// outline and shadow, which read as a pale ring at small sizes.
+    static func badge(points: Int, family: String = AppFont.family) -> NSImage {
+        let img = NSImage(size: NSSize(width: points, height: points))
+        img.addRepresentation(bitmap(size: points * 2, shape: .rounded, family: family))
+        return img
+    }
+
     /// Writes the icon files the asset catalogs and the website use (debug flag `-exportIcons <dir>`).
     static func export(to dir: URL, family: String) throws {
         func png(_ size: Int, _ shape: Shape, _ name: String) throws {
