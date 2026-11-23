@@ -98,7 +98,8 @@ struct ReflectionsView: View {
                 HStack(spacing: 8) {
                     Circle().fill(color).frame(width: 8, height: 8)
                     Text(r.taskTitle).font(.app(.callout).weight(.semibold))
-                    Label(r.isMissed ? "Didn't do it" : "Done", systemImage: r.isMissed ? "xmark" : "checkmark")
+                    Label(r.isMissed ? "Didn't do it" : r.isAway ? "Away" : r.isDecision ? "Kept going" : "Done",
+                          systemImage: r.isMissed ? "xmark" : r.isAway ? "moon.zzz" : r.isDecision ? "hourglass" : "checkmark")
                         .font(.app(.caption2).weight(.semibold))
                         .foregroundStyle(r.isMissed ? Color.red : Color.green)
                         .padding(.horizontal, 7).padding(.vertical, 2)

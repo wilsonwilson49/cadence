@@ -80,6 +80,18 @@ enum DebugDriver {
                 if let o = model.store.todayChecklist().first(where: { !$0.isResolved && !$0.isEvent }) { model.workOn(o) }
             }
         }
+        // -wallPreview decision|away|reflect: shows that wall in an ordinary window (never over the screen).
+        if let w = LaunchOptions.value("-wallPreview") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                switch w {
+                case "decision": model.walls.show(.decision)
+                case "away": model.walls.show(.away(from: Date().addingTimeInterval(-47 * 60), to: Date()))
+                default:
+                    let occs = model.store.todayChecklist().filter { !$0.isResolved && !$0.isEvent }.prefix(2)
+                    model.walls.reflect(on: Array(occs), minutes: 35)
+                }
+            }
+        }
         // -keepAliveTest on|off (with -stayRunningTest and a renamed bundle ID): turns the launch agent on or off.
         if let v = LaunchOptions.value("-keepAliveTest") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { try? StayRunning.setKeepAlive(v == "on") }
@@ -169,6 +181,11 @@ enum DebugDriver {
             }
             if LaunchOptions.has("-edit"), let t = model.store.tasks.first(where: \.recurrence.isRepeating) {
                 model.edit(t)
+            }
+            // -editFollowUp: a new task set to follow the first open one (the editor's "After another task").
+            if LaunchOptions.has("-editFollowUp"), let t = model.store.todayChecklist().first(where: { !$0.isEvent })?.task {
+                model.editingTask = PlanTask(title: "Proofread it", startDate: Date().startOfDay, after: t.id, afterMinutes: 15)
+                model.windows.showMain()
             }
         }
         runSyncTest(model)

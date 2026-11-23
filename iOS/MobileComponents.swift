@@ -323,9 +323,25 @@ struct EditorSheet: View {
                     }
                 }
                 Section("When") {
+                    if !task.isEvent && !task.isHabit {
+                        Picker("Starts", selection: Binding(get: { task.after != nil }, set: { on in
+                            if on { task.after = model.store.possibleTriggers(for: task.id).first?.id }
+                            else { task.after = nil; task.afterMinutes = nil; task.armedAt = nil; task.armedBy = nil }
+                        })) { Text("On a date").tag(false); Text("After a task").tag(true) }
+                        .pickerStyle(.segmented)
+                    }
+                    if task.after != nil {
+                        Picker("After", selection: $task.after) {
+                            ForEach(model.store.possibleTriggers(for: task.id)) { t in Text(t.title).tag(Optional(t.id)) }
+                        }
+                        Picker("Comes up", selection: Binding(get: { task.afterMinutes ?? 0 }, set: { task.afterMinutes = $0 == 0 ? nil : $0 })) {
+                            ForEach(PlanTask.afterChoices, id: \.self) { m in Text(PlanTask.afterLabel(m)).tag(m) }
+                        }
+                    } else {
                     DatePicker(task.isHabit ? "Starts" : "Date", selection: $task.startDate, displayedComponents: .date)
                     Toggle("At a specific time", isOn: $hasTime)
-                    if hasTime {
+                    }
+                    if hasTime && task.after == nil {
                         DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
                         Picker("Length", selection: $task.durationMinutes) {
                             ForEach(Array(Set([5, 10, 15, 30, 45, 60, 90, 120, 180, task.durationMinutes])).sorted(), id: \.self) { m in
@@ -521,6 +537,12 @@ struct EditorSheet: View {
         t.title = t.title.trimmingCharacters(in: .whitespacesAndNewlines)
         t.startDate = t.startDate.startOfDay
         t.timeMinutes = hasTime ? time.minutesSinceMidnight : nil
+        if t.after != nil {
+            // A follow-up keeps the date and time it was set off at (or none yet); it has no schedule of its own.
+            t.timeMinutes = task.armedAt == nil ? nil : task.timeMinutes
+            t.recurrence = Recurrence()
+            if model.store.task(t.id)?.after != t.after { t.armedAt = nil; t.armedBy = nil }
+        }
         if t.recurrence.frequency != .weekly { t.recurrence.weekdays = [] }
         else if t.recurrence.weekdays.isEmpty { t.recurrence.weekdays = [Calendar.current.component(.weekday, from: t.startDate)] }
         if t.reminderOffsets.isEmpty { t.reminderOffsets = [0] }

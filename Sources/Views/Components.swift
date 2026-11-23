@@ -226,6 +226,14 @@ struct ChecklistRow: View {
                     if let plan = occ.task.planSummary, !compact {
                         Label(plan, systemImage: occ.task.isUntilDone ? "flame" : "repeat").lineLimit(1)
                     }
+                    if let trigger = occ.task.after.flatMap(store.task) {
+                        Label("after \(trigger.title)", systemImage: "arrow.turn.down.right").lineLimit(1)
+                    }
+                    let next = store.followUps(of: occ.task.id)
+                    if !next.isEmpty && !compact && !occ.isResolved {
+                        Label("then \(next.map(\.title).joined(separator: ", "))", systemImage: "arrow.turn.down.right").lineLimit(1)
+                            .help("Comes up when this is checked off")
+                    }
                     if let p = occ.task.priorityLevel, !occ.isResolved {
                         Label(p.title, systemImage: p.symbol).foregroundStyle(p.color)
                             .help("\(p.title) priority")
@@ -329,6 +337,10 @@ struct OccurrenceMenu: View {
             Button("Complete with reflection…") { model.beginReflection(occ) }
             if !occ.isResolved && !occ.isEvent {
                 Button("Work on this now") { model.workOn(occ) }
+                Button("Add a task that follows this one…") {
+                    model.editingTask = PlanTask(title: "", startDate: Date().startOfDay, after: occ.task.id)
+                    model.windows.showMain()
+                }
             }
         }
         if occ.isMissed {
@@ -378,12 +390,16 @@ struct ReflectionForm: View {
     var missed = false
     /// Pre-filled "how long it took" (e.g. the length of the work session).
     var initialMinutes: Int?
+    /// The way out: "Cancel" in the sheet, "I didn't finish it" on the focus wall.
+    var cancelTitle = "Cancel"
     /// The reflection, and how long it took if you wrote that down (never for "didn't do it").
     let onSubmit: (String, Int?) -> Void
     let onCancel: () -> Void
 
     @State private var text = ""
     @State private var taken = ""
+    @State private var checking = false
+    @State private var aiProblem: String?
     @FocusState private var focused: Bool
 
     private static let prompts = [
@@ -451,6 +467,9 @@ struct ReflectionForm: View {
             if !missed {
                 TimeTakenField(task: occurrence.task, text: $taken).font(.app(.callout))
             }
+            if let aiProblem {
+                Label(aiProblem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.app(.callout))
+            }
 
             HStack(spacing: 10) {
                 ProgressView(value: Double(min(count, minWords)), total: Double(minWords))
@@ -460,25 +479,40 @@ struct ReflectionForm: View {
                     .monospacedDigit()
                     .foregroundStyle(ready ? .green : .secondary)
                 Spacer()
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
+                if checking { ProgressView().controlSize(.small); Text("Checking…").foregroundStyle(.secondary) }
+                Button(cancelTitle, role: .cancel, action: onCancel)
+                    .keyboardShortcut(cancelTitle == "Cancel" ? .cancelAction : nil)
                 Button {
-                    onSubmit(text.trimmingCharacters(in: .whitespacesAndNewlines), missed ? nil : TaskStats.parseMinutes(taken))
+                    submit()
                 } label: {
                     Label(missed ? "Submit & mark not done" : "Submit & complete", systemImage: missed ? "xmark" : "checkmark")
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
                 .tint(missed ? .red : .accentColor)
-                .disabled(!ready)
+                .disabled(!ready || checking)
                 .help(ready ? "⌘↩ to submit" : count < minWords ? "Write \(minWords - count) more word\(minWords - count == 1 ? "" : "s")" : "The time taken isn't a length (try 45 or 1:30), or clear it")
             }
         }
         .padding(22)
-        .frame(width: 540)
+        .frame(width: cancelTitle == "Cancel" ? 540 : 600)
         .onAppear {
             if let m = initialMinutes, taken.isEmpty { taken = "\(m)" }
             DispatchQueue.main.async { focused = true }
+        }
+    }
+
+    /// With Settings › AI check on, Gemini reads it first; filler is sent back with a note.
+    private func submit() {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let minutes = missed ? nil : TaskStats.parseMinutes(taken)
+        guard AICheck.enabled else { onSubmit(t, minutes); return }
+        checking = true; aiProblem = nil
+        let about = missed ? "Why “\(occurrence.task.title)” didn't get done" : "Checking off “\(occurrence.task.title)”"
+        Task {
+            let v = await AICheck.check(t, about: about)
+            checking = false
+            if v.genuine { onSubmit(t, minutes) } else { aiProblem = v.reason }
         }
     }
 

@@ -125,6 +125,8 @@ extension PlanTask {
     /// Whether this task has an occurrence on `day`.
     func occurs(on day: Date) -> Bool {
         if archived == true { return false }
+        // A follow-up that hasn't been set off yet is on no list.
+        if after != nil && armedAt == nil { return false }
         let d = day.startOfDay
         guard d >= startDate.startOfDay else { return false }
         guard isUntilDone else { return occursByPattern(d) }

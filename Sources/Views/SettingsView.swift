@@ -25,6 +25,20 @@ struct SettingsView: View {
     @AppStorage(AppFont.key) private var fontFamily = AppFont.defaultFamily
     @State private var newSite = ""
     @State private var newApp = ""
+    // Screen time walls (local to this Mac; ScreenGuard reads the same keys).
+    @AppStorage("allowanceOn") private var allowanceOn = false
+    @AppStorage("allowanceMinutes") private var allowanceMinutes = 30
+    @AppStorage("awayOn") private var awayOn = false
+    @AppStorage("awayMinutes") private var awayMinutes = 20
+    @AppStorage("activeFrom") private var activeFrom = 8 * 60
+    @AppStorage("activeTo") private var activeTo = 22 * 60
+    // AI check.
+    @AppStorage("aiCheckOn") private var aiCheckOn = false
+    @AppStorage("aiCheckModel") private var aiModel = AICheck.defaultModel
+    @State private var aiKeyDraft = ""
+    @State private var aiHasKey = AICheck.hasKey
+    @State private var aiTest: String?
+    @State private var aiTesting = false
 
     var body: some View {
         Form {
@@ -35,6 +49,8 @@ struct SettingsView: View {
             sidebarSection
             nudgeSection
             toughLoveSection
+            wallsSection
+            aiSection
             checkInSection
             reflectionSection
             startupSection
@@ -146,6 +162,98 @@ struct SettingsView: View {
                         .controlSize(.small)
                 }
             }
+        }
+    }
+
+    private func minutesBinding(_ v: Binding<Int>) -> Binding<Date> {
+        Binding(get: { Date().startOfDay.addingTimeInterval(Double(v.wrappedValue * 60)) }, set: { v.wrappedValue = $0.minutesSinceMidnight })
+    }
+
+    /// The allowance after you sit down, and "what happened while you were away?".
+    private var wallsSection: some View {
+        Section {
+            Toggle(isOn: $allowanceOn) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Give me a set time when I sit down, then make me decide")
+                    Text("When you open or unlock your Mac (or come back after 5 minutes away), the clock starts. When it runs out, a wall covers the screen: work on a task, keep going with a reason, or stop.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: allowanceOn) { _, _ in model.guardian.restartAllowance() }
+            if allowanceOn {
+                Picker("Time before the wall", selection: $allowanceMinutes) {
+                    ForEach([10, 15, 20, 30, 45, 60, 90, 120], id: \.self) { Text(Focus.label($0)).tag($0) }
+                }
+                .onChange(of: allowanceMinutes) { _, _ in model.guardian.restartAllowance() }
+                if let ends = model.guardian.allowanceEnds {
+                    Text("This time: until \(timeString(ends)). Focus, work and study sessions count as a decision; you get fresh time after them.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
+                }
+            }
+            Toggle(isOn: $awayOn) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("When I've been away, ask what happened")
+                    Text("Back after a while away during your active hours, a wall asks you to write why before you carry on. Time covered by a closed task or event, or a no-computer study session, doesn't count.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
+                }
+            }
+            if awayOn {
+                Picker("Away for at least", selection: $awayMinutes) {
+                    ForEach([10, 15, 20, 30, 45, 60, 90], id: \.self) { Text(Focus.label($0)).tag($0) }
+                }
+                HStack {
+                    DatePicker("Active hours", selection: minutesBinding($activeFrom), displayedComponents: .hourAndMinute)
+                    DatePicker("to", selection: minutesBinding($activeTo), displayedComponents: .hourAndMinute).labelsHidden()
+                }
+            }
+            HStack {
+                Button("Preview the decision wall") { model.walls.show(.decision, preview: true) }
+                Button("Preview the away wall") { model.walls.show(.away(from: Date().addingTimeInterval(-47 * 60), to: Date()), preview: true) }
+            }
+        } header: { Text("Screen time walls") } footer: {
+            Text("Walls cover every screen until you answer. If you ever need out, ⌥⌘Q quits Cadence completely. Your answers are kept under Reflections.")
+                .font(.app(.caption)).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Gemini reads reflections and sends filler back.
+    private var aiSection: some View {
+        Section {
+            Toggle(isOn: $aiCheckOn) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Check that reflections are real")
+                    Text("Before a reflection (or a wall answer) is accepted, Google's Gemini reads it and sends back keyboard mashing, padding and copy-paste. Honest short answers pass. If Gemini can't be reached, it's accepted as usual.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
+                }
+            }
+            .disabled(!aiHasKey && !aiCheckOn)
+            HStack {
+                if aiHasKey {
+                    Label("Gemini API key saved in this Mac's keychain", systemImage: "key.fill").foregroundStyle(.green)
+                    Spacer()
+                    Button("Remove key", role: .destructive) { AICheck.setKey(nil); aiHasKey = false; aiCheckOn = false; aiTest = nil }
+                } else {
+                    SecureField("Paste your Gemini API key", text: $aiKeyDraft)
+                    Button("Save") {
+                        AICheck.setKey(aiKeyDraft); aiKeyDraft = ""; aiHasKey = AICheck.hasKey
+                        if aiHasKey { aiCheckOn = true }
+                    }
+                    .disabled(aiKeyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            TextField("Model", text: $aiModel, prompt: Text(AICheck.defaultModel))
+            HStack {
+                Button(aiTesting ? "Testing…" : "Test") {
+                    guard let key = AICheck.key else { return }
+                    aiTesting = true
+                    Task { aiTest = await AICheck.test(key: key); aiTesting = false }
+                }
+                .disabled(!aiHasKey || aiTesting)
+                if let aiTest { Text(aiTest).font(.app(.caption)).foregroundStyle(aiTest.hasPrefix("Working") ? .green : .orange) }
+            }
+        } header: { Text("AI check") } footer: {
+            Text("Get a key at aistudio.google.com (API keys). Reflection text is sent to Google only when this is on; the key never leaves this Mac and isn't synced.")
+                .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
 

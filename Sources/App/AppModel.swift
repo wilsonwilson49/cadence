@@ -64,6 +64,10 @@ final class AppModel: ObservableObject {
     private(set) lazy var focus = FocusEngine(model: self)
     private(set) lazy var study = StudyEngine(model: self)
     private(set) lazy var nag = NagEngine(model: self)
+    /// Full-screen walls (focus reflections, the screen-time decision, "what happened while you were away?").
+    private(set) lazy var walls = Walls(model: self)
+    /// Screen time walls: the allowance after you sit down, and the away check.
+    private(set) lazy var guardian = ScreenGuard(model: self)
 
     @Published var screen: Screen = .home { didSet { if screen != .week { weekSelection = [:]; weekSelecting = false } } }
     /// Week calendar: tasks picked for changing all at once (by occurrence id), and whether a plain click picks.
@@ -114,6 +118,7 @@ final class AppModel: ObservableObject {
         engine.start()
         screenTime.start()
         nag.start()
+        guardian.start()
         _ = study   // resumes a study session that was running when Cadence quit
         LoginItem.applyDefault()
         sync.start()

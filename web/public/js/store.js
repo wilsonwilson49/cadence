@@ -327,6 +327,7 @@ class Store {
     delete missed[occ.key];
     const timed = minutes > 0 ? { timeTaken: { ...t.timeTaken, [occ.key]: Math.round(minutes) } } : {};
     this.upsertTask({ ...t, completions: { ...t.completions, [occ.key]: M.iso(new Date()) }, missed, ...timed });
+    for (const f of this.tasks.values()) if (f.after === t.id && !f.archived) this.upsertTask(M.armFollowUp(f, t.id, occ.key));
     this.#addReflection(t, occ, text);
     if (t.source === 'gtasks') this.onGoogleTaskChange?.(t, { status: 'completed' });
     return true;
@@ -375,6 +376,12 @@ class Store {
     const completions = { ...t.completions };
     delete completions[occ.key];
     this.upsertTask({ ...t, completions });
+    // Follow-ups this check-off set off go back to waiting, unless they're already done.
+    for (const f of this.tasks.values()) {
+      if (f.after === t.id && f.armedBy === `${t.id}|${occ.key}` && !f.completions?.[M.dateKey(new Date(f.startDate))]) {
+        const back = { ...f }; delete back.armedAt; delete back.armedBy; this.upsertTask(back);
+      }
+    }
     if (t.source === 'gtasks') this.onGoogleTaskChange?.(t, { status: 'needsAction' });
   }
 

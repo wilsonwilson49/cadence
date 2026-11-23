@@ -2,6 +2,7 @@
 import * as M from './model.js';
 import { store } from './store.js';
 import { Reminders, chime } from './reminders.js';
+import { ai, checkReflection, testKey, DEFAULT_MODEL } from './aicheck.js';
 
 // ---------- tiny helpers ----------
 const $ = sel => document.querySelector(sel);
@@ -221,6 +222,27 @@ function timeSpread(times) {
     <div class="spread-labels"><span>0</span><span><b>60% ≤ ${M.fmtMinutes(typ)}</b></span><span>longest ${M.fmtMinutes(longest)}</span></div></div>`;
 }
 const takenChoices = t => [...new Set([15, 30, 45, 60, 90, ...(t.timeMinutes != null ? [t.durationMinutes] : []), ...(M.typicalMinutes(t) ? [M.typicalMinutes(t)] : [])])].sort((a, b) => a - b);
+/** "After another task": which one, how long after, and where it stands. */
+function followUpControls(d) {
+  const options = M.possibleTriggers([...store.tasks.values()], d.id);
+  if (!options.length) return '<div class="small muted">There’s no other task for it to follow yet.</div>';
+  const trigger = store.tasks.get(d.after)?.title || 'that task';
+  return `<div class="grid2"><label class="field"><span>After</span><select class="input" data-edit="after" data-rerender>${options.map(t => `<option value="${t.id}" ${t.id === d.after ? 'selected' : ''}>${esc(t.title || 'Untitled')}</option>`).join('')}</select></label>
+      <label class="field"><span>Comes up</span><select class="input" data-edit="afterMinutes">${M.AFTER_CHOICES.map(n => `<option value="${n}" ${(d.afterMinutes || 0) === n ? 'selected' : ''}>${M.afterLabel(n)}</option>`).join('')}</select></label></div>
+    <label class="check"><input type="checkbox" data-edit="persist" data-rerender ${d.mode === 'untilDone' ? 'checked' : ''}>${ic('flame')} Once it’s up, keep it on my list until it’s done</label>
+    <div class="small muted">${ic('right')} ${d.armedAt ? `Came up at ${M.fmtTimeMinutes(d.timeMinutes ?? 0)} on ${M.fmtDay(d.startDate, { weekday: 'short', month: 'short', day: 'numeric' })} after “${esc(trigger)}” was checked off. It comes up again the next time.`
+      : `Off your list until “${esc(trigger)}” is checked off; then it comes up ${M.afterLabel(d.afterMinutes || 0).toLowerCase()} with a reminder.`}</div>`;
+}
+/** The tasks that follow this one, and a way to add another. */
+function followUpsFieldset(m) {
+  const list = [...store.tasks.values()].filter(f => f.after === m.draft.id && !f.archived);
+  return `<div class="fieldset"><div class="legend">Then</div>
+    ${list.map(f => `<div class="row" style="gap:8px">${ic('right')}<span class="grow ellipsis">${esc(f.title)}</span><span class="small muted">${M.afterLabel(f.afterMinutes || 0)}</span>
+      <button type="button" class="btn sm ghost" data-act="edit-followup" data-id="${f.id}">Edit</button></div>`).join('')}
+    <div><button type="button" class="btn sm" data-act="edit-add-followup">${ic('plus')} Add a task that follows this one</button></div>
+    <div class="small muted">Follow-ups wait off your list until this is checked off, then come up on their own: chain the next step to the last.</div></div>`;
+}
+
 function timeTakenFieldset(m) {
   const d = m.draft, entries = Object.entries(d.timeTaken || {}).filter(([, v]) => v > 0).sort((a, b) => b[0].localeCompare(a[0]));
   const typ = M.typicalMinutes(d);
@@ -241,6 +263,10 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (M.isUntilDone(t) && !compact && !o.resolved) meta.push(`<span>${ic('flame')}${esc(M.carryLabel(t, o.day))}</span>`);
   const plan = M.planSummary(t);
   if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
+  const trig = t.after && store.tasks.get(t.after);
+  if (trig) meta.push(`<span class="ellipsis">${ic('right')}after ${esc(trig.title)}</span>`);
+  const next = !compact && !o.resolved ? [...store.tasks.values()].filter(f => f.after === t.id && !f.archived) : [];
+  if (next.length) meta.push(`<span class="ellipsis" title="Comes up when this is checked off">${ic('right')}then ${esc(next.map(f => f.title).join(', '))}</span>`);
   const pr = M.priorityOf(t), hd = M.hardnessOf(t), took = o.done && t.timeTaken?.[o.key], typ = M.typicalMinutes(t);
   if (pr && !o.resolved) meta.push(`<span class="prio prio-${pr}" title="${PRIO_LABEL[pr]} priority"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]}</span>`);
   if (hd) meta.push(`<span title="Hardness ${hd} of 5: ${M.HARDNESS[hd - 1]}">${hardMeter(hd)}</span>`);
@@ -608,7 +634,7 @@ function completeWork() {
   const o = findOcc(focus.workId), minutes = Math.max(1, Math.round((Date.now() - focus.startedAt) / 60_000));
   focus.finished = [focus.workId];
   endFocus({ quiet: true });
-  if (o && !o.resolved) beginReflection(o, 'done', minutes);
+  if (o) reflectQueue([o], minutes);
 }
 
 /** `quiet`: you ended it yourself, so no "Time!" alert. */
@@ -629,6 +655,7 @@ function endFocus({ quiet = false } = {}) {
   saveFocus();
   ui.focusResult = session;
   if (quiet) { render(); return; }
+  reflectQueue(focus.finished.map(findOcc).filter(Boolean));
   reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#82a8ef' },
     store.settings.defaultChannels);
   navigate('focus');
@@ -1103,9 +1130,9 @@ function reflectionsView() {
       ${[...groups].map(([k, rs]) => `<div><div class="section-title">${M.isToday(M.parseKey(k)) ? 'Today' : M.fmtDay(M.parseKey(k), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
         <div class="stack" style="gap:8px">${rs.map(r => {
           const t = store.tasks.get(r.taskID);
-          const forDay = r.occurrenceKey !== M.dateKey(r.createdAt) ? `<span class="small muted">for ${M.fmtDay(M.parseKey(r.occurrenceKey), { month: 'short', day: 'numeric' })}</span>` : '';
+          const forDay = /^\d{4}-\d{2}-\d{2}$/.test(r.occurrenceKey) && r.occurrenceKey !== M.dateKey(r.createdAt) ? `<span class="small muted">for ${M.fmtDay(M.parseKey(r.occurrenceKey), { month: 'short', day: 'numeric' })}</span>` : '';
           return `<div class="card refl ${r.outcome === 'missed' ? 'missed' : ''}"><div class="row"><span style="width:8px;height:8px;border-radius:50%;background:${color(t?.color ?? 'gray')}"></span>
-            <b>${esc(r.taskTitle)}</b>${r.outcome === 'missed' ? `<span class="tag-missed">${ic('x')} Didn’t do it</span>` : `<span class="tag-done">${ic('check')} Done</span>`}${forDay}<span class="grow"></span>
+            <b>${esc(r.taskTitle)}</b>${r.outcome === 'missed' ? `<span class="tag-missed">${ic('x')} Didn’t do it</span>` : r.outcome === 'away' ? `<span class="tag-done">${ic('clock')} Away</span>` : r.outcome === 'decision' ? `<span class="tag-done">${ic('timer')} Kept going</span>` : `<span class="tag-done">${ic('check')} Done</span>`}${forDay}<span class="grow"></span>
             <span class="small muted">${M.countWords(r.text)} words · ${M.fmtTime(r.createdAt)}</span>
             <button class="btn ghost sm icon" data-act="copy-refl" data-id="${r.id}" title="Copy">${ic('copy')}</button>
             <button class="btn ghost sm icon danger" data-act="delete-refl" data-id="${r.id}" title="Delete">${ic('trash')}</button></div>
@@ -1316,6 +1343,17 @@ function settingsView() {
       <div class="srow"><div class="small muted">Blocked apps are the ones marked distracting on the Screen Time page.</div><a class="btn sm" href="/app/screentime">Screen Time</a></div>
     </div></div>
 
+    <div><h3>AI check</h3><div class="card">
+      <div class="srow"><div class="grow">Check that reflections are real<div class="small muted">Before a reflection is accepted, Google’s Gemini reads it and sends back keyboard mashing, padding and copy-paste. Honest short answers pass. If Gemini can’t be reached, it’s accepted as usual.</div></div>
+        <label class="check"><input type="checkbox" data-act-change="ai-toggle" ${ai.on ? 'checked' : ''} ${ai.key ? '' : 'disabled'}>On</label></div>
+      <div class="srow" style="flex-wrap:wrap">${ai.key
+        ? `<div class="grow">${ic('lock')} Gemini API key saved in this browser</div><button class="btn sm danger" data-act="ai-remove">Remove key</button>`
+        : `<form class="row grow" data-form="ai-key"><input class="input grow" type="password" name="key" placeholder="Paste your Gemini API key" autocomplete="off"><button class="btn">Save</button></form>`}</div>
+      <div class="srow" style="flex-wrap:wrap"><label class="row grow" style="gap:8px">Model <input class="input" data-ai-model value="${esc(ai.model)}" placeholder="${DEFAULT_MODEL}" style="max-width:260px"></label>
+        <button class="btn sm" data-act="ai-test" ${ai.key ? '' : 'disabled'}>Test</button><span class="small" id="aiTest">${esc(ui.aiTest || '')}</span></div>
+      <div class="srow"><div class="small muted">Get a key at aistudio.google.com (API keys). It stays in this browser only: it isn’t sent to Cadence or synced, and reflection text goes to Google only while this is on.</div></div>
+    </div></div>
+
     <div><h3>Account & sync</h3><div class="card">
       <div class="srow"><div>Signed in as <b>${esc(store.user.username)}</b><div class="small muted">You stay signed in on this browser until you sign out.</div></div><button class="btn" data-act="sign-out">${ic('logout')} Sign out</button></div>
       <div class="srow"><div>Sync<div class="small muted">Changes sync a moment after you make them, and every 20 seconds.</div></div>${syncControl('big')}</div>
@@ -1473,7 +1511,7 @@ function renderModal() {
   const m = ui.modal;
   if (!m) { root.innerHTML = ''; ui.modalHTML = null; return; }
   let html = '';
-  if (m.type === 'reflection') html = reflectionDialog(m.occ, 'reflection', m.mode, m.minutes);
+  if (m.type === 'reflection') html = reflectionDialog(m.occ, m.locked ? 'locked' : 'reflection', m.mode, m.minutes, m.left);
   else if (m.type === 'checkin') html = m.reflecting ? reflectionDialog(m.reflecting, 'checkin', m.reflectMode) : checkInDialog(m);
   else if (m.type === 'editor') html = editorDialog(m);
   else if (m.type === 'detail') html = detailDialog(m);
@@ -1547,7 +1585,7 @@ function reflReady() {
   btn.disabled = !enough || bad;
 }
 
-function reflectionDialog(o, ctx, mode = 'done', minutes = null) {
+function reflectionDialog(o, ctx, mode = 'done', minutes = null, left = 0) {
   const min = store.settings.minReflectionWords, missed = mode === 'missed';
   const seed = [...(o.task.id + o.key)].reduce((n, c) => n + c.charCodeAt(0), 0);
   const pool = missed ? MISSED_PROMPTS : PROMPTS;
@@ -1561,8 +1599,10 @@ function reflectionDialog(o, ctx, mode = 'done', minutes = null) {
         <input class="input" id="reflTaken" style="width:130px" placeholder="e.g. 45 or 1:30" autocomplete="off" value="${minutes || ''}"><span class="small muted" id="reflTakenNote">${minutes ? M.fmtMinutes(minutes) : 'optional'}</span></div>
       <div class="row" style="gap:5px;flex-wrap:wrap;margin-top:6px">${takenChoices(o.task).map(n => `<button type="button" class="btn sm" data-act="refl-taken" data-v="${n}">${M.fmtMinutes(n)}</button>`).join('')}</div>
       ${typicalText(o.task) ? `<div class="small muted" style="margin-top:4px">${esc(typicalText(o.task))}</div>` : ''}</div>`}</div>
+    <div class="small orange" id="reflAi" role="alert" hidden style="padding:0 22px 10px"></div>
     <div class="foot"><div class="progress" id="reflBar"><div style="width:0"></div></div><span class="small muted" id="reflCount">0 / ${min} words</span><span class="grow"></span>
-      <button type="button" class="btn" data-act="${ctx === 'checkin' ? 'checkin-back' : 'close'}">Cancel</button>
+      ${ctx === 'locked' ? `<span class="small muted">${left > 1 ? `${left} to go · ` : ''}reflect before you move on</span><button type="button" class="btn" data-act="refl-skip" title="Leave it open on your list, no reflection">I didn’t finish it</button>`
+        : `<button type="button" class="btn" data-act="${ctx === 'checkin' ? 'checkin-back' : 'close'}">Cancel</button>`}
       <button class="btn ${missed ? 'danger-solid' : 'primary'}" id="reflSubmit" disabled title="Ctrl/⌘ + Enter">${ic(missed ? 'x' : 'check')} ${missed ? 'Submit & mark not done' : 'Submit & complete'}</button></div></form>`;
 }
 
@@ -2110,9 +2150,11 @@ function editorDialog(m) {
         <span class="hpick" role="group" aria-label="Hardness">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= (M.hardnessOf(d) || 0) ? 'on' : ''}" style="--hc:${hardColor(M.hardnessOf(d) || i)};height:${9 + 3 * i}px" data-act="edit-hardness" data-v="${i}" title="${i}: ${M.HARDNESS[i - 1]}" aria-label="${i}, ${M.HARDNESS[i - 1]}" aria-pressed="${M.hardnessOf(d) === i}"></button>`).join('')}</span>
         <span class="small muted">${M.hardnessOf(d) ? `${M.hardnessOf(d)} · ${M.HARDNESS[M.hardnessOf(d) - 1]}` : 'Not rated'}</span></div></div>`}
     <div class="fieldset"><div class="legend">When</div>
-      <div class="grid2"><label class="field"><span>Date</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
+      ${M.isEvent(d) || isHab ? '' : `<div class="seg wide" role="group" aria-label="Starts"><button type="button" class="${d.after ? '' : 'on'}" data-act="edit-starts" data-v="">On a date</button><button type="button" class="${d.after ? 'on' : ''}" data-act="edit-starts" data-v="1">${ic('right')} After another task</button></div>`}
+      ${d.after ? followUpControls(d) : ''}
+      <div class="grid2" ${d.after ? 'style="display:none"' : ''}><label class="field"><span>Date</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
         <label class="field"><span>&nbsp;</span><label class="check"><input type="checkbox" data-edit="hasTime" data-rerender ${m.hasTime ? 'checked' : ''}>At a specific time</label></label></div>
-      ${m.hasTime ? `<div class="grid2"><label class="field"><span>Time</span><input class="input" type="time" data-edit="time" data-rerender value="${m.time}"></label>
+      ${m.hasTime && !d.after ? `<div class="grid2"><label class="field"><span>Time</span><input class="input" type="time" data-edit="time" data-rerender value="${m.time}"></label>
         <label class="field"><span>Duration</span><select class="input" data-edit="duration" data-rerender>${[...new Set([...DURATIONS, d.durationMinutes])].sort((a, b) => a - b).map(n => `<option value="${n}" ${d.durationMinutes === n ? 'selected' : ''}>${n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} hr ${n % 60} min` : `${n / 60} hr`}</option>`).join('')}</select></label></div>` : ''}
     </div>
     <div class="fieldset"><div class="legend">Your time</div>
@@ -2124,7 +2166,7 @@ function editorDialog(m) {
     ${d.source === 'google' && !m.isNew ? `<div class="fieldset"><div class="legend">${ic('sync')} Synced with Google Calendar</div>
       <div class="small muted">Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.</div>
       ${d.externalURL ? `<a class="small" href="${esc(d.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : ''}</div>` : `
-    <div class="fieldset"><div class="legend">${isHab || M.isEvent(d) ? 'Repeat' : 'Conditions'}</div>
+    <div class="fieldset" ${d.after ? 'style="display:none"' : ''}><div class="legend">${isHab || M.isEvent(d) ? 'Repeat' : 'Conditions'}</div>
       <div class="grid2"><label class="field"><span>${isHab || M.isEvent(d) ? 'Repeats' : 'Comes back'}</span><select class="input" data-edit="frequency" data-rerender>
         ${(isHab ? M.FREQUENCIES.filter(([v]) => v !== 'none') : M.isEvent(d) ? M.FREQUENCIES : [['none', 'No, just once']])
           .map(([v, l]) => `<option value="${v}" ${!lt && !cyc && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -2170,6 +2212,7 @@ function editorDialog(m) {
       <div class="seg wide">${M.NAG_LEVELS.map(([k, l]) => `<button type="button" class="${M.nagLevel(d) === k ? 'on' : ''}" data-act="edit-nag" data-nag="${k}">${l}</button>`).join('')}</div>
       <div class="small muted">${esc(M.NAG_LEVELS.find(x => x[0] === M.nagLevel(d))[2])}</div>
       ${M.nagLevel(d) !== 'normal' ? `<label class="field"><span>Comes back every</span><select class="input" data-edit="nagEvery" style="width:auto">${M.NAG_EVERY.map(x => `<option value="${x}" ${M.nagMinutes(d) === x ? 'selected' : ''}>${x === 60 ? 'hour' : `${x} min`}</option>`).join('')}</select></label>` : ''}</div>`}
+    ${M.isEvent(d) || isHab ? '' : followUpsFieldset(m)}
     ${M.isEvent(d) ? '' : timeTakenFieldset(m)}
     <div class="fieldset"><div class="legend">Color</div><div class="swatches">${Object.entries(M.COLORS).map(([k, v]) => `<button type="button" class="swatch ${d.color === k ? 'on' : ''}" style="background:${v}" data-act="edit-color" data-color="${k}" title="${k}"></button>`).join('')}</div></div>
     ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !d.source
@@ -2199,6 +2242,8 @@ function readEditorInputs() {
   if (val('hasTime')) m.hasTime = val('hasTime').checked;
   if (val('time')?.value) m.time = val('time').value;
   if (val('duration')) m.draft.durationMinutes = Number(val('duration').value);
+  if (val('after')) m.draft.after = val('after').value;
+  if (val('afterMinutes')) { const v = Number(val('afterMinutes').value); if (v) m.draft.afterMinutes = v; else delete m.draft.afterMinutes; }
   if (val('hasDue')) m.hasDue = val('hasDue').checked;
   if (val('dueDate')?.value) m.dueDate = val('dueDate').value;
   if (val('cycleGap')) m.cycleGap = Math.min(365, Math.max(1, Number(val('cycleGap').value) || 1));
@@ -2273,6 +2318,15 @@ async function saveEditor() {
     t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
   } else { delete t.cycleGapDays; delete t.cycleTimes; }
   if (t.mode === 'untilDone' && !M.isCycle(t) && t.recurrence.frequency === 'none' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
+  if (t.after) {
+    // A follow-up keeps the date and time it was set off at (or none yet); it has no schedule of its own.
+    t.startDate = m.draft.startDate;
+    if (t.armedAt && m.draft.timeMinutes != null) t.timeMinutes = m.draft.timeMinutes; else delete t.timeMinutes;
+    t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+    delete t.cycleGapDays; delete t.cycleTimes; delete t.dueDate;
+    if (t.mode === 'longTerm') delete t.mode;
+    if (store.tasks.get(t.id)?.after !== t.after) { delete t.armedAt; delete t.armedBy; }
+  } else { delete t.afterMinutes; delete t.armedAt; delete t.armedBy; }
   t.reminderOffsets = t.reminderOffsets.filter(o => o >= 0 || (t.timeMinutes != null && -o < t.durationMinutes));
   if (!t.reminderOffsets.length) t.reminderOffsets = [0];
   const day0 = M.parseKey(m.date);
@@ -2403,6 +2457,20 @@ function showBanner(c) {
 }
 
 // ---------- actions ----------
+/** After a focus session: each finished item's reflection, one after another, and the dialog can't be closed
+ *  until it's written (or you say you didn't finish it). */
+function reflectQueue(occs, minutes = null) {
+  ui.reflectQueue = occs.filter(o => !o.resolved).map(o => o.id);
+  ui.reflectMinutes = minutes;
+  nextQueuedReflection();
+}
+function nextQueuedReflection() {
+  const id = ui.reflectQueue?.shift();
+  const o = id && findOcc(id);
+  if (!o) { ui.reflectQueue = null; if (ui.modal?.locked) closeModal(); return; }
+  openModal({ type: 'reflection', occ: o, mode: 'done', minutes: ui.reflectMinutes, locked: true, left: ui.reflectQueue.length + 1 });
+}
+
 function beginReflection(o, mode = 'done', minutes = null) {
   const fresh = findOcc(o.id) ?? o;
   openModal({ type: 'reflection', occ: fresh, mode, minutes });
@@ -3620,7 +3688,7 @@ const actions = {
   'confirm-yes': () => { const fn = ui.modal.fn; closeModal(); fn(); },
   'confirm-alt': () => { const fn = ui.modal.altFn; closeModal(); fn?.(); },
   close: el => { const then = el.dataset.then; closeModal(); if (then) navigate(then); },
-  overlay: (el, e) => { if (e.target === el && !['editor', 'nag'].includes(ui.modal?.type)) closeModal(); },
+  overlay: (el, e) => { if (e.target === el && !ui.modal?.locked && !['editor', 'nag'].includes(ui.modal?.type)) closeModal(); },
   'nag-done': () => { const o = ui.modal.occ; reminders.snoozeNag(o, 5); closeModal(); beginReflection(o); },
   'nag-open': () => { const o = ui.modal.occ; reminders.snoozeNag(o, M.nagMinutes(o.task)); closeModal(); navigate('today'); },
   'nag-snooze': el => {
@@ -3734,11 +3802,27 @@ const actions = {
   },
   'edit-weekdays': () => { readEditorInputs(); ui.modal.draft.recurrence.weekdays = [2, 3, 4, 5, 6]; renderModal(); },
   'edit-color': el => { readEditorInputs(); ui.modal.draft.color = el.dataset.color; renderModal(); },
+  'edit-starts': el => {
+    readEditorInputs(); const d = ui.modal.draft;
+    if (el.dataset.v) { const first = M.possibleTriggers([...store.tasks.values()], d.id)[0]; if (first) d.after = first.id; }
+    else { delete d.after; delete d.afterMinutes; delete d.armedAt; delete d.armedBy; }
+    renderModal();
+  },
+  'edit-followup': async el => { const f = store.tasks.get(el.dataset.id); if (!f) return; await saveEditor(); if (!ui.modal) openEditor(f, false); },
+  'edit-add-followup': async () => {
+    readEditorInputs();
+    const id = ui.modal.draft.id;
+    await saveEditor();
+    if (!ui.modal) openEditor(M.newTask({ after: id }), true);
+  },
   'edit-priority': el => { readEditorInputs(); const d = ui.modal.draft; if (el.dataset.v) d.priority = el.dataset.v; else delete d.priority; renderModal(); },
   'edit-hardness': el => { readEditorInputs(); const d = ui.modal.draft, v = Number(el.dataset.v); if (M.hardnessOf(d) === v) delete d.hardness; else d.hardness = v; renderModal(); },
   'edit-use-typical': () => { readEditorInputs(); const d = ui.modal.draft; d.durationMinutes = M.typicalMinutes(d) || d.durationMinutes; renderModal(); },
   'edit-time-del': el => { readEditorInputs(); const d = ui.modal.draft; d.timeTaken = { ...d.timeTaken }; delete d.timeTaken[el.dataset.k]; if (!Object.keys(d.timeTaken).length) delete d.timeTaken; renderModal(); },
   'edit-times-all': () => { readEditorInputs(); ui.modal.allTimes = !ui.modal.allTimes; renderModal(); },
+  'refl-skip': () => nextQueuedReflection(),
+  'ai-remove': () => { ai.key = ''; ai.on = false; ui.aiTest = ''; render(); },
+  'ai-test': async () => { ui.aiTest = 'Testing…'; render(); ui.aiTest = await testKey(); render(); },
   'refl-taken': el => { const input = $('#reflTaken'); if (input) { input.value = el.dataset.v; reflReady(); } },
   'edit-nag': el => { readEditorInputs(); const d = ui.modal.draft; if (el.dataset.nag === 'normal') { delete d.nag; delete d.nagEvery; } else d.nag = el.dataset.nag; renderModal(); },
 };
@@ -3831,6 +3915,7 @@ document.addEventListener('change', e => {
   }
   if (el.dataset.siteSuggest !== undefined) { if (el.value) addBlockedSite(el.value); return; }
   if (el.dataset.pjDue !== undefined) { const v = el.value; if (v) projOps.setDue(v === 'none' ? null : M.dateKey(M.addDays(new Date(), Number(v)))); return; }
+  if (el.dataset.aiModel !== undefined) { ai.model = el.value; return; }
   if (el.dataset.workSwitch !== undefined) { const o = el.value && findOcc(el.value); if (o) startWork(o); return; }
   if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
   if (el.dataset.selPriority !== undefined) {
@@ -3920,6 +4005,7 @@ document.addEventListener('change', e => {
     store.updateSettings({ [key]: [...set] });
     return;
   }
+  if (el.dataset.actChange === 'ai-toggle') { ai.on = el.checked; render(); return; }
   if (el.dataset.actChange === 'browser-reminders') { store.setDevice('browserReminders', el.checked); render(); return; }
   if (el.dataset.actChange === 'focus-pick') {
     const pick = ui.focusPick ?? new Set(store.todayChecklist().filter(o => !o.resolved).map(o => o.id));
@@ -4005,6 +4091,11 @@ document.addEventListener('submit', async e => {
     if (!text) return;
     store.updateSettings({ habitScorecard: [...(store.settings.habitScorecard || []), { id: M.uuid(), text, rating: '=' }] });
     setTimeout(() => $('[data-form="scorecard"] [name=text]')?.focus());
+  } else if (kind === 'ai-key') {
+    const key = String(new FormData(form).get('key') || '').trim();
+    if (!key) return;
+    ai.key = key; ai.on = true; render();
+    toast('Gemini key saved in this browser', { icon: 'lock' });
   } else if (kind === 'work-new') {
     // "Something else": a quiet task for today (no reminders), and straight to work on it.
     const title = String(new FormData(form).get('title') || '').trim();
@@ -4016,6 +4107,14 @@ document.addEventListener('submit', async e => {
   } else if (kind === 'reflection') {
     const text = $('#reflText').value.trim();
     const o = findOcc(form.dataset.occ), missed = form.dataset.mode === 'missed';
+    if (o && ai.enabled && M.countWords(text) >= store.settings.minReflectionWords) {
+      // Gemini reads it first; filler goes back with a note.
+      const btn = $('#reflSubmit'), note = $('#reflAi');
+      btn.disabled = true; btn.dataset.label ??= btn.innerHTML; btn.textContent = 'Checking…';
+      const v = await checkReflection(text, missed ? `Why “${o.task.title}” didn’t get done` : `Checking off “${o.task.title}”`);
+      btn.innerHTML = btn.dataset.label; btn.disabled = false;
+      if (!v.genuine) { if (note) { note.hidden = false; note.textContent = v.reason; } return; }
+    }
     const taken = missed ? null : M.parseMinutes($('#reflTaken')?.value);
     if (!o || !(missed ? store.miss(o, text) : store.complete(o, text, taken))) return;
     if (missed) toast(`Marked ${o.task.title} as not done · reflection saved`, { icon: 'x' });
@@ -4024,7 +4123,9 @@ document.addEventListener('submit', async e => {
       setTimeout(() => { ui.justDone.delete(o.id); }, 1200);
       toast(`Checked off ${o.task.title} · reflection saved`, { icon: 'check', tone: 'good' });
     }
-    if (form.dataset.ctx === 'checkin') { ui.modal.reflecting = null; renderModal(); render(); } else closeModal();
+    if (form.dataset.ctx === 'checkin') { ui.modal.reflecting = null; renderModal(); render(); }
+    else if (form.dataset.ctx === 'locked') nextQueuedReflection();
+    else closeModal();
   } else if (kind === 'delete-account') {
     const m = ui.modal;
     m.working = true; m.error = null; renderModal();
@@ -4109,7 +4210,7 @@ document.addEventListener('keydown', e => {
     if (k === 'c') { e.preventDefault(); reminders.checkIn('Daily check-in', { manual: true }); return; }
     if (k === 's') { e.preventDefault(); syncUI.manual = true; store.sync(); return; }
   }
-  if (e.key === 'Escape' && ui.modal && !['editor', 'nag'].includes(ui.modal.type)) closeModal();
+  if (e.key === 'Escape' && ui.modal && !ui.modal.locked && !['editor', 'nag'].includes(ui.modal.type)) closeModal();
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.id === 'reflText' && !$('#reflSubmit').disabled) $('#reflSubmit').click();
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.closest('[data-form="editor"]')) { e.preventDefault(); saveEditor(); }
 });

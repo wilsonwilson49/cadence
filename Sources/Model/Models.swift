@@ -220,6 +220,13 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var hardness: Int?
     /// Occurrence key → how many minutes it actually took (asked when you check it off). Whole minutes.
     var timeTaken: [String: Int]?
+    /// Follow-up (trigger) tasks: this one waits, off every list, until the task `after` is checked off, then
+    /// comes up `afterMinutes` later (0 = right away) as a one-off with a reminder. Same on the web.
+    var after: UUID?
+    var afterMinutes: Int?
+    /// When it was set off (nil = still waiting), and by which check-off ("taskID|key"), so unchecking takes it back.
+    var armedAt: Date?
+    var armedBy: String?
     /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
     var steps: [HabitStep]?
     /// Occurrence key → the steps checked off that time.

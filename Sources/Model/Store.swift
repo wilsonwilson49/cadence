@@ -595,6 +595,7 @@ final class Store: ObservableObject {
         t.missed?[occ.key] = nil
         if let minutes, minutes > 0 { t.timeTaken = (t.timeTaken ?? [:]).merging([occ.key: minutes]) { $1 } }
         tasks[i] = t
+        armFollowUps(of: t.id, key: occ.key)
         reflections.insert(Reflection(taskID: occ.task.id, taskTitle: occ.task.title,
                                       occurrenceKey: occ.key, text: text), at: 0)
         if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "completed") }
@@ -625,6 +626,7 @@ final class Store: ObservableObject {
     func uncomplete(_ occ: Occurrence) {
         guard let i = tasks.firstIndex(where: { $0.id == occ.task.id }) else { return }
         tasks[i].completions[occ.key] = nil
+        disarmFollowUps(of: occ.task.id, key: occ.key)
         if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "needsAction") }
     }
 

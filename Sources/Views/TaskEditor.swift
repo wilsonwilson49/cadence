@@ -124,9 +124,23 @@ struct TaskEditor: View {
                 }
 
                 Section("When") {
+                    if !task.isEvent && !task.isHabit {
+                        Picker("Starts", selection: Binding(get: { task.after != nil }, set: { on in
+                            if on { task.after = store.possibleTriggers(for: task.id).first?.id }
+                            else { task.after = nil; task.afterMinutes = nil; task.armedAt = nil; task.armedBy = nil }
+                        })) {
+                            Text("On a date").tag(false)
+                            Text("After another task").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    if task.after != nil {
+                        followUpControls
+                    } else {
                     DatePicker("Date", selection: $task.startDate, displayedComponents: .date)
                     Toggle("At a specific time", isOn: $hasTime)
-                    if hasTime {
+                    }
+                    if hasTime && task.after == nil {
                         DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
                         Picker("Duration", selection: $task.durationMinutes) {
                             // Its own length too, if it isn't one of these (e.g. set from how long it usually takes).
@@ -171,7 +185,7 @@ struct TaskEditor: View {
                             .font(.app(.callout))
                         if let u = task.externalURL.flatMap(URL.init(string:)) { Link("Open in Google Calendar", destination: u) }
                     }
-                } else {
+                } else if task.after == nil {
                 Section(task.isHabit || task.isEvent ? "Repeat" : "Conditions") {
                     Picker(task.isHabit || task.isEvent ? "Repeats" : "Comes back", selection: repeatChoice) {
                         if task.isHabit {
@@ -300,6 +314,7 @@ struct TaskEditor: View {
                     }
                 }
 
+                if !task.isEvent && !task.isHabit { followUpsSection }
                 if !task.isEvent { timeTakenSection }
 
                 Section("Color") {
@@ -440,6 +455,56 @@ struct TaskEditor: View {
     }
 
     /// Steps: a small checklist that starts fresh each time the habit comes around.
+    /// "After another task": which one, how long after, and where it stands.
+    @ViewBuilder private var followUpControls: some View {
+        let options = store.possibleTriggers(for: task.id)
+        if options.isEmpty {
+            Text("There's no other task for it to follow yet.").font(.app(.caption)).foregroundStyle(.secondary)
+        } else {
+            Picker("After", selection: $task.after) {
+                ForEach(options) { t in Text(t.title.isEmpty ? "Untitled" : t.title).tag(Optional(t.id)) }
+            }
+            Picker("Comes up", selection: Binding(get: { task.afterMinutes ?? 0 }, set: { task.afterMinutes = $0 == 0 ? nil : $0 })) {
+                ForEach(PlanTask.afterChoices, id: \.self) { m in Text(PlanTask.afterLabel(m)).tag(m) }
+            }
+            Picker("Duration", selection: $task.durationMinutes) {
+                ForEach(Array(Set(Self.durations + [task.durationMinutes])).sorted(), id: \.self) { m in Text(TaskStats.format(m)).tag(m) }
+            }
+            Toggle(isOn: Binding(get: { task.isUntilDone }, set: { task.mode = $0 ? "untilDone" : nil })) {
+                Label("Once it's up, keep it on my list until it's done", systemImage: "flame")
+            }
+            let trigger = task.after.flatMap(store.task)?.title ?? "that task"
+            Label(task.armedAt == nil
+                  ? "Off your list until “\(trigger)” is checked off; then it comes up \(PlanTask.afterLabel(task.afterMinutes ?? 0).lowercased()) with a reminder."
+                  : "Came up at \(task.timeMinutes.map { timeString(minutes: $0) } ?? "—") on \(task.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) after “\(trigger)” was checked off. It comes up again the next time.",
+                  systemImage: "arrow.turn.down.right")
+                .font(.app(.caption)).foregroundStyle(.secondary)
+        }
+    }
+
+    /// The tasks that follow this one, and a way to add another.
+    @ViewBuilder private var followUpsSection: some View {
+        let list = store.followUps(of: task.id)
+        Section {
+            ForEach(list) { f in
+                HStack {
+                    Image(systemName: "arrow.turn.down.right").foregroundStyle(.secondary)
+                    Text(f.title)
+                    Spacer()
+                    Text(PlanTask.afterLabel(f.afterMinutes ?? 0)).foregroundStyle(.secondary)
+                    Button("Edit") { save(); DispatchQueue.main.async { model.editingTask = f } }.buttonStyle(.link)
+                }
+            }
+            Button { save(); let id = task.id; DispatchQueue.main.async { model.editingTask = PlanTask(title: "", startDate: Date().startOfDay, after: id) } } label: {
+                Label("Add a task that follows this one…", systemImage: "plus")
+            }
+            .disabled(task.title.trimmingCharacters(in: .whitespaces).isEmpty)
+        } header: { Text("Then") } footer: {
+            Text("Follow-ups wait off your list until this is checked off, then come up on their own: chain the next step to the last.")
+                .font(.app(.caption)).foregroundStyle(.secondary)
+        }
+    }
+
     /// How long it really took each time it was checked off, and how long it usually takes (the 60% mark).
     @ViewBuilder private var timeTakenSection: some View {
         let entries = (task.timeTaken ?? [:]).sorted { $0.key > $1.key }
@@ -667,13 +732,20 @@ struct TaskEditor: View {
         t.recurrence = previewRecurrence
         if t.recurrence.frequency != .weekly { t.recurrence.weekdays = [] }
         if t.isEvent { t.mode = nil }
+        if t.after != nil {
+            // A follow-up keeps the date and time it was set off at (or none yet); it has no schedule of its own.
+            t.startDate = task.startDate.startOfDay
+            t.timeMinutes = task.armedAt == nil ? nil : task.timeMinutes
+            if store.task(t.id)?.after != t.after { t.armedAt = nil; t.armedBy = nil }
+        }
         if t.isLongTerm {
             t.recurrence = Recurrence(frequency: .daily, interval: 1, weekdays: [], end: .onDate(max(endDate, t.startDate).startOfDay))
         }
-        if t.isCycle {
+        if t.isCycle && t.after == nil {
             t.cycleGapDays = cycleGap * (cycleWeeks ? 7 : 1); t.cycleTimes = cycleTimes
             t.recurrence = Recurrence()
         } else { t.cycleGapDays = nil; t.cycleTimes = nil }
+        if t.after != nil { t.recurrence = Recurrence(); if t.isLongTerm { t.mode = nil } }
         t.dueDate = t.isUntilDone && !t.isCycle && !t.recurrence.isRepeating && hasDue ? dueDate.startOfDay : nil
         let pending = newStep.trimmingCharacters(in: .whitespacesAndNewlines)
         if !pending.isEmpty { t.steps = t.habitSteps + [HabitStep(title: pending)] }

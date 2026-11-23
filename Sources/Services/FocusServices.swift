@@ -177,7 +177,8 @@ final class FocusEngine: ObservableObject {
         let taken = max(1, Int((Double(elapsedSeconds) / 60).rounded()))
         finished = [id]
         end(quiet: true)
-        if let occ, !occ.isResolved { model.beginReflection(occ, minutes: taken) }
+        // The reflection comes up right away, over everything, until it's written.
+        if let occ { model.walls.reflect(on: [occ], minutes: taken) }
     }
 
     func start(minutes: Int, picked: [String], mode: Mode = .sprint) {
@@ -245,6 +246,9 @@ final class FocusEngine: ObservableObject {
         model.store.saveFocusSession(s)
         result = s
         if quiet { return }
+        // Time's up: the reflections for what you finished come up right away, over everything, until they're written.
+        let done = s.finishedIds.compactMap(occurrence)
+        model.walls.reflect(on: done)
         model.notifier.deliver(AlertContent(kind: .nudge, title: "Time! \(s.finished) done",
                                             body: "\(percent)% focused · +\(s.points) points. Write your reflections to check them off.",
                                             symbol: "scope", tint: .pink), channels: model.store.settings.defaultChannels)

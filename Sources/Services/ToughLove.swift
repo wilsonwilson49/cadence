@@ -196,7 +196,7 @@ final class NagEngine: ObservableObject {
 }
 
 /// Borderless windows can't take typing unless they say so (the reason field needs it).
-private final class KeyWindow: NSWindow {
+final class KeyWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }

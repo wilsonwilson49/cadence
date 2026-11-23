@@ -332,6 +332,8 @@ export function untilDoneWeekDay(o) {
 
 export function occurs(task, day) {
   if (task.archived) return false;
+  // A follow-up that hasn't been set off yet is on no list.
+  if (task.after && !task.armedAt) return false;
   const d = startOfDay(day);
   if (d < startOfDay(task.startDate)) return false;
   if (!isUntilDone(task)) return occursByPattern(task, d);
@@ -487,6 +489,30 @@ export function sortOccurrences(a, b) {
   if (x == null && y != null) return 1;
   if (x != null && y == null) return -1;
   return p || String(a.task.createdAt).localeCompare(String(b.task.createdAt));
+}
+
+// Follow-up (trigger) tasks: "after X, do Y" (Sources/Model/FollowUps.swift has the same rules).
+export const AFTER_CHOICES = [0, 5, 10, 15, 30, 60, 120, 240];
+export const afterLabel = m => (m ? `${fmtMinutes(m)} later` : 'Right away');
+export const isWaiting = t => Boolean(t?.after && !t.armedAt);
+/** Y once X is checked off at `now`: a one-off on the next whole minute after the delay, with its reminder. */
+export function armFollowUp(f, triggerId, key, now = new Date()) {
+  const raw = +now + Math.max(0, Number(f.afterMinutes) || 0) * 60_000;
+  const when = new Date(Math.ceil(raw / 60_000) * 60_000), dk = dateKey(when);
+  const next = { ...f, startDate: iso(startOfDay(when)), timeMinutes: when.getHours() * 60 + when.getMinutes(),
+    recurrence: { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } }, armedAt: iso(now), armedBy: `${triggerId}|${key}` };
+  if (next.mode === 'longTerm') delete next.mode;
+  delete next.cycleGapDays; delete next.cycleTimes; delete next.dueDate;
+  next.completions = { ...next.completions }; delete next.completions[dk];
+  if (next.missed) { next.missed = { ...next.missed }; delete next.missed[dk]; }
+  next.skipped = (next.skipped || []).filter(k => k !== dk);
+  return next;
+}
+/** Tasks `id` could follow without making a loop. */
+export function possibleTriggers(tasks, id) {
+  const below = new Set([id]), frontier = [id];
+  while (frontier.length) { const x = frontier.pop(); for (const f of tasks) if (f.after === x && !below.has(f.id)) { below.add(f.id); frontier.push(f.id); } }
+  return tasks.filter(t => !below.has(t.id) && !isEvent(t) && !t.archived).sort((a, b) => a.title.localeCompare(b.title));
 }
 
 // Priority, hardness and how long things really take (Sources/Model/TaskStats.swift has the same rules).

@@ -240,5 +240,18 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   check(b.map(x => x.kind).join(',') === 'work,focus,study,focus' && b[0].title === 'Lab report', 'focus time: kinds, study counted once');
   check(M2.blockMinutes(b[3]) === 30 && M2.blockMinutes(b[2]) === 70, 'focus time: clipped to the day');
 }
+// Follow-up (trigger) tasks.
+{
+  const M2 = await import('../public/js/model.js');
+  const rec = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+  const x = { id: 'x', title: 'Gym', startDate: new Date(2026, 10, 22).toISOString(), recurrence: { ...rec, frequency: 'daily' }, completions: {} };
+  const y = { id: 'y', title: 'Shake', startDate: new Date(2026, 10, 1).toISOString(), recurrence: rec, after: 'x', afterMinutes: 30, completions: {} };
+  check(!M2.occurs(y, new Date(2026, 10, 22)) && M2.isWaiting(y), 'follow-up: waits off every list');
+  const armed = M2.armFollowUp(y, 'x', '2026-11-22', new Date(2026, 10, 22, 9, 10, 20));
+  check(M2.occurs(armed, new Date(2026, 10, 22)) && armed.timeMinutes === 9 * 60 + 41 && armed.armedBy === 'x|2026-11-22', 'follow-up: comes up 30 min after, on the next minute');
+  const z = { id: 'z', title: 'Stretch', after: 'y', completions: {} };
+  check(M2.possibleTriggers([x, y, z], 'x').map(t => t.id).join() === '', 'follow-up: no loops (x can\'t follow what follows it)');
+  check(M2.possibleTriggers([x, y, z], 'z').map(t => t.id).join() === 'x,y', 'follow-up: can follow anything else');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);
