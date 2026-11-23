@@ -515,6 +515,29 @@ export function parseMinutes(text) {
   if (!m || (m[1] == null && m[2] == null)) return null;
   return ok(Math.round((m[1] ? +m[1] * 60 : 0) + (m[2] ? +m[2] : 0)));
 }
+/** Focus sprints, work sessions (Focus › Work) and study sessions overlapping a day, clipped to it, for the calendars.
+ *  A study session is also saved as a focus session (same id, for points), so it's counted once, as study. */
+export function focusBlocks(sessions, studyLogs, day) {
+  const s = +startOfDay(day), e = +addDays(startOfDay(day), 1);
+  const clip = (a, b) => { const x = Math.max(+new Date(a), s), y = Math.min(+new Date(b), e); return y - x >= 60_000 ? [x, y] : null; };
+  const studyIds = new Set(studyLogs.map(l => l.id)), out = [];
+  for (const f of sessions) {
+    if (studyIds.has(f.id) || String(f.finishedTitles?.[0] || '').startsWith('Study: ')) continue;
+    const c = clip(f.startedAt, f.endedAt);
+    if (!c) continue;
+    const work = f.mode === 'work';
+    out.push({ id: `f-${f.id}`, start: new Date(c[0]), end: new Date(c[1]), kind: work ? 'work' : 'focus',
+      title: work ? f.title || 'Work' : f.finished ? `${f.finished} of ${f.picked} done` : 'Focus sprint' });
+  }
+  for (const l of studyLogs) {
+    const c = clip(l.startedAt, l.endedAt);
+    if (c) out.push({ id: `s-${l.id}`, start: new Date(c[0]), end: new Date(c[1]), kind: 'study', title: l.title || 'Study' });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+export const blockMinutes = b => Math.max(1, Math.round((b.end - b.start) / 60_000));
+export const FOCUS_KINDS = { work: 'Work', focus: 'Focus sprint', study: 'Study' };
+
 /** 45 → "45 min", 90 → "1 hr 30 min". */
 export const fmtMinutes = n => (n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} hr ${n % 60} min` : `${n / 60} hr`);
 

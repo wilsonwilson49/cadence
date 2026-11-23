@@ -132,12 +132,57 @@ final class FocusEngine: ObservableObject {
     @Published var result: FocusSession?
     private var sessionID = UUID()
 
+    enum Mode: String { case sprint, work }
+    /// Sprint: race the clock through a list. Work: one task, a clock counting up, until you complete it.
+    @Published private(set) var mode: Mode = .sprint
+    /// Work mode: the occurrence you're on ("taskID|yyyy-MM-dd").
+    @Published private(set) var workID: String?
+    /// Work mode blocks distracting apps and sites (Settings › Tough love) unless this is turned off.
+    @Published var workBlocks = UserDefaults.standard.object(forKey: "workBlocks") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(workBlocks, forKey: "workBlocks") }
+    }
+
+    var isWorking: Bool { running && mode == .work }
+    var workOccurrence: Occurrence? { workID.flatMap(occurrence) }
+    var elapsedSeconds: Int { max(0, Int(now.timeIntervalSince(startedAt))) }
+    /// Share of the time so far not spent away or in distracting apps.
+    var focusPercent: Int {
+        let e = max(1, elapsedSeconds)
+        return Int((100 * Double(e - min(e, awaySeconds + distractingSeconds)) / Double(e)).rounded())
+    }
+
     init(model: AppModel) { self.model = model }
 
     var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(now).rounded(.up))) }
-    var clock: String { String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60) }
+    var clock: String {
+        if mode == .work {
+            let s = elapsedSeconds
+            return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
+        }
+        return String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60)
+    }
 
-    func start(minutes: Int, picked: [String]) {
+    /// Work mode: latch onto one task. Switching from another logs the time spent on that one first.
+    func startWork(_ occ: Occurrence) {
+        if running { end(quiet: true) }
+        result = nil
+        workID = occ.id
+        start(minutes: Focus.maxMinutes, picked: [occ.id], mode: .work)
+    }
+
+    /// Work mode's Complete: ends the session and opens the check-off, with the time already filled in.
+    func completeWork() {
+        guard isWorking, let id = workID else { return }
+        let occ = workOccurrence
+        let taken = max(1, Int((Double(elapsedSeconds) / 60).rounded()))
+        finished = [id]
+        end(quiet: true)
+        if let occ, !occ.isResolved { model.beginReflection(occ, minutes: taken) }
+    }
+
+    func start(minutes: Int, picked: [String], mode: Mode = .sprint) {
+        self.mode = mode
+        if mode == .sprint { workID = nil }
         self.minutes = minutes; self.picked = picked; finished = []
         awaySeconds = 0; distractingSeconds = 0; distractingStreak = 0
         startedAt = Date(); endsAt = startedAt.addingTimeInterval(Double(minutes * 60)); now = startedAt
@@ -166,16 +211,18 @@ final class FocusEngine: ObservableObject {
             // A nudge after 20 seconds in a distracting app, at most once a minute.
             if distractingStreak >= 20 && now.timeIntervalSince(lastNudge) > 60 {
                 lastNudge = now
-                model.notifier.deliver(AlertContent(kind: .nudge, title: "Back to focus: \(clock) left",
-                                                    body: "\(finished.count) of \(picked.count) done. \(app ?? "This app") is on your distracting list.",
-                                                    symbol: "scope", tint: .pink), channels: [.banner])
+                let title = mode == .work ? "Back to “\(workOccurrence?.task.title ?? "your task")”" : "Back to focus: \(clock) left"
+                let body = mode == .work ? "\(clock) in. \(app ?? "This app") is on your distracting list."
+                                         : "\(finished.count) of \(picked.count) done. \(app ?? "This app") is on your distracting list."
+                model.notifier.deliver(AlertContent(kind: .nudge, title: title, body: body, symbol: "scope", tint: .pink), channels: [.banner])
             }
         } else {
             distractingStreak = 0
         }
     }
 
-    func end() {
+    /// Ends the session and logs it. `quiet`: you ended it yourself, so no "Time!" alert.
+    func end(quiet: Bool = false) {
         guard running else { return }
         timer?.invalidate(); timer = nil
         running = false
@@ -189,8 +236,15 @@ final class FocusEngine: ObservableObject {
         s.finishedIds = finished
         s.finishedTitles = finished.compactMap { occurrence($0)?.task.title }
         s.awaySeconds = awaySeconds; s.distractingSeconds = distractingSeconds; s.focusPercent = percent
+        if mode == .work {
+            s.mode = "work"; s.occurrenceID = workID; s.title = workOccurrence?.task.title
+            workID = nil
+        }
+        // Under a minute of work (picked by mistake, switched straight away) isn't worth a record.
+        if mode == .work && elapsed < 60 && finished.isEmpty { mode = .sprint; return }
         model.store.saveFocusSession(s)
         result = s
+        if quiet { return }
         model.notifier.deliver(AlertContent(kind: .nudge, title: "Time! \(s.finished) done",
                                             body: "\(percent)% focused · +\(s.points) points. Write your reflections to check them off.",
                                             symbol: "scope", tint: .pink), channels: model.store.settings.defaultChannels)

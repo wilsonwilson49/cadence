@@ -9,17 +9,31 @@ struct FocusView: View {
     @State private var minutes = 25
     @State private var picks: Set<String>?
     @State private var didAppear = false
+    /// "work" (one task, until it's done) or "sprint" (race the clock through a list).
+    @AppStorage("focusMode") private var modeRaw = "work"
+    @State private var newWork = ""
 
     var body: some View {
         let sessions = store.sortedFocusSessions
         let points = sessions.reduce(0) { $0 + $1.points }
         let lv = Focus.level(points: points)
         VStack(spacing: 0) {
-            ScreenHeader(title: "Focus", subtitle: "Race the clock: set a time, then see how much of your list you can finish before it runs out.") { EmptyView() }
+            ScreenHeader(title: "Focus", subtitle: modeRaw == "work" || focus.isWorking
+                         ? "Work on one thing: pick it, and it stays up front with distractions blocked until you complete it."
+                         : "Race the clock: set a time, then see how much of your list you can finish before it runs out.") { EmptyView() }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    levelCard(lv, points: points, sessions: sessions)
-                    if focus.running { running } else { setup }
+                    if focus.isWorking { working } else {
+                        levelCard(lv, points: points, sessions: sessions)
+                        if focus.running { running } else {
+                            Picker("", selection: $modeRaw) {
+                                Label("Work on one task", systemImage: "scope").tag("work")
+                                Label("Sprint through a list", systemImage: "timer").tag("sprint")
+                            }
+                            .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 420)
+                            if modeRaw == "work" { workSetup } else { setup }
+                        }
+                    }
                     if !sessions.isEmpty { history(sessions) }
                 }
                 .padding(22)
@@ -96,6 +110,128 @@ struct FocusView: View {
 
     private var openItems: [Occurrence] { store.todayChecklist().filter { !$0.isResolved } }
 
+    // MARK: Work mode
+
+    /// Today's open items, most important first (then in checklist order).
+    private var workChoices: [Occurrence] {
+        openItems.filter { !$0.isEvent }.enumerated()
+            .sorted { ($0.element.task.priorityLevel?.rank ?? 3, $0.offset) < ($1.element.task.priorityLevel?.rank ?? 3, $1.offset) }
+            .map(\.element)
+    }
+
+    private var workSetup: some View {
+        let choices = workChoices
+        return VStack(alignment: .leading, spacing: 14) {
+            if let r = focus.result { result(r) }
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionTitle(text: "What are you working on?", symbol: "scope")
+                    Text("Click one and it starts straight away: it goes up front as your headline, the clock runs, and distracting apps and websites (Settings › Tough love) are blocked until you complete it or stop.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
+                    HStack {
+                        TextField("Something else? Type it and press Return", text: $newWork).onSubmit(startNewWork)
+                        Button("Start", action: startNewWork).disabled(newWork.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    Toggle("Block distracting apps and websites while I work", isOn: $focus.workBlocks)
+                    if choices.isEmpty {
+                        Text("Nothing open on today's list.").foregroundStyle(.secondary)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(choices) { o in WorkPickRow(occ: o) { focus.startWork(o) } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Something else": makes it a task for today (quiet, no reminders) and starts on it.
+    private func startNewWork() {
+        let title = newWork.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        var t = PlanTask(title: title, startDate: Date().startOfDay)
+        t.kind = "task"
+        t.channels = []
+        store.upsert(t)
+        newWork = ""
+        focus.startWork(Occurrence(task: t, day: Date().startOfDay))
+    }
+
+    /// Work mode: the task as a headline, the clock counting up, and Complete.
+    @ViewBuilder private var working: some View {
+        if let o = focus.workOccurrence {
+            let t = o.task
+            let target = t.typicalMinutes ?? (t.timeMinutes != nil ? t.durationMinutes : nil)
+            VStack(alignment: .leading, spacing: 16) {
+                Text("NOW WORKING ON").font(.app(.caption).weight(.bold)).tracking(1.2).foregroundStyle(.secondary)
+                Text(t.title)
+                    .font(Theme.heading(36, .bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                HStack(spacing: 14) {
+                    if let p = t.priorityLevel { Label("\(p.title) priority", systemImage: p.symbol).foregroundStyle(p.color) }
+                    if let h = t.hardnessLevel {
+                        HStack(spacing: 5) { HardnessMeter(level: h, height: 11); Text(Hardness.title(h)) }
+                    }
+                    if let m = t.typicalMinutes { Label("usually \(TaskStats.format(m))", systemImage: "stopwatch") }
+                    if o.isOverdue { Text("Overdue").foregroundStyle(.red) }
+                    if t.isPastDue { Text("Past due").foregroundStyle(.red) }
+                }
+                .font(.app(.callout)).foregroundStyle(.secondary).labelStyle(CompactLabelStyle())
+                if !t.notes.isEmpty {
+                    Text(t.notes).font(.app(.body)).foregroundStyle(.secondary).lineLimit(6).textSelection(.enabled)
+                }
+                if t.hasSteps { StepChecklist(occ: o) { _ in focus.completeWork() } }
+
+                HStack(alignment: .center, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(focus.clock).font(.system(size: 54, weight: .bold).monospacedDigit())
+                        Text("\(focus.focusPercent)% focused" + (focus.distractingSeconds + focus.awaySeconds > 0
+                             ? " · \(durationString(seconds: focus.distractingSeconds + focus.awaySeconds)) away or distracted" : ""))
+                            .font(.app(.caption)).foregroundStyle(.secondary)
+                    }
+                    if let target {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ProgressView(value: Double(min(focus.elapsedSeconds, target * 60)), total: Double(target * 60))
+                                .tint(focus.elapsedSeconds > target * 60 ? .orange : Theme.accent)
+                            Text(focus.elapsedSeconds > target * 60 ? "Past the \(TaskStats.format(target)) it usually takes"
+                                 : "\(TaskStats.format(max(1, target - focus.elapsedSeconds / 60))) to the usual \(TaskStats.format(target))")
+                                .font(.app(.caption)).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: 320)
+                    }
+                }
+
+                Label(model.nag.blocker.isOn ? "Distracting apps and websites are blocked \(model.nag.blocker.reason ?? "")."
+                      : focus.workBlocks ? "Add distracting apps and websites in Settings › Tough love to have them blocked."
+                      : "Blocking is off for this session.",
+                      systemImage: model.nag.blocker.isOn ? "lock.fill" : "lock.open")
+                    .font(.app(.caption)).foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                    Button { focus.completeWork() } label: { Label("Complete", systemImage: "checkmark").padding(.horizontal, 8) }
+                        .buttonStyle(.borderedProminent).controlSize(.large).tint(.green)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .help("Check it off (⌘↩): you'll write the reflection, with the time already filled in")
+                    let others = workChoices.filter { $0.id != o.id }
+                    Menu {
+                        ForEach(others) { x in Button(x.task.title) { focus.startWork(x) } }
+                    } label: { Label("Switch task", systemImage: "arrow.left.arrow.right") }
+                    .fixedSize().controlSize(.large).disabled(others.isEmpty)
+                    Toggle("Block distractions", isOn: $focus.workBlocks).toggleStyle(.checkbox)
+                    Spacer()
+                    Button("Stop", role: .destructive) { focus.end(quiet: true) }.controlSize(.large)
+                        .help("Stop working on it without checking it off (the time is still logged)")
+                }
+            }
+            .padding(26)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(alignment: .leading) { Rectangle().fill(t.color.color).frame(width: 4) }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+        }
+    }
+
     private var setup: some View {
         let open = openItems
         let selected = picks ?? Set(open.map(\.id))
@@ -147,7 +283,8 @@ struct FocusView: View {
         return HStack(alignment: .top, spacing: 16) {
             Text("\(r.finished)").font(.system(size: 44, weight: .heavy).monospacedDigit()).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.app(.headline))
+                Text(r.isWork ? "\(r.finished > 0 ? "Done" : "Stopped"): \(r.title ?? "work") after \(Focus.label(max(1, r.actualMinutes)))"
+                              : "Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.app(.headline))
                 Text("\(r.focusPercent)% focused (\(durationString(seconds: r.distractingSeconds + r.awaySeconds)) away or distracted) · ×\(String(format: "%g", Focus.multiplier(r.focusPercent))) · +\(r.points) points")
                     .font(.app(.caption)).foregroundStyle(.secondary)
                 if !unreflected.isEmpty {
@@ -184,7 +321,8 @@ struct FocusView: View {
                             }
                             .frame(width: 64, alignment: .leading)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(s.finished) of \(s.picked) done in \(s.actualMinutes) min")
+                                Text(s.isWork ? "\(s.finished > 0 ? "Finished" : "Worked on") “\(s.title ?? "a task")” for \(Focus.label(max(1, s.actualMinutes)))"
+                                              : "\(s.finished) of \(s.picked) done in \(s.actualMinutes) min").lineLimit(1)
                                 Text("\(s.focusPercent)% focused\(s.distractingSeconds > 0 ? " · \(durationString(seconds: s.distractingSeconds)) in distracting apps" : "") · \(s.device == "mac" ? "Mac" : "Web")")
                                     .font(.app(.caption)).foregroundStyle(.secondary)
                             }
@@ -442,5 +580,40 @@ struct FocusLengthPicker: View {
         }
         .onAppear { text = String(minutes) }
         .onChange(of: minutes) { _, m in if Int(text) != m { text = String(m) } }
+    }
+}
+
+/// A task you can start working on (Focus › Work): one click and it's on.
+struct WorkPickRow: View {
+    let occ: Occurrence
+    let start: () -> Void
+    @State private var hovering = false
+    var body: some View {
+        let t = occ.task
+        Button(action: start) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2).fill(t.color.color).frame(width: 3, height: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t.title).lineLimit(1)
+                    HStack(spacing: 8) {
+                        if let p = t.priorityLevel { Label(p.title, systemImage: p.symbol).foregroundStyle(p.color) }
+                        if let h = t.hardnessLevel { HardnessMeter(level: h, height: 9) }
+                        if let m = t.typicalMinutes { Label("usually \(TaskStats.format(m))", systemImage: "stopwatch") }
+                        if occ.isOverdue { Text("Overdue").foregroundStyle(.red) }
+                        if let s = occ.start { Label(timeString(s), systemImage: "clock") }
+                    }
+                    .font(.app(.caption)).foregroundStyle(.secondary).labelStyle(CompactLabelStyle())
+                }
+                Spacer()
+                Label("Work on this", systemImage: "play.fill").font(.app(.callout).weight(.medium))
+                    .foregroundStyle(hovering ? Color.accentColor : .secondary)
+            }
+            .padding(.vertical, 7).padding(.horizontal, 6)
+            .background(RoundedRectangle(cornerRadius: Theme.radius).fill(hovering ? Color.accentColor.opacity(0.08) : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Start working on “\(t.title)” now")
     }
 }

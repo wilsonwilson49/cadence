@@ -163,6 +163,12 @@ struct FocusSession: Codable, Identifiable, Hashable {
     var device = "mac"
     var points: Int
     var updatedAt: Date?
+    /// "work": one task, worked on until it's done (Focus › Work). nil: a sprint against the clock.
+    var mode: String?
+    /// Work sessions: what you worked on, and its occurrence ("taskID|yyyy-MM-dd").
+    var title: String?
+    var occurrenceID: String?
+    var isWork: Bool { mode == "work" }
 
     init(id: UUID = UUID(), startedAt: Date, endedAt: Date, plannedMinutes: Int, actualMinutes: Int, picked: Int, finished: Int,
          points: Int) {
@@ -179,6 +185,7 @@ struct FocusSession: Codable, Identifiable, Hashable {
         awaySeconds = c.value(.awaySeconds, 0); distractingSeconds = c.value(.distractingSeconds, 0)
         focusPercent = c.value(.focusPercent, 100); device = c.value(.device, "web"); points = c.value(.points, 0)
         updatedAt = c.value(.updatedAt, nil)
+        mode = c.value(.mode, nil); title = c.value(.title, nil); occurrenceID = c.value(.occurrenceID, nil)
     }
 }
 

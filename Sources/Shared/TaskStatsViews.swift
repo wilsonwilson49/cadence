@@ -167,3 +167,7 @@ struct TimeTakenField: View {
         }
     }
 }
+
+extension FocusBlock.Kind {
+    var color: Color { switch self { case .work: .accentColor; case .focus: .purple; case .study: .green } }
+}

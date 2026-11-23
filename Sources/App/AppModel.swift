@@ -85,6 +85,8 @@ final class AppModel: ObservableObject {
     @Published var reflectionTarget: Occurrence?
     /// True when the open reflection is for "didn't do it" rather than a check-off.
     @Published var reflectionMissed = false
+    /// Filled in as "how long it took" on the reflection form (from a work session).
+    @Published var reflectionMinutes: Int?
     @Published var editingTask: PlanTask?
     /// The project open on the Projects screen (nil = the list of projects).
     @Published var openProjectID: UUID?
@@ -220,9 +222,10 @@ final class AppModel: ObservableObject {
         if occ.isDone { store.uncomplete(occ) } else { beginReflection(occ) }
     }
 
-    func beginReflection(_ occ: Occurrence, missed: Bool = false) {
+    func beginReflection(_ occ: Occurrence, missed: Bool = false, minutes: Int? = nil) {
         windows.showMain()
         reflectionMissed = missed
+        reflectionMinutes = missed ? nil : minutes
         // Re-read the task so the sheet sees the latest state.
         if let t = store.task(occ.task.id) { reflectionTarget = Occurrence(task: t, day: occ.day) }
     }
@@ -230,6 +233,13 @@ final class AppModel: ObservableObject {
     /// The X box: "didn't do it / couldn't" asks why; clicking it again undoes it.
     func toggleMissed(_ occ: Occurrence) {
         if occ.isMissed { store.unmiss(occ) } else { beginReflection(occ, missed: true) }
+    }
+
+    /// Focus › Work: latches onto this task right away (headline, clock, blocking) and shows it.
+    func workOn(_ occ: Occurrence) {
+        focus.startWork(occ)
+        screen = .focus
+        windows.showMain()
     }
 
     func openChecklist() {

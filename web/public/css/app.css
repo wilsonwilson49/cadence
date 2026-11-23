@@ -991,3 +991,27 @@ table.times { width: 100%; border-collapse: collapse; margin-top: 6px; font-size
 table.times td { padding: 3px 4px; border-top: 1px solid var(--line); }
 table.times td.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.times td:last-child { width: 1%; }
+
+/* Focus › Work */
+.work-pick { display: flex; flex-direction: column; }
+.work-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 6px; border: 0; border-top: 1px solid var(--line);
+  background: transparent; color: var(--text); font: inherit; cursor: pointer; border-radius: 0; }
+.work-row:first-child { border-top: 0; }
+.work-row:hover, .work-row:focus-visible { background: var(--accent-soft); }
+.work-row .bar { width: 3px; align-self: stretch; border-radius: 2px; }
+.work-row .title { display: block; }
+.work-row .meta { display: flex; gap: 10px; font-size: 12px; color: var(--muted); align-items: center; }
+.work-row .meta .i { width: 12px; height: 12px; }
+.work-row .go { color: var(--muted); font-size: 13px; white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
+.work-row:hover .go { color: var(--accent); }
+.work-head { display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; background: var(--panel); border: 1px solid var(--line-strong); border-left: 4px solid var(--accent); }
+.work-head .kicker { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.work-head .headline { margin: 0; font-size: 34px; line-height: 1.15; font-weight: 700; border: 0; padding: 0; overflow-wrap: anywhere; }
+.work-head .meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--muted); }
+.work-head .notes { white-space: pre-wrap; max-height: 9em; overflow: auto; }
+.work-clock { font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+/* The week's focus strip */
+.fmark { position: absolute; left: 2px; width: 4px; border-radius: 2px; opacity: .85; z-index: 1; }
+.fmark.k-work { background: var(--accent); } .fmark.k-focus { background: #a77be8; } .fmark.k-study { background: var(--green); }
+.week-head .ftot { font-size: 10px; color: var(--accent); height: 14px; display: flex; justify-content: center; align-items: center; gap: 2px; }
+.week-head .ftot .i { width: 10px; height: 10px; }

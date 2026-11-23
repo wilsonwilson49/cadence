@@ -225,5 +225,20 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
     .sort(M2.sortOccurrences).map(o => o.task.title);
   check(order.join(',') === 'timed high,timed,high,low,none', 'priority: sorts any-time items and ties');
 }
+// Focus time on the calendar.
+{
+  const M2 = await import('../public/js/model.js');
+  const day = new Date(2026, 10, 22), at = (h, m = 0) => new Date(2026, 10, 22, h, m).toISOString();
+  const sessions = [
+    { id: 'w', startedAt: at(7), endedAt: at(7, 50), mode: 'work', title: 'Lab report', finished: 1, picked: 1 },
+    { id: 'f', startedAt: at(10, 30), endedAt: at(10, 55), finished: 2, picked: 3 },
+    { id: 's1', startedAt: at(13), endedAt: at(14, 10), finished: 1, picked: 1, finishedTitles: ['Study: Chemistry'] },
+    { id: 'late', startedAt: new Date(2026, 10, 22, 23, 30).toISOString(), endedAt: new Date(2026, 10, 23, 0, 30).toISOString(), finished: 0, picked: 1 },
+  ];
+  const logs = [{ id: 's1', title: 'Chemistry', startedAt: at(13), endedAt: at(14, 10) }];
+  const b = M2.focusBlocks(sessions, logs, day);
+  check(b.map(x => x.kind).join(',') === 'work,focus,study,focus' && b[0].title === 'Lab report', 'focus time: kinds, study counted once');
+  check(M2.blockMinutes(b[3]) === 30 && M2.blockMinutes(b[2]) === 70, 'focus time: clipped to the day');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

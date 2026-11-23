@@ -582,15 +582,37 @@ const saveFocus = () => { try { localStorage.setItem(FOCUS_KEY, JSON.stringify(f
 const fmtClock = ms => { const s = Math.ceil(ms / 1000), m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
 const focusLeft = () => Math.max(0, (focus.endsAt || 0) - Date.now());
 const awayNow = () => (focus.awayMs || 0) + (focus.awaySince ? Date.now() - focus.awaySince : 0);
+/** Work mode's clock, counting up: "12:34" or "1:02:03". */
+const workClock = () => {
+  const s = Math.max(0, Math.floor((Date.now() - focus.startedAt) / 1000));
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 
-function startFocus(minutes, picked) {
+function startFocus(minutes, picked, work = null) {
   Object.assign(focus, { running: true, id: M.uuid(), startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000, minutes, picked, finished: [],
-    awayMs: 0, awaySince: document.hasFocus() ? null : Date.now() });
+    awayMs: 0, awaySince: document.hasFocus() ? null : Date.now(), mode: work ? 'work' : 'sprint', workId: work?.id ?? null, title: work?.task.title ?? null });
   ui.focusResult = null;
   saveFocus(); render(); focusTick();
 }
 
-function endFocus() {
+// Focus › Work: one task as the headline, a clock counting up, until you complete it. (The Mac app also blocks
+// distracting apps and sites while it runs there; a browser tab can't.)
+const isWorking = () => focus.running && focus.mode === 'work';
+function startWork(o) {
+  if (focus.running) endFocus({ quiet: true });
+  startFocus(M.FOCUS_MAX_MINUTES, [o.id], o);
+  navigate('focus');
+}
+function completeWork() {
+  if (!isWorking()) return;
+  const o = findOcc(focus.workId), minutes = Math.max(1, Math.round((Date.now() - focus.startedAt) / 60_000));
+  focus.finished = [focus.workId];
+  endFocus({ quiet: true });
+  if (o && !o.resolved) beginReflection(o, 'done', minutes);
+}
+
+/** `quiet`: you ended it yourself, so no "Time!" alert. */
+function endFocus({ quiet = false } = {}) {
   if (!focus.running) return;
   const end = Math.min(Date.now(), focus.endsAt), elapsed = Math.max(1, end - focus.startedAt);
   const away = Math.min(elapsed, awayNow());
@@ -601,10 +623,12 @@ function endFocus() {
     actualMinutes: Math.round(elapsed / 60_000), picked, finished, finishedTitles: focus.finished.map(id => findOcc(id)?.task.title).filter(Boolean),
     finishedIds: focus.finished, awaySeconds: Math.round(away / 1000), focusPercent, device: 'web',
     points: M.focusPoints({ finished, picked, focusPercent }),
-  });
+    ...(focus.mode === 'work' ? { mode: 'work', title: focus.title, occurrenceID: focus.workId } : {}),
+  }, { skip: focus.mode === 'work' && elapsed < 60_000 && !finished });
   Object.assign(focus, { running: false });
   saveFocus();
   ui.focusResult = session;
+  if (quiet) { render(); return; }
   reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#82a8ef' },
     store.settings.defaultChannels);
   navigate('focus');
@@ -618,6 +642,15 @@ function focusTick() {
     if (!focus.running) { clearInterval(focusTimer); return; }
     if (focusLeft() <= 0) { clearInterval(focusTimer); endFocus(); return; }
     // Update just the clock pieces, not the whole page.
+    if (isWorking()) {
+      const t = workClock();
+      for (const el of document.querySelectorAll('[data-focus-clock]')) el.textContent = t;
+      for (const el of document.querySelectorAll('[data-focus-away]')) el.textContent = M.fmtDuration(awayNow() / 1000);
+      for (const el of document.querySelectorAll('[data-work-bar]')) el.style.width = `${Math.min(100, (Date.now() - focus.startedAt) / (Number(el.dataset.target) * 600))}%`;
+      const badge = document.querySelector('.nav-item[href="/app/focus"] .badge');
+      if (badge) badge.textContent = t;
+      return;
+    }
     const left = focusLeft(), frac = left / (focus.minutes * 60_000);
     for (const el of document.querySelectorAll('[data-focus-clock]')) el.textContent = fmtClock(left);
     for (const el of document.querySelectorAll('[data-focus-ring]')) el.style.strokeDashoffset = String(2 * Math.PI * 90 * (1 - frac));
@@ -643,6 +676,8 @@ function focusView() {
       <div class="progress"><div style="width:${Math.round(100 * lv.into / lv.span)}%"></div></div>
       <div class="small muted" style="margin-top:4px">${M.focusStreak(sessions)}-day focus streak · ${week.reduce((n, x) => n + (x.points || 0), 0)} points this week · best session: ${best} done</div></div></div>`;
   let body;
+  const workMode = (ui.focusMode ?? (() => { try { return localStorage.getItem('cadence:focusMode'); } catch { return null; } })() ?? 'work') === 'work';
+  if (isWorking()) return workingView();
   if (focus.running) {
     const occs = focus.picked.map(findOcc).filter(Boolean), left = focusLeft();
     body = `<div class="focus-run">
@@ -665,13 +700,18 @@ function focusView() {
     const lengths = M.focusLengths(store.settings.focusLengths);
     const r = ui.focusResult;
     const unreflected = r ? (r.finishedIds || []).map(findOcc).filter(o => o && !o.resolved) : [];
-    body = `${r ? `<div class="focus-result"><div class="fr-big">${r.finished}</div><div class="grow"><b>Time! ${r.finished} of ${r.picked} done in ${r.actualMinutes} min</b>
+    const modeSeg = `<div class="seg" role="group" aria-label="Focus mode" style="max-width:440px">
+      <button class="${workMode ? 'on' : ''}" data-act="focus-mode" data-m="work">${ic('target')} Work on one task</button>
+      <button class="${workMode ? '' : 'on'}" data-act="focus-mode" data-m="sprint">${ic('timer')} Sprint through a list</button></div>`;
+    body = `${modeSeg}${r ? `<div class="focus-result"><div class="fr-big">${r.finished}</div><div class="grow"><b>${r.mode === 'work'
+        ? `${r.finished ? 'Done' : 'Stopped'}: ${esc(r.title || 'work')} after ${M.fmtFocusLength(Math.max(1, r.actualMinutes))}`
+        : `Time! ${r.finished} of ${r.picked} done in ${r.actualMinutes} min`}</b>
         <div class="small muted">${r.focusPercent}% focused (${M.fmtDuration(r.awaySeconds)} away) · ×${M.focusMultiplier(r.focusPercent)} · <b class="green">+${r.points} points</b></div>
         ${unreflected.length ? `<div class="stack" style="gap:6px;margin-top:10px"><div class="small">Write a reflection for each to check it off:</div>
           ${unreflected.map(o => `<div class="row"><span class="grow ellipsis">${esc(o.task.title)}</span><button class="btn sm primary" data-act="toggle" data-occ="${esc(o.id)}">Reflect &amp; check off</button></div>`).join('')}</div>`
           : r.finished ? '<div class="small green" style="margin-top:6px">All reflected and checked off.</div>' : ''}</div>
         <button class="btn ghost sm icon" data-act="focus-dismiss" title="Close">${ic('x')}</button></div>` : ''}
-      <div class="card pad stack" style="gap:14px">
+      ${workMode ? workSetup(open) : `<div class="card pad stack" style="gap:14px">
         <div><div class="section-title" style="margin:0 0 8px">${ic('timer')}How long?</div>
           <div class="row" style="flex-wrap:wrap">${lengths.map(n => `<span class="flen"><button class="btn ${mins === n ? 'primary' : ''}" data-act="focus-mins" data-m="${n}">${M.fmtFocusLength(n)}</button><button class="flen-x" data-act="focus-len-remove" data-m="${n}" title="Remove this length">${ic('x')}</button></span>`).join('')}
             <span class="flen-custom"><input class="input" type="number" min="1" max="${M.FOCUS_MAX_MINUTES}" style="width:80px" value="${mins}" data-bind="focusMinutes" title="Any length, in minutes"><span class="small muted">min</span></span>
@@ -683,16 +723,66 @@ function focusView() {
             : '<div class="muted">Nothing open on today’s list. Add a task first.</div>'}</div>
         <div class="row"><div class="small muted grow">Score: 10 points per task finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.</div>
           <button class="btn primary" data-act="focus-start" ${pick.size ? '' : 'disabled'}>${ic('target')} Start ${M.fmtFocusLength(mins)} focus</button></div>
-      </div>`;
+      </div>`}`;
   }
-  return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Race the clock: set a time, then see how much of your list you can finish before it runs out.</div></div></div>
+  return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">${workMode && !focus.running
+    ? 'Work on one thing: pick it, and it stays up front until you complete it. The Mac app also blocks distracting apps and sites.'
+    : 'Race the clock: set a time, then see how much of your list you can finish before it runs out.'}</div></div></div>
     <div class="page stack" style="max-width:980px">
       ${levelCard}${body}
       ${sessions.length ? `<div><div class="section-title">${ic('clock')}Recent sessions</div><div class="card">${sessions.slice(0, 8).map(x => `<div class="crow">
         <span class="evt-time">${M.fmtDay(x.startedAt, { month: 'short', day: 'numeric' })}<small>${M.fmtTime(x.startedAt)}</small></span>
-        <div class="grow"><div class="title">${x.finished} of ${x.picked} done in ${x.actualMinutes} min</div>
+        <div class="grow"><div class="title ellipsis">${x.mode === 'work' ? `${x.finished ? 'Finished' : 'Worked on'} “${esc(x.title || 'a task')}” for ${M.fmtFocusLength(Math.max(1, x.actualMinutes))}` : `${x.finished} of ${x.picked} done in ${x.actualMinutes} min`}</div>
           <div class="meta"><span>${x.focusPercent}% focused</span>${x.distractingSeconds ? `<span>${M.fmtDuration(x.distractingSeconds)} in distracting apps</span>` : ''}<span>${x.device === 'mac' ? 'Mac' : 'Web'}</span></div></div>
         <b class="green">+${x.points}</b></div>`).join('')}</div></div>` : ''}
+    </div>`;
+}
+
+/** Focus › Work: pick one and it starts straight away. Most important first. */
+function workSetup(open) {
+  const rank = o => M.priorityRank(o.task);
+  const list = open.filter(o => !o.event).map((o, i) => [o, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([o]) => o);
+  return `<div class="card pad stack" style="gap:12px">
+    <div class="section-title" style="margin:0">${ic('target')}What are you working on?</div>
+    <div class="small muted">Click one and it starts straight away: it goes up front as your headline and the clock runs until you complete it. Time in other tabs and apps counts as away.</div>
+    <form class="row" data-form="work-new"><input class="input grow" name="title" placeholder="Something else? Type it and press Enter" autocomplete="off"><button class="btn">Start</button></form>
+    ${list.length ? `<div class="work-pick">${list.map(o => {
+      const t = o.task, pr = M.priorityOf(t), hd = M.hardnessOf(t), typ = M.typicalMinutes(t);
+      return `<button class="work-row" data-act="work-start" data-occ="${esc(o.id)}" title="Start working on this now">
+        <span class="bar" style="background:${color(t.color)}"></span>
+        <span class="grow"><span class="title ellipsis">${esc(t.title)}</span><span class="meta">${pr ? `<span class="prio prio-${pr}"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]}</span>` : ''}${hd ? hardMeter(hd) : ''}${typ ? `<span>${ic('timer')}usually ${M.fmtMinutes(typ)}</span>` : ''}${o.overdue ? '<span class="red">Overdue</span>' : ''}${o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : ''}</span></span>
+        <span class="go">${ic('play')} Work on this</span></button>`;
+    }).join('')}</div>` : '<div class="muted">Nothing open on today’s list.</div>'}</div>`;
+}
+
+/** Focus › Work while it runs: the task as a headline, the clock counting up, and Complete. */
+function workingView() {
+  const o = findOcc(focus.workId);
+  const t = o?.task ?? { title: focus.title || 'Your task', color: 'blue' };
+  const pr = M.priorityOf(t), hd = M.hardnessOf(t), typ = M.typicalMinutes(t);
+  const target = typ || (t.timeMinutes != null ? t.durationMinutes : null);
+  const others = store.todayChecklist().filter(x => !x.resolved && !x.event && x.id !== focus.workId);
+  const elapsedMin = (Date.now() - focus.startedAt) / 60_000;
+  return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Working on one thing until it’s done.</div></div></div>
+    <div class="page stack" style="max-width:980px">
+      <div class="work-head" style="border-left-color:${color(t.color)}">
+        <div class="kicker">Now working on</div>
+        <h2 class="headline">${esc(t.title)}</h2>
+        <div class="meta">${pr ? `<span class="prio prio-${pr}"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]} priority</span>` : ''}${hd ? `<span>${hardMeter(hd)} ${M.HARDNESS[hd - 1]}</span>` : ''}${typ ? `<span>${ic('timer')}usually ${M.fmtMinutes(typ)}</span>` : ''}${o?.overdue ? '<span class="red">Overdue</span>' : ''}</div>
+        ${t.notes ? `<div class="muted notes">${esc(t.notes)}</div>` : ''}
+        ${o && M.habitSteps(t).length ? stepList(o, 'work') : ''}
+        <div class="row" style="gap:28px;align-items:center;flex-wrap:wrap">
+          <div><div class="work-clock" data-focus-clock>${workClock()}</div><div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div>
+          ${target ? `<div class="grow" style="max-width:320px"><div class="progress"><div data-work-bar data-target="${target}" style="width:${Math.min(100, (elapsedMin / target) * 100)}%"></div></div>
+            <div class="small muted" style="margin-top:4px">${elapsedMin > target ? `Past the ${M.fmtMinutes(target)} it usually takes` : `It usually takes ${M.fmtMinutes(target)}`}</div></div>` : ''}
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button class="btn primary" data-act="work-complete" title="Check it off: you’ll write the reflection, with the time already filled in">${ic('check')} Complete</button>
+          ${others.length ? `<select class="input" style="width:auto" data-work-switch aria-label="Switch task"><option value="">Switch task…</option>${others.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}</select>` : ''}
+          <span class="grow"></span>
+          <button class="btn danger" data-act="work-stop" title="Stop without checking it off (the time is still logged)">Stop</button>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -812,20 +902,44 @@ function selEdit(fn, msg) {
   toast(msg, { icon: 'check', undo: () => { before.forEach(t => store.upsertTask(t)); render(); } });
 }
 
+/** The week calendar's focus strip (focus, work and study time down the left of each day). On unless turned off. */
+function weekShowsFocus() {
+  if (ui.weekFocus != null) return ui.weekFocus;
+  try { return localStorage.getItem('cadence:weekFocus') !== '0'; } catch { return true; }
+}
+const fmtHM = m => (m < 60 ? `${m}m` : m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m / 60}h`);
+function focusMarks(d) {
+  const blocks = store.focusBlocks(d);
+  if (M.isToday(d) && focus.running && focus.startedAt < Date.now() - 60_000) {
+    blocks.push({ id: 'live', start: new Date(focus.startedAt), end: new Date(), kind: isWorking() ? 'work' : 'focus', title: `${isWorking() ? focus.title : 'Focus sprint'} (now)` });
+  }
+  const day0 = M.startOfDay(d);
+  return blocks.map(b => {
+    const top = ((b.start - day0) / 3_600_000) * HOUR, h = Math.max(3, ((b.end - b.start) / 3_600_000) * HOUR);
+    return `<div class="fmark k-${b.kind}" style="top:${top}px;height:${h}px" title="${M.FOCUS_KINDS[b.kind]}: ${esc(b.title)} · ${M.fmtTime(b.start)}–${M.fmtTime(b.end)} (${M.fmtMinutes(M.blockMinutes(b))})"></div>`;
+  }).join('');
+}
+
 function weekView() {
   const days = [...Array(7)].map((_, i) => M.addDays(ui.weekStart, i));
+  const showFocus = weekShowsFocus(), lane = showFocus ? 7 : 0;
+  const weekMins = days.reduce((t, d) => { const m = store.focusMinutes(d); t.focus += m.focus; t.study += m.study; return t; }, { focus: 0, study: 0 });
+  const weekSub = showFocus && weekMins.focus + weekMins.study
+    ? `${[weekMins.focus ? `${fmtHM(weekMins.focus)} focused` : '', weekMins.study ? `${fmtHM(weekMins.study)} studied` : ''].filter(Boolean).join(', ')} this week. ` : '';
   store.ensureGoogle(days[0], M.addDays(days[6], 1));
   const end = days[6];
   const title = `${M.fmtDay(days[0], { month: 'short', day: 'numeric' })} – ${M.fmtDay(end, { month: days[0].getMonth() === end.getMonth() ? undefined : 'short', day: 'numeric' })}, ${end.getFullYear()}`;
   const now = new Date();
   return `<div class="week">
-    <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">Double-click an empty slot — or inside an existing block — to add a task at that time.</div></div>
-      <div class="row"><button class="btn ${ui.weekSelecting ? 'primary' : ''}" data-act="sel-toggle" title="Pick several tasks to change them all at once. You can also ⌘/Ctrl- or Shift-click tasks, or Shift-drag a box around them.">${ic('check')} Select</button>${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
+    <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">${weekSub}Double-click an empty slot — or inside an existing block — to add a task at that time.</div></div>
+      <div class="row"><button class="btn ${showFocus ? 'primary' : ''}" data-act="week-focus" title="Show the time you spent focusing (purple), working on a task (blue) and studying (green) down the left of each day" aria-pressed="${showFocus}">${ic('target')} Focus time</button><button class="btn ${ui.weekSelecting ? 'primary' : ''}" data-act="sel-toggle" title="Pick several tasks to change them all at once. You can also ⌘/Ctrl- or Shift-click tasks, or Shift-drag a box around them.">${ic('check')} Select</button>${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
       <button class="btn" data-act="week-today">Today</button><button class="btn icon" data-act="week-next" title="Next week">${ic('right')}</button></div></div>
     ${weekSelBar(days)}
     <div class="week-head"><div></div>${days.map(d => {
       const open = store.tasksOn(d).filter(o => !o.resolved).length;
-      return `<div class="d ${M.isToday(d) ? 'today' : ''}"><div class="dow">${M.WEEKDAY_SHORT[d.getDay()].toUpperCase()}</div><div class="num">${d.getDate()}</div><div class="open">${open ? `${open} open` : ''}</div></div>`;
+      const fm = showFocus ? store.focusMinutes(d) : { focus: 0, study: 0 };
+      return `<div class="d ${M.isToday(d) ? 'today' : ''}"><div class="dow">${M.WEEKDAY_SHORT[d.getDay()].toUpperCase()}</div><div class="num">${d.getDate()}</div><div class="open">${open ? `${open} open` : ''}</div>
+        ${showFocus ? `<div class="ftot" ${fm.focus + fm.study ? `title="${[fm.focus ? `Focused ${fmtHM(fm.focus)}` : '', fm.study ? `studied ${fmtHM(fm.study)}` : ''].filter(Boolean).join(', ')}"` : ''}>${fm.focus + fm.study ? `${ic('target')}${fmtHM(fm.focus + fm.study)}` : ''}</div>` : ''}</div>`;
     }).join('')}</div>
     <div class="week-allday"><div class="lab">any<br>time</div>${days.map(d => {
       const items = allDayItems(d);
@@ -834,13 +948,14 @@ function weekView() {
     <div class="week-scroll" id="weekScroll"><div class="week-grid" style="height:${24 * HOUR}px">
       <div class="hours">${[...Array(24)].map((_, h) => `<div class="h">${h ? M.fmtTimeMinutes(h * 60) : ''}</div>`).join('')}</div>
       ${days.map(d => `<div class="wcol ${M.isToday(d) ? 'today' : ''}" data-day="${M.dateKey(d)}">
+        ${showFocus ? focusMarks(d) : ''}
         ${calItemsTimed(d).map(p => {
           const dayStart = M.startOfDay(d);
           const top = Math.max(0, (p.start - dayStart) / 3_600_000) * HOUR;
           const bottom = Math.min(24, (p.end - dayStart) / 3_600_000) * HOUR;
           return `<div class="block ${ui.weekSel?.has(p.id) ? 'picked' : ''} ${p.done ? 'done' : ''} ${p.missed ? 'missed' : ''} ${p.kind !== 'task' ? 'evt' : ''} ${busyOf(p) ? '' : 'free'}" data-item="${esc(p.id)}" data-start="${+p.start}" data-end="${+p.end}"
             title="${busyOf(p) ? 'Closed' : 'Open (just for info)'} · click for details · double-click to add a task at this time"
-            style="top:${top}px;height:${Math.max(20, bottom - top - 1)}px;left:calc(${(p.lane * 100) / p.lanes}% + 2px);width:calc(${100 / p.lanes}% - 4px);
+            style="top:${top}px;height:${Math.max(20, bottom - top - 1)}px;left:calc(${lane}px + (100% - ${lane}px) * ${p.lane / p.lanes} + 2px);width:calc((100% - ${lane}px) / ${p.lanes} - 4px);
             background:${tint(p.color, p.done ? .1 : p.kind !== 'task' ? .14 : .24)};border-color:${p.color}">
             <b>${p.ud ? `<span class="flame">${ic('flame')}</span> ` : p.kind !== 'task' ? `${ic('cal')} ` : ''}${esc(p.title)}</b>${M.fmtTime(p.start)}</div>`;
         }).join('')}
@@ -1358,7 +1473,7 @@ function renderModal() {
   const m = ui.modal;
   if (!m) { root.innerHTML = ''; ui.modalHTML = null; return; }
   let html = '';
-  if (m.type === 'reflection') html = reflectionDialog(m.occ, 'reflection', m.mode);
+  if (m.type === 'reflection') html = reflectionDialog(m.occ, 'reflection', m.mode, m.minutes);
   else if (m.type === 'checkin') html = m.reflecting ? reflectionDialog(m.reflecting, 'checkin', m.reflectMode) : checkInDialog(m);
   else if (m.type === 'editor') html = editorDialog(m);
   else if (m.type === 'detail') html = detailDialog(m);
@@ -1432,7 +1547,7 @@ function reflReady() {
   btn.disabled = !enough || bad;
 }
 
-function reflectionDialog(o, ctx, mode = 'done') {
+function reflectionDialog(o, ctx, mode = 'done', minutes = null) {
   const min = store.settings.minReflectionWords, missed = mode === 'missed';
   const seed = [...(o.task.id + o.key)].reduce((n, c) => n + c.charCodeAt(0), 0);
   const pool = missed ? MISSED_PROMPTS : PROMPTS;
@@ -1443,7 +1558,7 @@ function reflectionDialog(o, ctx, mode = 'done') {
     <div>${missed ? `Write at least ${min} words about why you didn’t or couldn’t do it. It’s marked as not done, not failed — this is for learning.` : `Write at least ${min} words before checking this off.`} Some prompts:<ul class="prompts">${prompts.map(p => `<li>${p}</li>`).join('')}</ul></div>
     <textarea class="input" id="reflText" rows="7" placeholder="${missed ? 'What happened?' : 'How did it go?'}" autofocus data-min="${min}"></textarea>
     ${missed ? '' : `<div class="taken"><div class="row" style="gap:8px;flex-wrap:wrap">${ic('timer')}<label for="reflTaken"><b>How long did it take?</b></label>
-        <input class="input" id="reflTaken" style="width:130px" placeholder="e.g. 45 or 1:30" autocomplete="off"><span class="small muted" id="reflTakenNote">optional</span></div>
+        <input class="input" id="reflTaken" style="width:130px" placeholder="e.g. 45 or 1:30" autocomplete="off" value="${minutes || ''}"><span class="small muted" id="reflTakenNote">${minutes ? M.fmtMinutes(minutes) : 'optional'}</span></div>
       <div class="row" style="gap:5px;flex-wrap:wrap;margin-top:6px">${takenChoices(o.task).map(n => `<button type="button" class="btn sm" data-act="refl-taken" data-v="${n}">${M.fmtMinutes(n)}</button>`).join('')}</div>
       ${typicalText(o.task) ? `<div class="small muted" style="margin-top:4px">${esc(typicalText(o.task))}</div>` : ''}</div>`}</div>
     <div class="foot"><div class="progress" id="reflBar"><div style="width:0"></div></div><span class="small muted" id="reflCount">0 / ${min} words</span><span class="grow"></span>
@@ -2288,9 +2403,9 @@ function showBanner(c) {
 }
 
 // ---------- actions ----------
-function beginReflection(o, mode = 'done') {
+function beginReflection(o, mode = 'done', minutes = null) {
   const fresh = findOcc(o.id) ?? o;
-  openModal({ type: 'reflection', occ: fresh, mode });
+  openModal({ type: 'reflection', occ: fresh, mode, minutes });
 }
 
 /** A new habit: daily, building something new, with the Atomic Habits fields to fill in. */
@@ -3426,6 +3541,11 @@ const actions = {
   'focus-more': () => { focus.endsAt += 5 * 60_000; focus.minutes += 5; saveFocus(); render(); },
   'focus-end': () => confirmThen('End this focus session?', 'Your score counts what you’ve finished so far.', 'End now', () => endFocus()),
   'focus-dismiss': () => { ui.focusResult = null; render(); },
+  'focus-mode': el => { ui.focusMode = el.dataset.m; try { localStorage.setItem('cadence:focusMode', el.dataset.m); } catch { /* storage blocked */ } render(); },
+  'work-start': el => { const o = findOcc(el.dataset.occ); if (o) startWork(o); },
+  'work-complete': () => completeWork(),
+  'work-stop': () => endFocus({ quiet: true }),
+  'week-focus': () => { ui.weekFocus = !weekShowsFocus(); try { localStorage.setItem('cadence:weekFocus', ui.weekFocus ? '1' : '0'); } catch { /* storage blocked */ } render(); },
   'score-rate': el => store.updateSettings({ habitScorecard: store.settings.habitScorecard.map(c => c.id === el.dataset.id ? { ...c, rating: el.dataset.r } : c) }),
   'score-del': el => store.updateSettings({ habitScorecard: store.settings.habitScorecard.filter(c => c.id !== el.dataset.id) }),
   'score-replace': el => {
@@ -3711,6 +3831,7 @@ document.addEventListener('change', e => {
   }
   if (el.dataset.siteSuggest !== undefined) { if (el.value) addBlockedSite(el.value); return; }
   if (el.dataset.pjDue !== undefined) { const v = el.value; if (v) projOps.setDue(v === 'none' ? null : M.dateKey(M.addDays(new Date(), Number(v)))); return; }
+  if (el.dataset.workSwitch !== undefined) { const o = el.value && findOcc(el.value); if (o) startWork(o); return; }
   if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
   if (el.dataset.selPriority !== undefined) {
     const v = el.value;
@@ -3884,6 +4005,14 @@ document.addEventListener('submit', async e => {
     if (!text) return;
     store.updateSettings({ habitScorecard: [...(store.settings.habitScorecard || []), { id: M.uuid(), text, rating: '=' }] });
     setTimeout(() => $('[data-form="scorecard"] [name=text]')?.focus());
+  } else if (kind === 'work-new') {
+    // "Something else": a quiet task for today (no reminders), and straight to work on it.
+    const title = String(new FormData(form).get('title') || '').trim();
+    if (!title) return;
+    const t = M.newTask({ title, kind: 'task', channels: [] });
+    store.upsertTask(t);
+    const o = store.todayChecklist().find(x => x.task.id === t.id);
+    if (o) startWork(o);
   } else if (kind === 'reflection') {
     const text = $('#reflText').value.trim();
     const o = findOcc(form.dataset.occ), missed = form.dataset.mode === 'missed';

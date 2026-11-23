@@ -5,6 +5,7 @@ import SwiftUI
 /// Launch-argument hooks for headless verification (GUI scripting is unavailable on this Mac):
 ///   -dataDir <path>   use a separate data folder
 ///   -demo             seed sample tasks/reflections into an empty store
+///   -noBlock          never hide apps or redirect browser tabs (use for every test copy)
 ///   -screen <name>    open a sidebar screen (today|week|month|todo|reflections|booking|settings)
 ///   -checkin          show the check-in window
 ///   -banner           show a sample on-screen banner
@@ -58,6 +59,26 @@ enum DebugDriver {
             if let file = rest.dropFirst(pid == nil ? 0 : 1).first { try? out.write(toFile: file, atomically: true, encoding: .utf8) }
             print(out)
             exit(0)
+        }
+        // -workDemo: logs a few work/focus/study sessions today (for the calendar strip), then starts work mode
+        // on the first open item.
+        if LaunchOptions.has("-workDemo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                let today = Date().startOfDay
+                if model.store.focusSessions.isEmpty {
+                    for (h, len, title, work) in [(7.0, 50, "Lab report", true), (10.5, 25, "", false)] {
+                        let s = today.addingTimeInterval(h * 3600), e = s.addingTimeInterval(Double(len * 60))
+                        var f = FocusSession(startedAt: s, endedAt: e, plannedMinutes: len, actualMinutes: len, picked: 1, finished: 1, points: 30)
+                        if work { f.mode = "work"; f.title = title }
+                        model.store.saveFocusSession(f)
+                    }
+                    let s = today.addingTimeInterval(13 * 3600)
+                    var log = StudyLog(mode: .timed, courseID: nil, title: "Chemistry", startedAt: s, endedAt: s.addingTimeInterval(70 * 60))
+                    log.minutes = 70
+                    model.store.studyLogs.append(log)
+                }
+                if let o = model.store.todayChecklist().first(where: { !$0.isResolved && !$0.isEvent }) { model.workOn(o) }
+            }
         }
         // -keepAliveTest on|off (with -stayRunningTest and a renamed bundle ID): turns the launch agent on or off.
         if let v = LaunchOptions.value("-keepAliveTest") {

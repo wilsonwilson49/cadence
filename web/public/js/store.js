@@ -400,12 +400,20 @@ class Store {
   }
 
   /** Save a finished focus session (they sync, so your score is the same everywhere). */
-  saveFocusSession(s) {
+  /** `skip`: not worth a record (under a minute of work), so it isn't kept. */
+  saveFocusSession(s, { skip = false } = {}) {
     const f = { ...s, id: s.id || M.uuid(), updatedAt: M.iso(new Date()) };
+    if (skip) return f;
     this.focus.set(f.id, f);
     this.#queue('focus', f.id, f);
     return f;
   }
+  /** Focus, work and study time on a day, for the calendars (see M.focusBlocks). */
+  focusBlocks(day) { return M.focusBlocks([...this.focus.values()], [...this.studyLogs.values()], day); }
+  focusMinutes(day) {
+    return this.focusBlocks(day).reduce((t, b) => { t[b.kind === 'study' ? 'study' : 'focus'] += M.blockMinutes(b); return t; }, { focus: 0, study: 0 });
+  }
+
   get focusSessions() { return [...this.focus.values()].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))); }
   /** Screen-time summaries for a day, from every device that tracks it (the Mac app). */
   screenDays(day) { const k = M.dateKey(day); return [...this.screen.values()].filter(d => d.date === k); }

@@ -5,9 +5,23 @@ struct WeekView: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var google: GoogleCalendar
     @State private var weekStart = Date().startOfWeek
+    /// The time you spent focusing, working and studying, as a strip down each day (and totals in the headers).
+    @AppStorage("weekShowFocus") private var showFocus = true
 
     private let hourHeight: CGFloat = 48
     private let gutter: CGFloat = 56
+    /// Room for the focus strip at the left of each day.
+    private var lane: CGFloat { showFocus ? 6 : 0 }
+
+    private var weekFocus: (focus: Int, study: Int) {
+        days.reduce(into: (0, 0)) { t, d in let m = store.focusMinutes(on: d); t.0 += m.focus; t.1 += m.study }
+    }
+    private var subtitle: String {
+        let w = weekFocus
+        guard showFocus, w.focus + w.study > 0 else { return "Double-click an empty slot to add a task there." }
+        let parts = [w.focus > 0 ? "\(Focus.label(w.focus)) focused" : nil, w.study > 0 ? "\(Focus.label(w.study)) studied" : nil].compactMap { $0 }
+        return "\(parts.joined(separator: ", ")) this week. Double-click an empty slot to add a task."
+    }
 
     private var days: [Date] { (0..<7).map { weekStart.adding(days: $0) } }
 
@@ -21,7 +35,10 @@ struct WeekView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: title, subtitle: "Double-click an empty slot to add a task there.") {
+            ScreenHeader(title: title, subtitle: subtitle) {
+                Toggle(isOn: $showFocus) { Label("Focus time", systemImage: "scope") }
+                    .toggleStyle(.button)
+                    .help("Show the time you spent focusing (purple), working on a task (blue) and studying (green) down the left of each day")
                 Toggle(isOn: $model.weekSelecting) { Label("Select", systemImage: "checkmark.circle") }
                     .toggleStyle(.button)
                     .help("Pick several tasks to change them all at once. You can also ⌘-click or ⇧-click tasks any time.")
@@ -50,12 +67,13 @@ struct WeekView: View {
                         ScrollView(.vertical) {
                             ZStack(alignment: .topLeading) {
                                 hourGrid(colW)
+                                if showFocus { focusLayer(colW) }
                                 ForEach(Array(days.enumerated()), id: \.offset) { i, day in
                                     ForEach(placed(day)) { p in
                                         TimedBlock(item: p.item, height: max(20, p.height(hourHeight)))
-                                            .frame(width: colW / CGFloat(p.lanes) - 3,
+                                            .frame(width: (colW - lane) / CGFloat(p.lanes) - 3,
                                                    height: max(20, p.height(hourHeight)))
-                                            .offset(x: gutter + CGFloat(i) * colW + CGFloat(p.lane) * colW / CGFloat(p.lanes) + 1.5,
+                                            .offset(x: gutter + CGFloat(i) * colW + lane + CGFloat(p.lane) * (colW - lane) / CGFloat(p.lanes) + 1.5,
                                                     y: p.y(hourHeight))
                                     }
                                 }
@@ -99,6 +117,17 @@ struct WeekView: View {
                     let open = store.checklist(on: day).filter { !$0.isResolved }.count
                     Text(open > 0 ? "\(open) open" : " ")
                         .font(.system(size: 9)).foregroundStyle(.secondary)
+                    if showFocus {
+                        let m = store.focusMinutes(on: day)
+                        Group {
+                            if m.focus + m.study > 0 {
+                                Label(Focus.label(m.focus + m.study), systemImage: "scope").labelStyle(CompactLabelStyle())
+                                    .foregroundStyle(Color.accentColor)
+                                    .help([m.focus > 0 ? "Focused \(Focus.label(m.focus))" : nil, m.study > 0 ? "studied \(Focus.label(m.study))" : nil].compactMap { $0 }.joined(separator: ", "))
+                            } else { Text(" ") }
+                        }
+                        .font(.system(size: 9))
+                    }
                 }
                 .frame(width: colW)
             }
@@ -164,6 +193,32 @@ struct WeekView: View {
                 }
             }
         }
+    }
+
+    /// Focus, work and study sessions as a thin strip down the left of each day; hover one for what and how long.
+    private func focusLayer(_ colW: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(days.enumerated()), id: \.offset) { i, day in
+                ForEach(store.focusBlocks(on: day)) { b in focusMark(b, column: i, colW: colW) }
+            }
+            // The session running now, refreshed every half minute.
+            TimelineView(.periodic(from: .now, by: 30)) { _ in
+                if model.focus.running, let i = days.firstIndex(where: \.isToday) {
+                    let live = FocusBlock(id: "live", start: model.focus.startedAt, end: Date(), kind: model.focus.isWorking ? .work : .focus,
+                                          title: (model.focus.workOccurrence?.task.title ?? "Focus sprint") + " (now)")
+                    focusMark(live, column: i, colW: colW)
+                }
+            }
+        }
+    }
+
+    private func focusMark(_ b: FocusBlock, column i: Int, colW: CGFloat) -> some View {
+        let y = CGFloat(b.start.minutesSinceMidnight) / 60 * hourHeight + CGFloat(Calendar.current.component(.second, from: b.start)) / 3600 * hourHeight
+        let h = max(3, CGFloat(b.end.timeIntervalSince(b.start)) / 3600 * hourHeight)
+        return RoundedRectangle(cornerRadius: 2).fill(b.kind.color.opacity(0.85))
+            .frame(width: 4, height: h)
+            .offset(x: gutter + CGFloat(i) * colW + 2, y: y)
+            .help("\(b.kind.title): \(b.title) · \(timeString(b.start))–\(timeString(b.end)) (\(TaskStats.format(b.minutes)))")
     }
 
     @ViewBuilder private func nowLine(_ colW: CGFloat) -> some View {

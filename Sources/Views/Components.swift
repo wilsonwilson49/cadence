@@ -327,6 +327,9 @@ struct OccurrenceMenu: View {
             Button("Mark as not done") { store.uncomplete(occ) }
         } else {
             Button("Complete with reflection…") { model.beginReflection(occ) }
+            if !occ.isResolved && !occ.isEvent {
+                Button("Work on this now") { model.workOn(occ) }
+            }
         }
         if occ.isMissed {
             Button("Undo “didn't do it”") { store.unmiss(occ) }
@@ -373,6 +376,8 @@ struct ReflectionForm: View {
     let minWords: Int
     /// "Didn't do it": asks why it didn't happen instead of how it went.
     var missed = false
+    /// Pre-filled "how long it took" (e.g. the length of the work session).
+    var initialMinutes: Int?
     /// The reflection, and how long it took if you wrote that down (never for "didn't do it").
     let onSubmit: (String, Int?) -> Void
     let onCancel: () -> Void
@@ -471,7 +476,10 @@ struct ReflectionForm: View {
         }
         .padding(22)
         .frame(width: 540)
-        .onAppear { DispatchQueue.main.async { focused = true } }
+        .onAppear {
+            if let m = initialMinutes, taken.isEmpty { taken = "\(m)" }
+            DispatchQueue.main.async { focused = true }
+        }
     }
 
     /// Stable per task, so the prompts don't jump around while typing.
