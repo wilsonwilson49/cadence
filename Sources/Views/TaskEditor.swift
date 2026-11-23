@@ -31,6 +31,7 @@ struct TaskEditor: View {
     @State private var saving = false
     @State private var error: String?
     @State private var confirmDelete = false
+    @State private var showAllTimes = false
 
     private static let offsetChoices = [0, 5, 10, 15, 30, 60, 120, 1440]
     /// Reminders partway through a timed task (stored as negative offsets).
@@ -111,13 +112,25 @@ struct TaskEditor: View {
                         .lineLimit(2...5)
                 }
 
+                if !task.isEvent {
+                    Section("Priority and hardness") {
+                        Picker("Priority", selection: $task.priority) {
+                            Text("None").tag(String?.none)
+                            ForEach(Priority.allCases) { p in Text(p.title).tag(String?.some(p.rawValue)) }
+                        }
+                        .pickerStyle(.segmented)
+                        LabeledContent("Hardness") { HardnessPicker(value: $task.hardness) }
+                    }
+                }
+
                 Section("When") {
                     DatePicker("Date", selection: $task.startDate, displayedComponents: .date)
                     Toggle("At a specific time", isOn: $hasTime)
                     if hasTime {
                         DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
                         Picker("Duration", selection: $task.durationMinutes) {
-                            ForEach(Self.durations, id: \.self) { m in
+                            // Its own length too, if it isn't one of these (e.g. set from how long it usually takes).
+                            ForEach(Array(Set(Self.durations + [task.durationMinutes])).sorted(), id: \.self) { m in
                                 Text(m < 60 ? "\(m) min" : (m % 60 == 0 ? "\(m / 60) hr" : "\(m / 60) hr \(m % 60) min")).tag(m)
                             }
                         }
@@ -287,6 +300,8 @@ struct TaskEditor: View {
                     }
                 }
 
+                if !task.isEvent { timeTakenSection }
+
                 Section("Color") {
                     HStack(spacing: 10) {
                         ForEach(TaskColor.allCases) { c in
@@ -425,6 +440,39 @@ struct TaskEditor: View {
     }
 
     /// Steps: a small checklist that starts fresh each time the habit comes around.
+    /// How long it really took each time it was checked off, and how long it usually takes (the 60% mark).
+    @ViewBuilder private var timeTakenSection: some View {
+        let entries = (task.timeTaken ?? [:]).sorted { $0.key > $1.key }
+        Section {
+            if entries.isEmpty {
+                Text("Not timed yet. When you check it off, you can write down how long it took, and this shows how long it usually takes.")
+                    .font(.app(.caption)).foregroundStyle(.secondary)
+            } else {
+                TimeSpread(times: task.takenTimes).padding(.vertical, 2)
+                if let line = TaskStatsText.typical(task) { Text(line).font(.app(.caption)).foregroundStyle(.secondary) }
+                if let typical = task.typicalMinutes, typical != task.durationMinutes {
+                    Button("Plan \(TaskStats.format(typical)) for it") { task.durationMinutes = typical }
+                        .help("Sets its length to how long it usually takes")
+                }
+                ForEach(entries.prefix(showAllTimes ? entries.count : 6), id: \.key) { e in
+                    HStack {
+                        Text(DateKey.date(e.key)?.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year()) ?? e.key)
+                        Spacer()
+                        Text(TaskStats.format(e.value)).monospacedDigit()
+                        Button {
+                            task.timeTaken?[e.key] = nil
+                            if task.timeTaken?.isEmpty == true { task.timeTaken = nil }
+                        } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove this time")
+                    }
+                }
+                if entries.count > 6 {
+                    Button(showAllTimes ? "Show fewer" : "Show all \(entries.count)") { showAllTimes.toggle() }.buttonStyle(.link)
+                }
+            }
+        } header: { Text("Time it took") }
+    }
+
     @ViewBuilder private var stepsSection: some View {
         Section {
             ForEach(Array(task.habitSteps.enumerated()), id: \.element.id) { i, s in

@@ -45,6 +45,12 @@ struct MobileRow: View {
                     if let s = occ.start { Label(timeString(s), systemImage: "clock") }
                     if occ.isUntilDone && !occ.isResolved { Label(t.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1) }
                     else if let p = t.planSummary { Label(p, systemImage: "repeat").lineLimit(1) }
+                    if let p = t.priorityLevel, !occ.isResolved {
+                        Image(systemName: p.symbol).foregroundStyle(p.color).accessibilityLabel("\(p.title) priority")
+                    }
+                    if let h = t.hardnessLevel { HardnessMeter(level: h, height: 9) }
+                    if occ.isDone, let m = t.timeTaken?[occ.key] { Label(TaskStats.format(m), systemImage: "stopwatch") }
+                    else if !occ.isResolved, let m = t.typicalMinutes { Label("~\(TaskStats.format(m))", systemImage: "stopwatch").accessibilityLabel("usually \(TaskStats.format(m))") }
                     if t.isPastDue { Text("Past due").foregroundStyle(.red) }
                     if t.isUrgent && t.isUntilDone && !occ.isResolved { Text("URGENT").font(.system(size: 9, weight: .heavy)).foregroundStyle(.red) }
                     if t.hasSteps {
@@ -156,6 +162,7 @@ struct ReflectionSheet: View {
     @Environment(\.dismiss) private var dismiss
     let target: ReflectTarget
     @State private var text = ""
+    @State private var taken = ""
     @FocusState private var focused: Bool
 
     private static let prompts = ["What went well, and why?", "What got in the way or felt harder than expected?",
@@ -197,6 +204,9 @@ struct ReflectionSheet: View {
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
                     .frame(height: 180)
+                if !target.missed {
+                    TimeTakenField(task: target.occ.task, text: $taken).font(.app(.callout))
+                }
                 HStack {
                     ProgressView(value: Double(Swift.min(count, min)), total: Double(min)).tint(count >= min ? .green : Theme.accent)
                     Text("\(count) / \(min) words").font(.app(.caption).monospacedDigit()).foregroundStyle(count >= min ? .green : .secondary)
@@ -212,12 +222,13 @@ struct ReflectionSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(target.missed ? "Not done" : "Complete") {
                         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if target.missed { store.miss(target.occ, reflection: t) } else { store.complete(target.occ, reflection: t) }
+                        if target.missed { store.miss(target.occ, reflection: t) }
+                        else { store.complete(target.occ, reflection: t, minutes: TaskStats.parseMinutes(taken)) }
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .disabled(count < min)
+                    .disabled(count < min || (!target.missed && !TimeTakenField.isValid(taken)))
                 }
             }
             .onAppear { focused = true }
@@ -301,13 +312,23 @@ struct EditorSheet: View {
                          : task.isHabit ? "Habits repeat and are tracked on the Habits tab: streaks, and never missing twice."
                          : "Tasks go on your checklist; checking one off asks for a short reflection.")
                 }
+                if !task.isEvent {
+                    Section("Priority and hardness") {
+                        Picker("Priority", selection: $task.priority) {
+                            Text("None").tag(String?.none)
+                            ForEach(Priority.allCases) { p in Text(p.title).tag(String?.some(p.rawValue)) }
+                        }
+                        .pickerStyle(.segmented)
+                        HStack { Text("Hardness"); Spacer(); HardnessPicker(value: $task.hardness, barHeight: 24) }
+                    }
+                }
                 Section("When") {
                     DatePicker(task.isHabit ? "Starts" : "Date", selection: $task.startDate, displayedComponents: .date)
                     Toggle("At a specific time", isOn: $hasTime)
                     if hasTime {
                         DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
                         Picker("Length", selection: $task.durationMinutes) {
-                            ForEach([5, 10, 15, 30, 45, 60, 90, 120, 180], id: \.self) { m in
+                            ForEach(Array(Set([5, 10, 15, 30, 45, 60, 90, 120, 180, task.durationMinutes])).sorted(), id: \.self) { m in
                                 Text(m < 60 ? "\(m) min" : m % 60 == 0 ? "\(m / 60) hr" : "\(m / 60) hr \(m % 60) min").tag(m)
                             }
                         }
@@ -365,6 +386,7 @@ struct EditorSheet: View {
                              : "On iPhone it's a notification that keeps coming back. The pop-ups and app blocking happen on the Mac and the web.")
                     }
                 }
+                if !task.isEvent { timeTakenSection }
                 Section("Color") {
                     HStack {
                         ForEach(TaskColor.allCases) { c in
@@ -418,6 +440,39 @@ struct EditorSheet: View {
     }
 
     /// Steps: a small checklist that starts fresh each time the habit comes around.
+    /// How long it really took each time, and how long it usually takes (the 60% mark).
+    @ViewBuilder private var timeTakenSection: some View {
+        let entries = (task.timeTaken ?? [:]).sorted { $0.key > $1.key }
+        Section {
+            if entries.isEmpty {
+                Text("Not timed yet. When you check it off, you can write down how long it took, and this shows how long it usually takes.")
+                    .font(.app(.caption)).foregroundStyle(.secondary)
+            } else {
+                TimeSpread(times: task.takenTimes).padding(.vertical, 4)
+                if let line = TaskStatsText.typical(task) { Text(line).font(.app(.caption)).foregroundStyle(.secondary) }
+                if let typical = task.typicalMinutes, typical != task.durationMinutes {
+                    Button("Plan \(TaskStats.format(typical)) for it") { task.durationMinutes = typical }
+                }
+                ForEach(entries.prefix(8), id: \.key) { e in
+                    HStack {
+                        Text(DateKey.date(e.key)?.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) ?? e.key)
+                        Spacer()
+                        Text(TaskStats.format(e.value)).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    .swipeActions {
+                        Button("Remove", role: .destructive) {
+                            task.timeTaken?[e.key] = nil
+                            if task.timeTaken?.isEmpty == true { task.timeTaken = nil }
+                        }
+                    }
+                }
+            }
+        } header: { Text("Time it took") } footer: {
+            if entries.count > 8 { Text("Showing the latest 8 of \(entries.count). Swipe one to remove it.") }
+            else if !entries.isEmpty { Text("Swipe a time to remove it.") }
+        }
+    }
+
     @ViewBuilder private var stepsSection: some View {
         Section {
             ForEach(Array(task.habitSteps.enumerated()), id: \.element.id) { i, _ in

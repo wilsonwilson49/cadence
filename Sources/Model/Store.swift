@@ -513,11 +513,13 @@ final class Store: ObservableObject {
     }
 
     static func order(_ a: Occurrence, _ b: Occurrence) -> Bool {
+        // Timed items by time; "any time" ones after them, higher priority first. (Same order on the web.)
+        let pa = a.task.priorityLevel?.rank ?? 3, pb = b.task.priorityLevel?.rank ?? 3
         switch (a.task.timeMinutes, b.task.timeMinutes) {
-        case let (x?, y?): return x == y ? a.task.title < b.task.title : x < y
+        case let (x?, y?): return x != y ? x < y : pa != pb ? pa < pb : a.task.title < b.task.title
         case (nil, _?): return false
         case (_?, nil): return true
-        case (nil, nil): return a.task.createdAt < b.task.createdAt
+        case (nil, nil): return pa != pb ? pa < pb : a.task.createdAt < b.task.createdAt
         }
     }
 
@@ -584,11 +586,15 @@ final class Store: ObservableObject {
     }
 
     /// Checking something off always goes through here, and always records a reflection.
-    func complete(_ occ: Occurrence, reflection text: String) {
+    /// `minutes`: how long it took, if you wrote it down.
+    func complete(_ occ: Occurrence, reflection text: String, minutes: Int? = nil) {
         guard countWords(text) >= settings.minReflectionWords,
               let i = tasks.firstIndex(where: { $0.id == occ.task.id }) else { return }
-        tasks[i].completions[occ.key] = Date()
-        tasks[i].missed?[occ.key] = nil
+        var t = tasks[i]
+        t.completions[occ.key] = Date()
+        t.missed?[occ.key] = nil
+        if let minutes, minutes > 0 { t.timeTaken = (t.timeTaken ?? [:]).merging([occ.key: minutes]) { $1 } }
+        tasks[i] = t
         reflections.insert(Reflection(taskID: occ.task.id, taskTitle: occ.task.title,
                                       occurrenceKey: occ.key, text: text), at: 0)
         if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "completed") }

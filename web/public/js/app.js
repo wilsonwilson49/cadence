@@ -202,6 +202,37 @@ function ring(done, total, size = 72, width = 8, key = `ring${size}`, { left = f
       : size >= 44 ? `<div class="lbl" style="font-size:${size * 0.24}px">${!total ? '–' : left ? `${remaining}<small style="display:block;font-size:.45em;opacity:.65;margin-top:-2px">left</small>` : `${done}/${total}`}</div>` : ''}</div>`;
 }
 
+// Priority, hardness and time taken (rules in model.js).
+const PRIO_LABEL = Object.fromEntries(M.PRIORITIES);
+const hardColor = n => (n <= 2 ? 'var(--green)' : n === 3 ? '#d6b43c' : n === 4 ? 'var(--orange)' : 'var(--red)');
+/** Five bars rising like a signal meter, filled up to the hardness. */
+const hardMeter = n => `<span class="hmeter" style="--hc:${hardColor(n)}" aria-label="Hardness ${n} of 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}" style="height:${40 + 15 * (i - 1)}%"></i>`).join('')}</span>`;
+/** "Usually about 40 min: 60% of the 7 times you timed took that long or less." */
+function typicalText(t) {
+  const times = M.takenTimes(t), p = M.typicalMinutes(t);
+  if (!p) return '';
+  return times.length === 1 ? `It took ${M.fmtMinutes(p)} the one time you timed it.` : `Usually about ${M.fmtMinutes(p)}: 60% of the ${times.length} times you timed took that long or less.`;
+}
+/** Every recorded time as a tick from 0 to the longest; filled up to the 60% mark. */
+function timeSpread(times) {
+  const typ = M.percentile(times, 0.6), longest = times[times.length - 1], pct = n => Math.min(100, (n / Math.max(1, longest)) * 100);
+  return `<div class="spread" role="img" aria-label="60% of ${times.length} times took ${M.fmtMinutes(typ)} or less; the longest took ${M.fmtMinutes(longest)}">
+    <div class="spread-track"><div class="spread-fill" style="width:${pct(typ)}%"></div>${times.map(n => `<i class="${n <= typ ? 'in' : ''}" style="left:${pct(n)}%"></i>`).join('')}<b style="left:${pct(typ)}%"></b></div>
+    <div class="spread-labels"><span>0</span><span><b>60% ≤ ${M.fmtMinutes(typ)}</b></span><span>longest ${M.fmtMinutes(longest)}</span></div></div>`;
+}
+const takenChoices = t => [...new Set([15, 30, 45, 60, 90, ...(t.timeMinutes != null ? [t.durationMinutes] : []), ...(M.typicalMinutes(t) ? [M.typicalMinutes(t)] : [])])].sort((a, b) => a - b);
+function timeTakenFieldset(m) {
+  const d = m.draft, entries = Object.entries(d.timeTaken || {}).filter(([, v]) => v > 0).sort((a, b) => b[0].localeCompare(a[0]));
+  const typ = M.typicalMinutes(d);
+  return `<div class="fieldset"><div class="legend">Time it took</div>${!entries.length
+    ? '<div class="small muted">Not timed yet. When you check it off, you can write down how long it took, and this shows how long it usually takes.</div>'
+    : `${timeSpread(M.takenTimes(d))}<div class="small muted">${esc(typicalText(d))}</div>
+      ${typ !== d.durationMinutes ? `<div><button type="button" class="btn sm" data-act="edit-use-typical" title="Sets its length to how long it usually takes">Plan ${M.fmtMinutes(typ)} for it</button></div>` : ''}
+      <table class="times">${entries.slice(0, m.allTimes ? entries.length : 6).map(([k, v]) => `<tr><td>${M.fmtDay(M.parseKey(k), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</td>
+        <td class="num">${M.fmtMinutes(v)}</td><td><button type="button" class="btn sm ghost" data-act="edit-time-del" data-k="${k}" title="Remove this time" aria-label="Remove this time">${ic('x')}</button></td></tr>`).join('')}</table>
+      ${entries.length > 6 ? `<button type="button" class="btn sm ghost" data-act="edit-times-all">${m.allTimes ? 'Show fewer' : `Show all ${entries.length}`}</button>` : ''}`}</div>`;
+}
+
 function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   const t = o.task;
   const meta = [];
@@ -210,6 +241,11 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (M.isUntilDone(t) && !compact && !o.resolved) meta.push(`<span>${ic('flame')}${esc(M.carryLabel(t, o.day))}</span>`);
   const plan = M.planSummary(t);
   if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
+  const pr = M.priorityOf(t), hd = M.hardnessOf(t), took = o.done && t.timeTaken?.[o.key], typ = M.typicalMinutes(t);
+  if (pr && !o.resolved) meta.push(`<span class="prio prio-${pr}" title="${PRIO_LABEL[pr]} priority"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]}</span>`);
+  if (hd) meta.push(`<span title="Hardness ${hd} of 5: ${M.HARDNESS[hd - 1]}">${hardMeter(hd)}</span>`);
+  if (took) meta.push(`<span>${ic('timer')}took ${M.fmtMinutes(took)}</span>`);
+  else if (!o.resolved && typ && !compact) meta.push(`<span title="${esc(typicalText(t))}">${ic('timer')}usually ${M.fmtMinutes(typ)}</span>`);
   if (M.nagLevel(t) !== 'normal' && !o.resolved) {
     const [, label, desc] = M.NAG_LEVELS.find(x => x[0] === M.nagLevel(t));
     meta.push(`<span class="${M.nagLevel(t) === 'strict' ? 'red' : 'orange'}" title="Keeps after you until it’s checked off. ${esc(desc)}">${ic(M.nagLevel(t) === 'strict' ? 'lock' : 'bell')}${label}</span>`);
@@ -754,6 +790,8 @@ function weekSelBar(days) {
     <button class="btn sm" data-act="sel-mode" data-v="">Just on its day</button>
     <button class="btn sm" data-act="sel-urgent" data-v="1">Urgent</button><button class="btn sm" data-act="sel-urgent" data-v="">Not urgent</button>
     <select class="input sm" style="width:auto" data-sel-color><option value="">Color…</option>${Object.keys(M.COLORS).map(c => `<option value="${c}">${c[0].toUpperCase() + c.slice(1)}</option>`).join('')}</select>
+    <select class="input sm" style="width:auto" data-sel-priority><option value="">Priority…</option>${M.PRIORITIES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}<option value="none">None</option></select>
+    <select class="input sm" style="width:auto" data-sel-hardness><option value="">Hardness…</option>${M.HARDNESS.map((l, i) => `<option value="${i + 1}">${i + 1} · ${l}</option>`).join('')}<option value="none">Not rated</option></select>
     <select class="input sm" style="width:auto" data-sel-move><option value="">Move…</option><option value="-1">1 day earlier</option><option value="1">1 day later</option><option value="7">1 week later</option></select>
     <button class="btn sm danger" data-act="sel-del" data-scope="one">${ic('trash')} Only these days</button>
     <button class="btn sm danger" data-act="sel-del" data-scope="later">These and later</button>
@@ -1383,6 +1421,17 @@ const PROMPTS = ['What went well, and why?', 'What got in the way or felt harder
 const MISSED_PROMPTS = ['What got in the way?', 'Was it in your control, or not?', 'What would make it happen next time?',
   'Was it still the right thing to plan, or should it change?', 'How do you feel about skipping it?'];
 
+/** The reflection's submit button: enough words, and the time taken (if any) is a length. */
+function reflReady() {
+  const text = $('#reflText'), btn = $('#reflSubmit');
+  if (!text || !btn) return;
+  const enough = M.countWords(text.value) >= Number(text.dataset.min);
+  const taken = $('#reflTaken'), note = $('#reflTakenNote');
+  const raw = taken?.value.trim() || '', mins = M.parseMinutes(raw), bad = raw && mins == null;
+  if (note) { note.textContent = mins ? M.fmtMinutes(mins) : bad ? 'Try 45, 1:30 or 1h 30m' : 'optional'; note.className = `small ${bad ? 'orange' : 'muted'}`; }
+  btn.disabled = !enough || bad;
+}
+
 function reflectionDialog(o, ctx, mode = 'done') {
   const min = store.settings.minReflectionWords, missed = mode === 'missed';
   const seed = [...(o.task.id + o.key)].reduce((n, c) => n + c.charCodeAt(0), 0);
@@ -1392,7 +1441,11 @@ function reflectionDialog(o, ctx, mode = 'done') {
     <div class="row" style="gap:12px"><span class="badge-icon" style="background:${missed ? 'var(--red)' : color(o.task.color)}">${ic(missed ? 'x' : 'quote')}</span>
       <div class="grow"><h2>${missed ? 'Why didn’t it happen?' : 'Reflect to complete'}</h2><div class="muted ellipsis">${esc(o.task.title)} · ${M.fmtDay(o.day, { weekday: 'long', month: 'short', day: 'numeric' })}</div></div></div>
     <div>${missed ? `Write at least ${min} words about why you didn’t or couldn’t do it. It’s marked as not done, not failed — this is for learning.` : `Write at least ${min} words before checking this off.`} Some prompts:<ul class="prompts">${prompts.map(p => `<li>${p}</li>`).join('')}</ul></div>
-    <textarea class="input" id="reflText" rows="7" placeholder="${missed ? 'What happened?' : 'How did it go?'}" autofocus data-min="${min}"></textarea></div>
+    <textarea class="input" id="reflText" rows="7" placeholder="${missed ? 'What happened?' : 'How did it go?'}" autofocus data-min="${min}"></textarea>
+    ${missed ? '' : `<div class="taken"><div class="row" style="gap:8px;flex-wrap:wrap">${ic('timer')}<label for="reflTaken"><b>How long did it take?</b></label>
+        <input class="input" id="reflTaken" style="width:130px" placeholder="e.g. 45 or 1:30" autocomplete="off"><span class="small muted" id="reflTakenNote">optional</span></div>
+      <div class="row" style="gap:5px;flex-wrap:wrap;margin-top:6px">${takenChoices(o.task).map(n => `<button type="button" class="btn sm" data-act="refl-taken" data-v="${n}">${M.fmtMinutes(n)}</button>`).join('')}</div>
+      ${typicalText(o.task) ? `<div class="small muted" style="margin-top:4px">${esc(typicalText(o.task))}</div>` : ''}</div>`}</div>
     <div class="foot"><div class="progress" id="reflBar"><div style="width:0"></div></div><span class="small muted" id="reflCount">0 / ${min} words</span><span class="grow"></span>
       <button type="button" class="btn" data-act="${ctx === 'checkin' ? 'checkin-back' : 'close'}">Cancel</button>
       <button class="btn ${missed ? 'danger-solid' : 'primary'}" id="reflSubmit" disabled title="Ctrl/⌘ + Enter">${ic(missed ? 'x' : 'check')} ${missed ? 'Submit & mark not done' : 'Submit & complete'}</button></div></form>`;
@@ -1936,11 +1989,16 @@ function editorDialog(m) {
     ${presetRow(m)}
     <label class="field"><span>Title</span><input class="input" data-edit="title" value="${esc(d.title)}" placeholder="What do you need to do?" autofocus required></label>
     <label class="field"><span>Notes</span><textarea class="input" data-edit="notes" rows="2" placeholder="Optional details">${esc(d.notes)}</textarea></label>
+    ${M.isEvent(d) ? '' : `<div class="fieldset"><div class="legend">Priority and hardness</div>
+      <div class="seg wide" role="group" aria-label="Priority">${[['', 'None'], ...M.PRIORITIES].map(([k, l]) => `<button type="button" class="${(M.priorityOf(d) || '') === k ? 'on' : ''}" data-act="edit-priority" data-v="${k}">${l}</button>`).join('')}</div>
+      <div class="row" style="gap:10px;margin-top:10px"><span class="small" style="font-weight:600">Hardness</span>
+        <span class="hpick" role="group" aria-label="Hardness">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= (M.hardnessOf(d) || 0) ? 'on' : ''}" style="--hc:${hardColor(M.hardnessOf(d) || i)};height:${9 + 3 * i}px" data-act="edit-hardness" data-v="${i}" title="${i}: ${M.HARDNESS[i - 1]}" aria-label="${i}, ${M.HARDNESS[i - 1]}" aria-pressed="${M.hardnessOf(d) === i}"></button>`).join('')}</span>
+        <span class="small muted">${M.hardnessOf(d) ? `${M.hardnessOf(d)} · ${M.HARDNESS[M.hardnessOf(d) - 1]}` : 'Not rated'}</span></div></div>`}
     <div class="fieldset"><div class="legend">When</div>
       <div class="grid2"><label class="field"><span>Date</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
         <label class="field"><span>&nbsp;</span><label class="check"><input type="checkbox" data-edit="hasTime" data-rerender ${m.hasTime ? 'checked' : ''}>At a specific time</label></label></div>
       ${m.hasTime ? `<div class="grid2"><label class="field"><span>Time</span><input class="input" type="time" data-edit="time" data-rerender value="${m.time}"></label>
-        <label class="field"><span>Duration</span><select class="input" data-edit="duration" data-rerender>${DURATIONS.map(n => `<option value="${n}" ${d.durationMinutes === n ? 'selected' : ''}>${n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} hr ${n % 60} min` : `${n / 60} hr`}</option>`).join('')}</select></label></div>` : ''}
+        <label class="field"><span>Duration</span><select class="input" data-edit="duration" data-rerender>${[...new Set([...DURATIONS, d.durationMinutes])].sort((a, b) => a - b).map(n => `<option value="${n}" ${d.durationMinutes === n ? 'selected' : ''}>${n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} hr ${n % 60} min` : `${n / 60} hr`}</option>`).join('')}</select></label></div>` : ''}
     </div>
     <div class="fieldset"><div class="legend">Your time</div>
       <div class="seg wide"><button type="button" class="${M.isBusy(d) ? 'on' : ''}" data-act="edit-busy" data-busy="1">${ic('lock')} Closed</button>
@@ -1997,6 +2055,7 @@ function editorDialog(m) {
       <div class="seg wide">${M.NAG_LEVELS.map(([k, l]) => `<button type="button" class="${M.nagLevel(d) === k ? 'on' : ''}" data-act="edit-nag" data-nag="${k}">${l}</button>`).join('')}</div>
       <div class="small muted">${esc(M.NAG_LEVELS.find(x => x[0] === M.nagLevel(d))[2])}</div>
       ${M.nagLevel(d) !== 'normal' ? `<label class="field"><span>Comes back every</span><select class="input" data-edit="nagEvery" style="width:auto">${M.NAG_EVERY.map(x => `<option value="${x}" ${M.nagMinutes(d) === x ? 'selected' : ''}>${x === 60 ? 'hour' : `${x} min`}</option>`).join('')}</select></label>` : ''}</div>`}
+    ${M.isEvent(d) ? '' : timeTakenFieldset(m)}
     <div class="fieldset"><div class="legend">Color</div><div class="swatches">${Object.entries(M.COLORS).map(([k, v]) => `<button type="button" class="swatch ${d.color === k ? 'on' : ''}" style="background:${v}" data-act="edit-color" data-color="${k}" title="${k}"></button>`).join('')}</div></div>
     ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !d.source
       ? `<label class="check"><input type="checkbox" data-edit="addToGTasks" ${m.addToGTasks ? 'checked' : ''}>${ic('list')} Also add to Google Tasks</label>` : ''}
@@ -3555,6 +3614,12 @@ const actions = {
   },
   'edit-weekdays': () => { readEditorInputs(); ui.modal.draft.recurrence.weekdays = [2, 3, 4, 5, 6]; renderModal(); },
   'edit-color': el => { readEditorInputs(); ui.modal.draft.color = el.dataset.color; renderModal(); },
+  'edit-priority': el => { readEditorInputs(); const d = ui.modal.draft; if (el.dataset.v) d.priority = el.dataset.v; else delete d.priority; renderModal(); },
+  'edit-hardness': el => { readEditorInputs(); const d = ui.modal.draft, v = Number(el.dataset.v); if (M.hardnessOf(d) === v) delete d.hardness; else d.hardness = v; renderModal(); },
+  'edit-use-typical': () => { readEditorInputs(); const d = ui.modal.draft; d.durationMinutes = M.typicalMinutes(d) || d.durationMinutes; renderModal(); },
+  'edit-time-del': el => { readEditorInputs(); const d = ui.modal.draft; d.timeTaken = { ...d.timeTaken }; delete d.timeTaken[el.dataset.k]; if (!Object.keys(d.timeTaken).length) delete d.timeTaken; renderModal(); },
+  'edit-times-all': () => { readEditorInputs(); ui.modal.allTimes = !ui.modal.allTimes; renderModal(); },
+  'refl-taken': el => { const input = $('#reflTaken'); if (input) { input.value = el.dataset.v; reflReady(); } },
   'edit-nag': el => { readEditorInputs(); const d = ui.modal.draft; if (el.dataset.nag === 'normal') { delete d.nag; delete d.nagEvery; } else d.nag = el.dataset.nag; renderModal(); },
 };
 
@@ -3609,9 +3674,10 @@ document.addEventListener('input', e => {
     $('#reflCount').className = `small ${n >= min ? 'green' : 'muted'}`;
     $('#reflBar').className = `progress ${n >= min ? 'ok' : ''}`;
     $('#reflBar').firstElementChild.style.width = `${Math.min(100, (n / min) * 100)}%`;
-    $('#reflSubmit').disabled = n < min;
+    reflReady();
     return;
   }
+  if (el.id === 'reflTaken') { reflReady(); return; }
   if (el.dataset.courseField) { store.editCourse(el.dataset.course, c => { c[el.dataset.courseField] = el.value; }); return; }
   if (el.dataset.periodField && el.dataset.periodField !== 'minutes') { store.editCourse(el.dataset.course, c => { c.periods[+el.dataset.i][el.dataset.periodField] = el.value; }); return; }
   if (el.dataset.cardField) { store.editCourse(el.dataset.course, c => { const k = c.cards.find(x => x.id === el.dataset.card); if (k) k[el.dataset.cardField] = el.value; }); return; }
@@ -3646,6 +3712,16 @@ document.addEventListener('change', e => {
   if (el.dataset.siteSuggest !== undefined) { if (el.value) addBlockedSite(el.value); return; }
   if (el.dataset.pjDue !== undefined) { const v = el.value; if (v) projOps.setDue(v === 'none' ? null : M.dateKey(M.addDays(new Date(), Number(v)))); return; }
   if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
+  if (el.dataset.selPriority !== undefined) {
+    const v = el.value;
+    if (v) selEdit(t => { if (v === 'none') delete t.priority; else t.priority = v; }, v === 'none' ? 'Priority cleared' : `${v[0].toUpperCase() + v.slice(1)} priority`);
+    return;
+  }
+  if (el.dataset.selHardness !== undefined) {
+    const v = el.value;
+    if (v) selEdit(t => { if (v === 'none') delete t.hardness; else t.hardness = Number(v); }, v === 'none' ? 'Hardness cleared' : `Hardness ${v}: ${M.HARDNESS[v - 1]}`);
+    return;
+  }
   if (el.dataset.selMove !== undefined) {
     const n = Number(el.value); if (!n) return;
     selEdit(t => { if (t.recurrence.frequency !== 'none') return; t.startDate = M.iso(M.addDays(new Date(t.startDate), n)); if (t.dueDate) t.dueDate = M.dateKey(M.addDays(M.parseKey(String(t.dueDate).slice(0, 10)), n)); }, 'Moved (repeating ones keep their pattern)');
@@ -3811,7 +3887,8 @@ document.addEventListener('submit', async e => {
   } else if (kind === 'reflection') {
     const text = $('#reflText').value.trim();
     const o = findOcc(form.dataset.occ), missed = form.dataset.mode === 'missed';
-    if (!o || !(missed ? store.miss(o, text) : store.complete(o, text))) return;
+    const taken = missed ? null : M.parseMinutes($('#reflTaken')?.value);
+    if (!o || !(missed ? store.miss(o, text) : store.complete(o, text, taken))) return;
     if (missed) toast(`Marked ${o.task.title} as not done · reflection saved`, { icon: 'x' });
     else {
       ui.justDone.add(o.id);

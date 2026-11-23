@@ -966,3 +966,28 @@ table.rules th { background: var(--head-bg); }
 .overlay.cover { background: var(--bg); z-index: 90; }
 .overlay.cover .dialog.nag { width: min(620px, 100%); border-color: color-mix(in srgb, var(--red) 55%, var(--line-strong)); box-shadow: none; }
 .overlay.cover .nag-title { font-size: 31px; }
+
+/* Priority, hardness and time taken */
+.prio b { margin-right: 3px; letter-spacing: -.5px; }
+.prio-high { color: var(--red); } .prio-medium { color: var(--orange); } .prio-low { color: var(--accent); }
+.hmeter { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 10px; vertical-align: -1px; }
+.hmeter i { width: 3px; border-radius: 1px; background: var(--line-strong); }
+.hmeter i.on { background: var(--hc); }
+.hpick { display: inline-flex; align-items: flex-end; gap: 4px; }
+.hpick button { width: 17px; border: 0; padding: 0; border-radius: 2px; background: var(--line-strong); cursor: pointer; }
+.hpick button.on { background: var(--hc); }
+.hpick button:hover { outline: 1px solid var(--muted); }
+.hpick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.taken { margin-top: 12px; }
+.spread { margin: 4px 0 6px; }
+.spread-track { position: relative; height: 20px; }
+.spread-track::before { content: ''; position: absolute; left: 0; right: 0; top: 7px; height: 6px; border-radius: 3px; background: var(--line); }
+.spread-fill { position: absolute; left: 0; top: 7px; height: 6px; min-width: 6px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.spread-track i { position: absolute; top: 3px; width: 2px; height: 14px; margin-left: -1px; background: var(--muted); }
+.spread-track i.in { background: var(--accent); }
+.spread-track b { position: absolute; top: 0; width: 2px; height: 20px; margin-left: -1px; background: var(--text); }
+.spread-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+table.times { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12.5px; }
+table.times td { padding: 3px 4px; border-top: 1px solid var(--line); }
+table.times td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.times td:last-child { width: 1%; }

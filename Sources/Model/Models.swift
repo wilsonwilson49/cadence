@@ -214,6 +214,12 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var nag: String?
     /// How often it comes back, in minutes (default 10).
     var nagEvery: Int?
+    /// "high", "medium" or "low"; nil = no priority. Same values on the web.
+    var priority: String?
+    /// How hard it is, 1 (easy) to 5 (very hard); nil = not rated.
+    var hardness: Int?
+    /// Occurrence key → how many minutes it actually took (asked when you check it off). Whole minutes.
+    var timeTaken: [String: Int]?
     /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
     var steps: [HabitStep]?
     /// Occurrence key → the steps checked off that time.

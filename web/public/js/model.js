@@ -479,13 +479,44 @@ export function openRanges(day, hours, blocked, now = Date.now()) {
   return free.filter(([fs, fe]) => fe - fs >= 5 * 60_000);
 }
 
+/** Timed items by time; "any time" ones after them, higher priority first (same order as the apps). */
 export function sortOccurrences(a, b) {
   const x = a.task.timeMinutes, y = b.task.timeMinutes;
-  if (x != null && y != null) return x === y ? a.task.title.localeCompare(b.task.title) : x - y;
+  const p = priorityRank(a.task) - priorityRank(b.task);
+  if (x != null && y != null) return x !== y ? x - y : p || a.task.title.localeCompare(b.task.title);
   if (x == null && y != null) return 1;
   if (x != null && y == null) return -1;
-  return String(a.task.createdAt).localeCompare(String(b.task.createdAt));
+  return p || String(a.task.createdAt).localeCompare(String(b.task.createdAt));
 }
+
+// Priority, hardness and how long things really take (Sources/Model/TaskStats.swift has the same rules).
+export const PRIORITIES = [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']];
+export const priorityOf = t => (PRIORITIES.some(([k]) => k === t?.priority) ? t.priority : null);
+export const priorityRank = t => ({ high: 0, medium: 1, low: 2 })[priorityOf(t)] ?? 3;
+export const HARDNESS = ['Easy', 'Fairly easy', 'Medium', 'Hard', 'Very hard'];
+export const hardnessOf = t => { const n = Math.round(Number(t?.hardness)); return n >= 1 ? Math.min(5, n) : null; };
+/** Every recorded time (minutes), shortest first. */
+export const takenTimes = t => Object.values(t?.timeTaken || {}).map(Number).filter(n => n > 0).sort((a, b) => a - b);
+/** Nearest-rank percentile of sorted numbers. */
+export function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  return sorted[Math.min(sorted.length, Math.max(1, Math.ceil(p * sorted.length))) - 1];
+}
+/** The length 60% of your recorded times came in under; null until it has been timed once. */
+export const typicalMinutes = t => percentile(takenTimes(t), 0.6);
+/** "45", "45m", "1:30", "1h 30m", "1.5h", "90 min" → minutes; null if it isn't a length. */
+export function parseMinutes(text) {
+  const s = String(text ?? '').trim().toLowerCase();
+  if (!s) return null;
+  const ok = n => (n > 0 && n < 1440 ? n : null);
+  let m = s.match(/^(\d+):(\d{1,2})$/);
+  if (m) return +m[2] < 60 ? ok(+m[1] * 60 + +m[2]) : null;
+  m = s.match(/^(?:(\d+(?:\.\d+)?)\s*h[a-z]*)?\s*(?:(\d+(?:\.\d+)?)\s*(?:m[a-z]*)?)?$/);
+  if (!m || (m[1] == null && m[2] == null)) return null;
+  return ok(Math.round((m[1] ? +m[1] * 60 : 0) + (m[2] ? +m[2] : 0)));
+}
+/** 45 → "45 min", 90 → "1 hr 30 min". */
+export const fmtMinutes = n => (n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} hr ${n % 60} min` : `${n / 60} hr`);
 
 export function newTask(fields = {}) {
   const now = iso(new Date());

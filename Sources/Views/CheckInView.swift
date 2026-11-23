@@ -13,8 +13,8 @@ struct CheckInView: View {
     var body: some View {
         Group {
             if let occ = reflecting {
-                ReflectionForm(occurrence: occ, minWords: store.settings.minReflectionWords, missed: reflectingMissed) { text in
-                    if reflectingMissed { store.miss(occ, reflection: text) } else { store.complete(occ, reflection: text) }
+                ReflectionForm(occurrence: occ, minWords: store.settings.minReflectionWords, missed: reflectingMissed) { text, minutes in
+                    if reflectingMissed { store.miss(occ, reflection: text) } else { store.complete(occ, reflection: text, minutes: minutes) }
                     withAnimation { reflecting = nil }
                 } onCancel: {
                     withAnimation { reflecting = nil }

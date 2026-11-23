@@ -226,6 +226,19 @@ struct ChecklistRow: View {
                     if let plan = occ.task.planSummary, !compact {
                         Label(plan, systemImage: occ.task.isUntilDone ? "flame" : "repeat").lineLimit(1)
                     }
+                    if let p = occ.task.priorityLevel, !occ.isResolved {
+                        Label(p.title, systemImage: p.symbol).foregroundStyle(p.color)
+                            .help("\(p.title) priority")
+                    }
+                    if let h = occ.task.hardnessLevel {
+                        HardnessMeter(level: h, height: 9).help("Hardness \(h) of 5: \(Hardness.title(h))")
+                    }
+                    if occ.isDone, let m = occ.task.timeTaken?[occ.key] {
+                        Label("took \(TaskStats.format(m))", systemImage: "stopwatch")
+                    } else if !occ.isResolved, let m = occ.task.typicalMinutes, !compact {
+                        Label("usually \(TaskStats.format(m))", systemImage: "stopwatch")
+                            .help(TaskStatsText.typical(occ.task) ?? "")
+                    }
                     if occ.task.nagLevel != .normal && !occ.isResolved {
                         Label(occ.task.nagLevel.title, systemImage: occ.task.nagLevel.symbol)
                             .foregroundStyle(occ.task.nagLevel == .strict ? .red : .orange)
@@ -360,10 +373,12 @@ struct ReflectionForm: View {
     let minWords: Int
     /// "Didn't do it": asks why it didn't happen instead of how it went.
     var missed = false
-    let onSubmit: (String) -> Void
+    /// The reflection, and how long it took if you wrote that down (never for "didn't do it").
+    let onSubmit: (String, Int?) -> Void
     let onCancel: () -> Void
 
     @State private var text = ""
+    @State private var taken = ""
     @FocusState private var focused: Bool
 
     private static let prompts = [
@@ -382,7 +397,7 @@ struct ReflectionForm: View {
     ]
 
     private var count: Int { countWords(text) }
-    private var ready: Bool { count >= minWords }
+    private var ready: Bool { count >= minWords && (missed || TimeTakenField.isValid(taken)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -428,6 +443,10 @@ struct ReflectionForm: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(focused ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.12)))
 
+            if !missed {
+                TimeTakenField(task: occurrence.task, text: $taken).font(.app(.callout))
+            }
+
             HStack(spacing: 10) {
                 ProgressView(value: Double(min(count, minWords)), total: Double(minWords))
                     .frame(width: 110)
@@ -439,7 +458,7 @@ struct ReflectionForm: View {
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Button {
-                    onSubmit(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                    onSubmit(text.trimmingCharacters(in: .whitespacesAndNewlines), missed ? nil : TaskStats.parseMinutes(taken))
                 } label: {
                     Label(missed ? "Submit & mark not done" : "Submit & complete", systemImage: missed ? "xmark" : "checkmark")
                 }
@@ -447,7 +466,7 @@ struct ReflectionForm: View {
                 .buttonStyle(.borderedProminent)
                 .tint(missed ? .red : .accentColor)
                 .disabled(!ready)
-                .help(ready ? "⌘↩ to submit" : "Write \(minWords - count) more word\(minWords - count == 1 ? "" : "s")")
+                .help(ready ? "⌘↩ to submit" : count < minWords ? "Write \(minWords - count) more word\(minWords - count == 1 ? "" : "s")" : "The time taken isn't a length (try 45 or 1:30), or clear it")
             }
         }
         .padding(22)

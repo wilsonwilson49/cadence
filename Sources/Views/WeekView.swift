@@ -512,6 +512,14 @@ struct WeekSelectionBar: View {
                     Button("Not urgent") { editTasks { $0.urgent = nil } }
                     Divider()
                     Menu("Color") { ForEach(TaskColor.allCases) { c in Button(c.rawValue.capitalized) { editTasks { $0.color = c } } } }
+                    Menu("Priority") {
+                        ForEach(Priority.allCases) { p in Button(p.title) { editTasks { $0.priority = p.rawValue } } }
+                        Button("None") { editTasks { $0.priority = nil } }
+                    }
+                    Menu("Hardness") {
+                        ForEach(Hardness.range, id: \.self) { n in Button("\(n) · \(Hardness.title(n))") { editTasks { $0.hardness = n } } }
+                        Button("Not rated") { editTasks { $0.hardness = nil } }
+                    }
                     Menu("Move") {
                         Button("1 day earlier") { move(-1) }
                         Button("1 day later") { move(1) }

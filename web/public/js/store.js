@@ -318,13 +318,15 @@ class Store {
     return { added, updated, removed };
   }
 
-  complete(occ, text) {
+  /** `minutes`: how long it took, if you wrote it down. */
+  complete(occ, text, minutes = null) {
     if (M.countWords(text) < this.settings.minReflectionWords) return false;
     const t = this.tasks.get(occ.task.id);
     if (!t) return false;
     const missed = { ...t.missed };
     delete missed[occ.key];
-    this.upsertTask({ ...t, completions: { ...t.completions, [occ.key]: M.iso(new Date()) }, missed });
+    const timed = minutes > 0 ? { timeTaken: { ...t.timeTaken, [occ.key]: Math.round(minutes) } } : {};
+    this.upsertTask({ ...t, completions: { ...t.completions, [occ.key]: M.iso(new Date()) }, missed, ...timed });
     this.#addReflection(t, occ, text);
     if (t.source === 'gtasks') this.onGoogleTaskChange?.(t, { status: 'completed' });
     return true;
@@ -340,6 +342,17 @@ class Store {
     this.upsertTask({ ...t, completions, missed: { ...t.missed, [occ.key]: M.iso(new Date()) } });
     this.#addReflection(t, occ, text, 'missed');
     return true;
+  }
+
+  /** Writes down (or clears, with null) how long one occurrence took. */
+  setTimeTaken(occ, minutes) {
+    const t = this.tasks.get(occ.task?.id ?? occ.taskId);
+    if (!t) return;
+    const timeTaken = { ...t.timeTaken };
+    if (minutes > 0) timeTaken[occ.key] = Math.round(minutes); else delete timeTaken[occ.key];
+    const next = { ...t, timeTaken };
+    if (!Object.keys(timeTaken).length) delete next.timeTaken;
+    this.upsertTask(next);
   }
 
   unmiss(occ) {

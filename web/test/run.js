@@ -211,5 +211,19 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   const until = { task: { ...base, mode: 'untilDone', timeMinutes: 600 }, day: new Date(2026, 10, 18) };
   check(+M2.nagStart(until, 540, now) === +new Date(2026, 10, 21, 10, 0), 'nag: until-done starts at its time each day');
 }
+// Priority, hardness and time taken.
+{
+  const M2 = await import('../public/js/model.js');
+  const parse = ['45', '45m', '1:30', '1h 30m', '1.5h', '90 min', '2 hours', '', 'soon', '0', '1:75'].map(M2.parseMinutes);
+  check(JSON.stringify(parse) === JSON.stringify([45, 45, 90, 90, 90, 90, 120, null, null, null, null]), 'time taken: parsing lengths');
+  check(M2.percentile([10], 0.6) === 10 && M2.percentile([10, 20], 0.6) === 20 && M2.percentile([10, 20, 30, 40, 50], 0.6) === 30 && M2.percentile([], 0.6) === null, 'time taken: 60% mark');
+  check(M2.typicalMinutes({ timeTaken: { a: 50, b: 20, c: 30, d: 0, e: 40, f: 200 } }) === 40, 'time taken: typical ignores zeros, resists one long day');
+  check(M2.fmtMinutes(45) === '45 min' && M2.fmtMinutes(90) === '1 hr 30 min' && M2.fmtMinutes(120) === '2 hr', 'time taken: formatting');
+  check(M2.priorityOf({ priority: 'high' }) === 'high' && M2.priorityOf({ priority: 'urgent' }) === null && M2.hardnessOf({ hardness: 9 }) === 5 && M2.hardnessOf({}) === null, 'priority and hardness: values');
+  const occ = (title, priority, timeMinutes, createdAt) => ({ task: { title, priority, timeMinutes, createdAt } });
+  const order = [occ('none', undefined, null, '1'), occ('low', 'low', null, '2'), occ('high', 'high', null, '3'), occ('timed', undefined, 600, '4'), occ('timed high', 'high', 600, '5')]
+    .sort(M2.sortOccurrences).map(o => o.task.title);
+  check(order.join(',') === 'timed high,timed,high,low,none', 'priority: sorts any-time items and ties');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

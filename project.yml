@@ -22,6 +22,10 @@ targets:
         PRODUCT_NAME: Cadence
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
+        # Signed by the last build step instead (scripts/sign-mac.sh): with the permanent local certificate when
+        # this Mac has one, so permissions survive rebuilds; ad hoc otherwise (e.g. the release build).
+        CODE_SIGNING_ALLOWED: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         ENABLE_HARDENED_RUNTIME: NO
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
@@ -29,6 +33,10 @@ targets:
         INFOPLIST_KEY_NSAppleEventsUsageDescription: "Cadence reads the address of your browser's current tab so it can block the websites you chose while a strict task is overdue or during a focus session."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    postBuildScripts:
+      - name: Sign
+        script: '"$SRCROOT/scripts/sign-mac.sh"'
+        basedOnDependencyAnalysis: false
   CadenceMobile:
     type: application
     platform: iOS
