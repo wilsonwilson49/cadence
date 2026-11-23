@@ -15,7 +15,10 @@ struct SettingsView: View {
 
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var loginItemOn = SMAppService.mainApp.status == .enabled
-    @State private var runInBackground = WindowManager.runsInBackground
+    @State private var dockMode = StayRunning.dockMode
+    @State private var quitCloses = StayRunning.quitClosesWindows
+    @State private var keepAlive = StayRunning.keepAlive
+    @State private var keepAliveError: String?
     @State private var loginError: String?
     @State private var showSecret = false
     @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
@@ -311,15 +314,23 @@ struct SettingsView: View {
                     .font(.app(.caption)).foregroundStyle(.orange)
             }
             if let loginError { Text(loginError).font(.app(.caption)).foregroundStyle(.red) }
-            Toggle("Run in the background", isOn: Binding(get: { runInBackground }, set: { runInBackground = $0; WindowManager.runsInBackground = $0 }))
-            Text(runInBackground
-                 ? "When you close the window, Cadence leaves the Dock and keeps running in the menu bar, so reminders, nudges and check-ins keep coming. When it starts at login it opens quietly. Open it any time from the menu bar icon."
-                 : "Cadence stays in the Dock when you close the window. It keeps running either way; quit it from the menu bar icon.")
+            Picker("Dock icon", selection: Binding(get: { dockMode }, set: { dockMode = $0; StayRunning.dockMode = $0 })) {
+                ForEach(DockIconMode.allCases) { Text($0.title).tag($0) }
+            }
+            Toggle("⌘Q closes the windows instead of quitting", isOn: Binding(get: { quitCloses }, set: { quitCloses = $0; StayRunning.quitClosesWindows = $0 }))
+            Toggle("Keep Cadence alive", isOn: Binding(get: { keepAlive }, set: { on in
+                do { try StayRunning.setKeepAlive(on); keepAlive = on; keepAliveError = nil }
+                catch { keepAliveError = "Couldn't change it: \(error.localizedDescription)" }
+            }))
+            Text(keepAlive
+                 ? "macOS starts Cadence when you log in and brings it back within seconds if it crashes or is force-quit. Only “Quit completely” stops it, until your next login. Turning this on restarts Cadence once."
+                 : "Turn on to have macOS keep Cadence running all the time, even if it crashes or is force-quit.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
-            Text("Recommended: turn on both, since reminders only fire while Cadence is running.")
+            if let keepAliveError { Text(keepAliveError).font(.app(.caption)).foregroundStyle(.red) }
+            Text("Closing the window never quits Cadence: it keeps running in the menu bar, so reminders, nudges, check-ins and blocking keep working\(dockMode == .never ? ", with no Dock icon at all" : ""). To quit completely, press ⌥⌘Q or use the menu bar icon.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         } header: {
-            Text("Startup")
+            Text("Running in the background")
         }
     }
 

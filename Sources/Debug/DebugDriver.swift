@@ -50,6 +50,10 @@ enum DebugDriver {
             try? AppIconArt.export(to: dir, family: family)
             exit(0)
         }
+        // -keepAliveTest on|off (with -stayRunningTest and a renamed bundle ID): turns the launch agent on or off.
+        if let v = LaunchOptions.value("-keepAliveTest") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { try? StayRunning.setKeepAlive(v == "on") }
+        }
         // -nagPreview pushy|strict: shows that reminder window (for screenshots).
         if let l = LaunchOptions.value("-nagPreview"), let level = NagLevel(rawValue: l) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { model.nag.preview(level) }

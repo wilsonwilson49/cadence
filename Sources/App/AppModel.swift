@@ -120,9 +120,10 @@ final class AppModel: ObservableObject {
         #if DEBUG
         DebugDriver.prepare(self)
         #endif
-        // Opened at login with background mode on: stay in the menu bar (the check-in below still appears).
-        if !LaunchOptions.has("-background") && !(WindowManager.runsInBackground && AppDelegate.launchedAtLogin) { windows.showMain() }
-        else { windows.updateDockIcon() }
+        // Opened at login (or by the keep-alive agent): stay in the menu bar; the check-in below still appears.
+        // A copy that just took over from another opens the window, since you were using it.
+        let quiet = LaunchOptions.has("-background") || (AppDelegate.launchedAtLogin && StayRunning.dockMode != .always)
+        if StayRunning.tookOver || !quiet { windows.showMain() } else { windows.updateDockIcon() }
         if store.settings.checkInOnLaunch && !LaunchOptions.has("-noCheckIn") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.engine.triggerCheckIn(reason: .launch) }
         }
@@ -258,18 +259,25 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
     // MARK: Running in the background
 
-    /// On (the default): with no Cadence window open, the Dock icon goes away and Cadence keeps running in
-    /// the menu bar, so reminders and check-ins keep working. Starting at login opens quietly (no window).
-    static var runsInBackground: Bool {
-        get { UserDefaults.standard.object(forKey: "runInBackground") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "runInBackground"); AppModel.shared.windows.updateDockIcon() }
-    }
-
-    /// Dock icon only while a window is on screen (or always, with background mode off).
+    /// The Dock icon follows Settings › Running: while a window is open (default), never, or always.
+    /// Cadence keeps running in the menu bar either way.
     func updateDockIcon() {
         let visible = [mainWindow, checkInWindow].contains { $0?.isVisible == true }
-        let policy: NSApplication.ActivationPolicy = !Self.runsInBackground || visible ? .regular : .accessory
+        let policy: NSApplication.ActivationPolicy
+        switch StayRunning.dockMode {
+        case .never: policy = .accessory
+        case .always: policy = .regular
+        case .window: policy = visible ? .regular : .accessory
+        }
         if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+        if policy == .regular { AppIconArt.applyToDock() }
+    }
+
+    /// ⌘Q with "⌘Q closes the windows" on: everything goes away except the menu bar icon.
+    func closeAll() {
+        mainWindow?.close()
+        checkInWindow?.orderOut(nil)
+        updateDockIcon()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -278,7 +286,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     }
 
     func showMain() {
-        if !LaunchOptions.has("-noActivate") && Self.runsInBackground { NSApp.setActivationPolicy(.regular) }
+        if !LaunchOptions.has("-noActivate") && StayRunning.dockMode != .never { NSApp.setActivationPolicy(.regular); AppIconArt.applyToDock() }
         if mainWindow == nil {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],

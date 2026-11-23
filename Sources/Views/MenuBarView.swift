@@ -88,7 +88,8 @@ struct MenuBarView: View {
                 Button { engine.triggerCheckIn(reason: .manual) } label: { Image(systemName: "sun.max") }.help("Check in")
                 Button("Open Cadence") { model.openChecklist() }
                 Spacer()
-                Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.borderless).foregroundStyle(.secondary)
+                Button("Quit completely") { StayRunning.quitCompletely() }.buttonStyle(.borderless).foregroundStyle(.secondary)
+                    .help("Stops reminders until Cadence is opened again (⌥⌘Q). Closing the window or ⌘Q keeps it running here.")
             }
             .controlSize(.small)
         }

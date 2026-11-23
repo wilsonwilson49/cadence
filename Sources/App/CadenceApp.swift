@@ -4,7 +4,13 @@ import AppKit
 @main
 struct CadenceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @ObservedObject private var store = AppModel.shared.store
+    @ObservedObject private var store: Store
+
+    init() {
+        // Before anything loads: make sure only one Cadence runs (see StayRunning).
+        MainActor.assumeIsolated { StayRunning.ensureSingleInstance() }
+        _store = ObservedObject(wrappedValue: AppModel.shared.store)
+    }
 
     var body: some Scene {
         MenuBarExtra {
@@ -25,6 +31,12 @@ struct CadenceApp: App {
             MenuBarLabel(store: store, focus: AppModel.shared.focus, study: AppModel.shared.study)
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            CommandGroup(after: .appTermination) {
+                Button("Quit Cadence Completely") { StayRunning.quitCompletely() }
+                    .keyboardShortcut("q", modifiers: [.command, .option])
+            }
+        }
     }
 }
 
@@ -37,7 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let event = NSAppleEventManager.shared().currentAppleEvent
         Self.launchedAtLogin = event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(StayRunning.dockMode == .never ? .accessory : .regular)
+        StayRunning.watchForLogout()
+        StayRunning.listenForOtherCopies()
+        StayRunning.refreshAgentPath()
         AppearanceMode.current.apply()
         AppModel.shared.start()
         AppIconArt.applyToDock()
@@ -56,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Closing the window keeps Cadence running in the menu bar so reminders keep working.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// ⌘Q closes the windows instead (unless that's turned off); see StayRunning.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply { StayRunning.shouldTerminate() }
 
     func applicationWillTerminate(_ notification: Notification) {
         AppModel.shared.screenTime.flush()
