@@ -15,7 +15,7 @@ struct RemindersScreen: View {
                         Image(systemName: r.enabled ? "bell.fill" : "bell.slash").foregroundStyle(r.enabled ? .teal : .secondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title.isEmpty ? "Untitled" : r.title)
-                            Text(r.summary).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(2)
+                            Text(r.summary).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(2)
                         }
                     }
                 }

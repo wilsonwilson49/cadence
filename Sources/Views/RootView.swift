@@ -17,7 +17,7 @@ struct RootView: View {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 28, height: 28)
-                    Text("Cadence").font(.verdana(.title3).weight(.bold))
+                    Text("Cadence").font(.app(.title3).weight(.bold))
                     Spacer()
                 }
                 .padding(.horizontal, 16)

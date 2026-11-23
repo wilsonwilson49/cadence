@@ -21,8 +21,8 @@ struct CustomRemindersView: View {
                         HStack {
                             Image(systemName: r.enabled ? "bell.fill" : "bell.slash").foregroundStyle(r.enabled ? .teal : .secondary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(r.title.isEmpty ? "Untitled" : r.title).font(.verdana(.callout).weight(.medium)).lineLimit(1)
-                                Text(r.summary).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                Text(r.title.isEmpty ? "Untitled" : r.title).font(.app(.callout).weight(.medium)).lineLimit(1)
+                                Text(r.summary).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
                         .tag(r.id)
@@ -39,7 +39,7 @@ struct CustomRemindersView: View {
                         .id(id)
                 } else {
                     VStack(spacing: 8) {
-                        Image(systemName: "bell.badge").font(.verdana(.largeTitle)).foregroundStyle(.secondary)
+                        Image(systemName: "bell.badge").font(.app(.largeTitle)).foregroundStyle(.secondary)
                         Text(store.customReminders.isEmpty ? "No reminders yet. Make one with New Reminder." : "Pick a reminder to edit it.")
                             .foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -106,7 +106,7 @@ private struct ReminderEditor: View {
                 case .once:
                     DatePicker("At", selection: $reminder.at)
                 }
-                Text(reminder.summary).font(.verdana(.caption)).foregroundStyle(.secondary)
+                Text(reminder.summary).font(.app(.caption)).foregroundStyle(.secondary)
             }
             Section("Alert with") {
                 ForEach([AlertChannel.notification, .banner, .sound], id: \.self) { ch in

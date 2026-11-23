@@ -20,7 +20,7 @@ struct CadenceApp: App {
                 .environmentObject(AppModel.shared.screenTime)
                 .environmentObject(AppModel.shared.study)
                 .tint(Theme.accent)
-                .font(.verdana(.body))
+                .modifier(AppFontScope())
         } label: {
             MenuBarLabel(store: store, focus: AppModel.shared.focus, study: AppModel.shared.study)
         }
@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         AppearanceMode.current.apply()
         AppModel.shared.start()
+        AppIconArt.applyToDock()
         // Reminders run on a timer; keep App Nap from delaying it while Cadence has no window open.
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep],
                                                          reason: "Cadence reminders and check-ins")

@@ -48,9 +48,9 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Today · \(Date().formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))").font(.verdana(.headline))
+                    Text("Today · \(Date().formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))").font(.app(.headline))
                     Text((total == 0 ? "Nothing scheduled" : openCount == 0 ? "All settled" : "\(openCount) left · \(done) done") + (laterCount > 0 ? " · \(laterCount) later" : ""))
-                        .font(.verdana(.caption)).foregroundStyle(.secondary)
+                        .font(.app(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button { grouped.toggle() } label: {
@@ -62,11 +62,11 @@ struct MenuBarView: View {
             }
             Divider()
             if total == 0 && laterCount == 0 {
-                Text("Nothing on today's checklist.").font(.verdana(.callout)).foregroundStyle(.secondary)
+                Text("Nothing on today's checklist.").font(.app(.callout)).foregroundStyle(.secondary)
                     .frame(height: Self.rowHeight)
             } else {
                 if openCount == 0 && total > 0 {
-                    Label("Everything's checked off.", systemImage: "checkmark.seal").font(.verdana(.callout)).foregroundStyle(.green)
+                    Label("Everything's checked off.", systemImage: "checkmark.seal").font(.app(.callout)).foregroundStyle(.green)
                         .frame(height: Self.rowHeight)
                 }
                 list(entries)
@@ -76,7 +76,7 @@ struct MenuBarView: View {
                             Image(systemName: showSettled ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .semibold))
                             Text("\(settled.count + projDone.count) settled")
                         }
-                        .font(.verdana(.caption)).foregroundStyle(.secondary).contentShape(Rectangle())
+                        .font(.app(.caption)).foregroundStyle(.secondary).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     if showSettled { list(settled.map { .occ($0, later: false) } + projDone.map { .proj($0, later: false) }) }
@@ -184,9 +184,9 @@ private struct MenuProjectRow: View {
                 else if later, let due = d.due { Text("due \(shortDay(due))").foregroundStyle(.secondary) }
                 else if let due = d.due { Text(due < DateKey.string(Date()) && !done ? "Overdue" : shortDay(due)).foregroundStyle(due < DateKey.string(Date()) && !done ? .red : .secondary) }
             }
-            .font(.verdana(.caption).monospacedDigit()).lineLimit(1).fixedSize()
+            .font(.app(.caption).monospacedDigit()).lineLimit(1).fixedSize()
         }
-        .font(.verdana(.callout))
+        .font(.app(.callout))
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Color.primary.opacity(0.06) : .clear))
         .contentShape(Rectangle())
@@ -227,18 +227,18 @@ private struct MenuRow: View {
                 .foregroundStyle(occ.isResolved ? .secondary : .primary)
                 .opacity(later ? 0.8 : 1)
             if occ.task.isUrgent && occ.isUntilDone && !occ.isResolved {
-                Text("!").font(.verdana(.caption).weight(.heavy)).foregroundStyle(.red).help("Urgent")
+                Text("!").font(.app(.caption).weight(.heavy)).foregroundStyle(.red).help("Urgent")
             }
             Spacer(minLength: 6)
             if later && hovering {
                 Button("Urgent") { store.setUrgent(occ.task.id, true) }
-                    .buttonStyle(.borderless).font(.verdana(.caption).weight(.semibold)).foregroundStyle(.red)
+                    .buttonStyle(.borderless).font(.app(.caption).weight(.semibold)).foregroundStyle(.red)
                     .help("Put it on today's list and in today's progress")
             } else {
-                when.font(.verdana(.caption).monospacedDigit()).lineLimit(1).fixedSize()
+                when.font(.app(.caption).monospacedDigit()).lineLimit(1).fixedSize()
             }
         }
-        .font(.verdana(.callout))
+        .font(.app(.callout))
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Color.primary.opacity(0.06) : .clear))
         .contentShape(Rectangle())

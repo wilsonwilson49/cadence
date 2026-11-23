@@ -17,6 +17,11 @@
   <script>
     // Before first paint: the theme (dark unless this device chose otherwise), and signed-in buttons if the app said so.
     try { document.documentElement.dataset.theme = localStorage.getItem('cadence:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
+    try {
+      const f = localStorage.getItem('cadence:font') || 'verdana', r = document.documentElement;
+      if (f.startsWith('custom:')) { r.dataset.font = 'custom'; r.style.setProperty('--sans', `"${f.slice(7).replace(/[^\w .-]/g, '')}", Verdana, sans-serif`); }
+      else r.dataset.font = f;
+    } catch {}
     try { if (localStorage.getItem('cadence:signedIn') === '1') document.documentElement.classList.add('signed-in'); } catch {}
   </script>
 </head>

@@ -10,6 +10,11 @@
   <script>
     // Theme before first paint, so there's no flash. Dark unless this device chose otherwise.
     try { document.documentElement.dataset.theme = localStorage.getItem('cadence:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
+    try {
+      const f = localStorage.getItem('cadence:font') || 'verdana', r = document.documentElement;
+      if (f.startsWith('custom:')) { r.dataset.font = 'custom'; r.style.setProperty('--sans', `"${f.slice(7).replace(/[^\w .-]/g, '')}", Verdana, sans-serif`); }
+      else r.dataset.font = f;
+    } catch {}
   </script>
 </head>
 <body>

@@ -61,7 +61,7 @@ struct TaskEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("\(isNew ? "New" : "Edit") \(kindName)").font(.verdana(.title3).bold())
+                Text("\(isNew ? "New" : "Edit") \(kindName)").font(.app(.title3).bold())
                 Spacer()
                 Picker("", selection: Binding(get: { task.isEvent ? "event" : task.isHabit ? "habit" : "task" }, set: { k in
                     task.kind = k
@@ -97,7 +97,7 @@ struct TaskEditor: View {
             Text(task.isEvent ? "Events show on your calendars only: no checkbox, no reflection."
                  : task.isHabit ? "Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you're becoming."
                  : "Tasks go on your checklist; checking one off asks for a short reflection.")
-                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                .font(.app(.caption)).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
 
@@ -136,16 +136,16 @@ struct TaskEditor: View {
                     Text(task.isBusy
                          ? "Blocks this time: it's taken out of your open time on Booking\(task.source == "google" || syncGoogle ? ", and shows as busy in Google Calendar" : "")."
                          : "Just for info: it shows on your calendars, but you're still free to be booked then.")
-                        .font(.verdana(.caption)).foregroundStyle(.secondary)
+                        .font(.app(.caption)).foregroundStyle(.secondary)
                 }
 
                 if !overlaps.isEmpty {
                     Section {
                         ForEach(overlaps, id: \.self) { line in
-                            Label(line, systemImage: "square.stack.3d.up").font(.verdana(.callout))
+                            Label(line, systemImage: "square.stack.3d.up").font(.app(.callout))
                         }
                         Text("That's fine: this task's reminders will still fire on time, even in the middle of the other one.")
-                            .font(.verdana(.caption)).foregroundStyle(.secondary)
+                            .font(.app(.caption)).foregroundStyle(.secondary)
                     } header: {
                         Text("Overlaps with")
                     }
@@ -155,7 +155,7 @@ struct TaskEditor: View {
                     Section("Synced with Google Calendar") {
                         Label("Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.",
                               systemImage: "arrow.triangle.2.circlepath")
-                            .font(.verdana(.callout))
+                            .font(.app(.callout))
                         if let u = task.externalURL.flatMap(URL.init(string:)) { Link("Open in Google Calendar", destination: u) }
                     }
                 } else {
@@ -180,12 +180,12 @@ struct TaskEditor: View {
                         Stepper("Times in total: \(cycleTimes)", value: $cycleTimes, in: 1...99)
                         Label("No dates: it stays on your list every day until you check it off (or mark it “didn't do it”), then takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back — \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total, then it's finished for good.",
                               systemImage: "flame")
-                            .font(.verdana(.caption)).foregroundStyle(.secondary)
+                            .font(.app(.caption)).foregroundStyle(.secondary)
                     } else if task.isLongTerm {
                         DatePicker("Every day until", selection: $endDate, in: task.startDate..., displayedComponents: .date)
                         Label("On your checklist and reminds you every day until \(endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) (\(max(0, Calendar.current.dateComponents([.day], from: task.startDate.startOfDay, to: endDate.startOfDay).day ?? 0) + 1) days). Check off each day on its own.",
                               systemImage: "repeat")
-                            .font(.verdana(.caption)).foregroundStyle(.secondary)
+                            .font(.app(.caption)).foregroundStyle(.secondary)
                     } else if task.recurrence.isRepeating {
                         Stepper(value: $task.recurrence.interval, in: 1...99) {
                             Text(task.recurrence.interval == 1 ? "Every \(task.recurrence.frequency.unit)"
@@ -205,7 +205,7 @@ struct TaskEditor: View {
                             Stepper("\(endCount) times", value: $endCount, in: 1...999)
                         }
                         Text(previewRecurrence.summary(start: task.startDate))
-                            .font(.verdana(.caption)).foregroundStyle(.secondary)
+                            .font(.app(.caption)).foregroundStyle(.secondary)
                     }
                     // "Keep it on my list until it's done" works with any repeat except long-term.
                     if !task.isEvent && !task.isLongTerm && !task.isCycle {
@@ -216,12 +216,12 @@ struct TaskEditor: View {
                             Text(task.recurrence.isRepeating
                                  ? "Each one shows up and reminds you every day until you check it off or mark it “didn't do it”, or until the next one arrives and takes its place."
                                  : "It shows up and reminds you every day until you check it off or mark it “didn't do it”. Then it's gone.")
-                                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                                .font(.app(.caption)).foregroundStyle(.secondary)
                             if !task.recurrence.isRepeating {
                                 Toggle("Has a due date", isOn: $hasDue)
                                 if hasDue {
                                     DatePicker("Due by", selection: $dueDate, in: task.startDate..., displayedComponents: .date)
-                                    Text("It keeps going past the due date, marked “Past due”.").font(.verdana(.caption)).foregroundStyle(.secondary)
+                                    Text("It keeps going past the due date, marked “Past due”.").font(.app(.caption)).foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -244,7 +244,7 @@ struct TaskEditor: View {
                         }
                     }
                     if hasTime {
-                        Text("During the task").font(.verdana(.callout).weight(.medium)).padding(.top, 4)
+                        Text("During the task").font(.app(.callout).weight(.medium)).padding(.top, 4)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)], alignment: .leading, spacing: 6) {
                             ForEach(Self.duringChoices.filter { -$0 < task.durationMinutes }, id: \.self) { off in
                                 Toggle(offsetString(off), isOn: setBinding($task.reminderOffsets, off))
@@ -259,10 +259,10 @@ struct TaskEditor: View {
                 } footer: {
                     if task.isImported {
                         Text("Imported from \(task.source == "calendly" ? "Calendly" : "Google Calendar"). Its title and time update on each import.")
-                            .font(.verdana(.caption)).foregroundStyle(.secondary)
+                            .font(.app(.caption)).foregroundStyle(.secondary)
                     } else if !hasTime && !task.channels.isEmpty {
                         Text("Tasks without a time remind at \(timeString(minutes: store.settings.untimedReminderMinutes)) on the day (change in Settings).")
-                            .font(.verdana(.caption)).foregroundStyle(.secondary)
+                            .font(.app(.caption)).foregroundStyle(.secondary)
                     }
                 }
 
@@ -272,7 +272,7 @@ struct TaskEditor: View {
                             ForEach(NagLevel.allCases) { l in Label(l.title, systemImage: l.symbol).tag(l) }
                         }
                         .pickerStyle(.segmented)
-                        Text(task.nagLevel.detail).font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text(task.nagLevel.detail).font(.app(.caption)).foregroundStyle(.secondary)
                         if task.nagLevel != .normal {
                             Picker("Comes back every", selection: Binding(get: { task.nagMinutes }, set: { task.nagEvery = $0 == 10 ? nil : $0 })) {
                                 ForEach(NagLevel.everyChoices, id: \.self) { m in Text(m == 60 ? "hour" : "\(m) min").tag(m) }
@@ -282,7 +282,7 @@ struct TaskEditor: View {
                     } header: { Text("For things you'd rather put off") } footer: {
                         if task.nagLevel == .strict {
                             Text("Blocks the apps on your distracting list (Screen Time) and the websites in Settings › Tough love, until this is checked off.")
-                                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                                .font(.app(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -307,7 +307,7 @@ struct TaskEditor: View {
                     }
                 }
                 if task.source == "gtasks" {
-                    Section { Label("Synced with Google Tasks: title, notes, due date and checking it off update Google too.", systemImage: "arrow.triangle.2.circlepath").font(.verdana(.caption)) }
+                    Section { Label("Synced with Google Tasks: title, notes, due date and checking it off update Google too.", systemImage: "arrow.triangle.2.circlepath").font(.app(.caption)) }
                 }
 
                 if google.isConnected && task.googleEventID == nil && task.source == nil && !task.isHabit {
@@ -316,11 +316,11 @@ struct TaskEditor: View {
                             Toggle(isOn: $syncGoogle) { Label("Sync with Google Calendar", systemImage: "arrow.triangle.2.circlepath") }
                             Text(syncGoogle ? "Creates it in your Google Calendar\(task.recurrence.isRepeating ? " (with the repeat schedule)" : ""); edits stay in sync both ways."
                                             : "Keep this event in Cadence only.")
-                                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                                .font(.app(.caption)).foregroundStyle(.secondary)
                         } else {
                             Toggle("Also add to Google Calendar", isOn: $addToGoogle)
                             if addToGoogle && task.recurrence.isRepeating {
-                                Text("The repeat schedule is copied to Google too.").font(.verdana(.caption)).foregroundStyle(.secondary)
+                                Text("The repeat schedule is copied to Google too.").font(.app(.caption)).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -447,7 +447,7 @@ struct TaskEditor: View {
             Text("Steps")
         } footer: {
             Text("Optional. Break the habit into steps you tick off each time, e.g. stretch, journal, make the bed. They start fresh every time it comes around; ticking the last one opens the check-off.")
-                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -485,12 +485,12 @@ struct TaskEditor: View {
             TextField("When and where", text: habitBinding(\.cue), prompt: Text("at 9 PM on the couch")).multilineTextAlignment(.leading)
             TextField("2-minute version", text: habitBinding(\.twoMinute), prompt: Text("read one page")).multilineTextAlignment(.leading)
             TextField("Right after, I get…", text: habitBinding(\.reward), prompt: Text("a cup of tea")).multilineTextAlignment(.leading)
-            if let s = task.habitSentence { Label(s, systemImage: "quote.opening").font(.verdana(.callout)).italic().foregroundStyle(.green) }
+            if let s = task.habitSentence { Label(s, systemImage: "quote.opening").font(.app(.callout)).italic().foregroundStyle(.green) }
         } header: {
             Text("Make it stick")
         } footer: {
             Text("Who you're becoming (identity), make it obvious (cue), easy (2 minutes) and satisfying (reward). For a habit to break, the Mac's screen time can track an app against a daily limit.")
-                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -510,7 +510,7 @@ struct TaskEditor: View {
                 }
                 Spacer()
                 if let presetSaved {
-                    Label("Saved “\(presetSaved)”", systemImage: "checkmark").font(.verdana(.caption)).foregroundStyle(.green)
+                    Label("Saved “\(presetSaved)”", systemImage: "checkmark").font(.app(.caption)).foregroundStyle(.green)
                 }
                 Button { presetName = task.title.trimmingCharacters(in: .whitespaces); namingPreset = true } label: {
                     Label("Save as preset", systemImage: "plus")
@@ -751,7 +751,7 @@ struct WeekdayPicker: View {
             ForEach(order, id: \.self) { wd in
                 let on = selection.contains(wd)
                 Text(cal.veryShortWeekdaySymbols[wd - 1])
-                    .font(.verdana(.callout).weight(.semibold))
+                    .font(.app(.callout).weight(.semibold))
                     .frame(width: 30, height: 30)
                     .foregroundStyle(on ? .white : .primary)
                     .background(Circle().fill(on ? Color.accentColor : Color.secondary.opacity(0.15)))

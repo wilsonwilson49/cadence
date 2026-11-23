@@ -28,7 +28,7 @@ struct NewMenu: View {
             Button { model.newTask(on: day) } label: { Label("New Task", systemImage: "checklist") }
             Button { model.newHabit() } label: { Label("New Habit", systemImage: "arrow.triangle.2.circlepath") }
             Button { model.newEvent(on: day) } label: { Label("New Event", systemImage: "calendar.badge.plus") }
-        } label: { Image(systemName: "plus.circle.fill").font(.verdana(.title3)) }
+        } label: { Image(systemName: "plus.circle.fill").font(.app(.title3)) }
     }
 }
 
@@ -58,8 +58,8 @@ struct TodayScreen: View {
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(greeting).foregroundStyle(.secondary)
-                            Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day())).font(.verdana(.title2).bold())
-                            Text(status(all, proj)).font(.verdana(.callout)).foregroundStyle(.secondary)
+                            Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day())).font(.app(.title2).bold())
+                            Text(status(all, proj)).font(.app(.callout)).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Ring(done: all.filter(\.isDone).count + proj.filter { $0.item?.isDone == true }.count, total: all.count + proj.count,
@@ -100,7 +100,7 @@ struct TodayScreen: View {
                             MobileRow(occ: o)
                                 .overlay(alignment: .topTrailing) {
                                     if let d = o.deadline {
-                                        Text("due \(d.formatted(.dateTime.weekday(.abbreviated))) \(timeString(d))").font(.verdana(.caption2).monospacedDigit()).foregroundStyle(.secondary)
+                                        Text("due \(d.formatted(.dateTime.weekday(.abbreviated))) \(timeString(d))").font(.app(.caption2).monospacedDigit()).foregroundStyle(.secondary)
                                     }
                                 }
                         }
@@ -121,7 +121,7 @@ struct TodayScreen: View {
                 }
                 Section {
                     Text("Checking an item off asks for a reflection of at least \(store.settings.minReflectionWords) words.")
-                        .font(.verdana(.footnote)).foregroundStyle(.secondary)
+                        .font(.app(.footnote)).foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Today")
@@ -169,7 +169,7 @@ struct HabitsScreen: View {
                     if habits.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "arrow.triangle.2.circlepath.circle").font(.system(size: 40)).foregroundStyle(.secondary)
-                            Text("No habits yet").font(.verdana(.title3).weight(.semibold))
+                            Text("No habits yet").font(.app(.title3).weight(.semibold))
                             Text("Start tiny: one thing you want to do every day, and its 2-minute version.").foregroundStyle(.secondary).multilineTextAlignment(.center)
                             Button("New Habit") { model.newHabit() }.buttonStyle(.borderedProminent)
                         }
@@ -182,7 +182,7 @@ struct HabitsScreen: View {
                 .padding()
             }
             .navigationTitle("Habits")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { model.newHabit() } label: { Image(systemName: "plus.circle.fill").font(.verdana(.title3)) } } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { model.newHabit() } label: { Image(systemName: "plus.circle.fill").font(.app(.title3)) } } }
         }
     }
 
@@ -191,7 +191,7 @@ struct HabitsScreen: View {
         let days = (stats[habits[0].id]?.grid.suffix(range) ?? []).map(\.day)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Tracker").font(.verdana(.headline))
+                Text("Tracker").font(.app(.headline))
                 Spacer()
                 Picker("", selection: $range) { Text("Week").tag(7); Text("2 wks").tag(14); Text("Month").tag(30) }
                     .pickerStyle(.segmented).frame(width: 190)
@@ -200,7 +200,7 @@ struct HabitsScreen: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Color.clear.frame(width: 96, height: 30)
                     ForEach(habits) { t in
-                        Text(t.title).font(.verdana(.caption)).lineLimit(1).frame(width: 96, height: 24, alignment: .leading)
+                        Text(t.title).font(.app(.caption)).lineLimit(1).frame(width: 96, height: 24, alignment: .leading)
                     }
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -227,9 +227,9 @@ struct HabitsScreen: View {
                 }
                 .defaultScrollAnchor(.trailing)
                 VStack(spacing: 4) {
-                    Image(systemName: "flame").font(.verdana(.caption)).foregroundStyle(.secondary).frame(height: 30)
+                    Image(systemName: "flame").font(.app(.caption)).foregroundStyle(.secondary).frame(height: 30)
                     ForEach(habits) { t in
-                        Text("\(stats[t.id]?.streak ?? 0)").font(.verdana(.caption).bold()).foregroundStyle(.orange).frame(height: 24)
+                        Text("\(stats[t.id]?.streak ?? 0)").font(.app(.caption).bold()).foregroundStyle(.orange).frame(height: 24)
                     }
                 }
             }
@@ -259,38 +259,38 @@ struct HabitsScreen: View {
             HStack(alignment: .top) {
                 RoundedRectangle(cornerRadius: 2).fill(t.color.color).frame(width: 4, height: 38)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t.title).font(.verdana(.headline))
-                    Text("\(t.planSummary ?? "Every day") · \((t.habit ?? HabitInfo()).styleLabel)").font(.verdana(.caption)).foregroundStyle(.secondary)
+                    Text(t.title).font(.app(.headline))
+                    Text("\(t.planSummary ?? "Every day") · \((t.habit ?? HabitInfo()).styleLabel)").font(.app(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 VStack(spacing: 0) {
-                    Image(systemName: "flame.fill").foregroundStyle(.orange).font(.verdana(.caption))
-                    Text("\(st.streak)").font(.verdana(.title3).bold())
+                    Image(systemName: "flame.fill").foregroundStyle(.orange).font(.app(.caption))
+                    Text("\(st.streak)").font(.app(.title3).bold())
                     Text("best \(st.best)").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
-            if let s = t.habitSentence { Text(s).font(.verdana(.callout)).italic().foregroundStyle(.secondary) }
+            if let s = t.habitSentence { Text(s).font(.app(.callout)).italic().foregroundStyle(.secondary) }
             HStack(spacing: 12) {
                 Text(st.rate.map { "\($0)% kept" } ?? "New")
                 Text("\(st.votes) vote\(st.votes == 1 ? "" : "s")")
                 if let two = t.habit?.twoMinute { Label(two, systemImage: "timer").lineLimit(1) }
             }
-            .font(.verdana(.caption)).foregroundStyle(.secondary)
+            .font(.app(.caption)).foregroundStyle(.secondary)
             if st.missTwice {
                 Label("Missed last time. Never miss twice: even the 2-minute version counts.", systemImage: "exclamationmark.circle")
-                    .font(.verdana(.caption)).foregroundStyle(.orange)
+                    .font(.app(.caption)).foregroundStyle(.orange)
             }
             HStack {
                 if let occ, !occ.isResolved {
                     Button { model.reflect(occ) } label: { Label("Done today…", systemImage: "checkmark") }.buttonStyle(.borderedProminent)
                     Button { model.reflect(occ, missed: true) } label: { Label("Didn't do it…", systemImage: "xmark") }.buttonStyle(.bordered)
                 } else if occ?.isDone == true {
-                    Label("Done today", systemImage: "checkmark").font(.verdana(.callout)).foregroundStyle(.green)
+                    Label("Done today", systemImage: "checkmark").font(.app(.callout)).foregroundStyle(.green)
                 } else if occ?.isMissed == true {
-                    Label("Not done today", systemImage: "xmark").font(.verdana(.callout)).foregroundStyle(.red)
+                    Label("Not done today", systemImage: "xmark").font(.app(.callout)).foregroundStyle(.red)
                 }
                 Spacer()
-                Button("Edit") { model.editing = t }.font(.verdana(.callout))
+                Button("Edit") { model.editing = t }.font(.app(.callout))
             }
             .controlSize(.small)
         }
@@ -313,13 +313,13 @@ struct WeekScreen: View {
                     let day = start.adding(days: i)
                     let occs = store.occurrences(on: day)
                     Section {
-                        if occs.isEmpty { Text("Nothing planned").foregroundStyle(.secondary).font(.verdana(.callout)) }
+                        if occs.isEmpty { Text("Nothing planned").foregroundStyle(.secondary).font(.app(.callout)) }
                         ForEach(occs.filter { !$0.isEvent }) { MobileRow(occ: $0, inDayList: true) }
                         ForEach(occs.filter(\.isEvent)) { MobileEventRow(occ: $0) }
                     } header: {
                         HStack {
                             Text(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())).foregroundStyle(day.isToday ? Theme.accent : .secondary)
-                            if day.isToday { Text("Today").font(.verdana(.caption2).bold()).foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Theme.solid)) }
+                            if day.isToday { Text("Today").font(.app(.caption2).bold()).foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Theme.solid)) }
                         }
                     }
                 }
@@ -361,12 +361,12 @@ struct FocusScreen: View {
             List {
                 Section {
                     HStack(spacing: 14) {
-                        Text("\(lv.level)").font(.verdana(.title).weight(.heavy)).foregroundStyle(.white).frame(width: 50, height: 50)
+                        Text("\(lv.level)").font(.app(.title).weight(.heavy)).foregroundStyle(.white).frame(width: 50, height: 50)
                             .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.solid))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Level \(lv.level) · \(points) points").font(.verdana(.headline))
+                            Text("Level \(lv.level) · \(points) points").font(.app(.headline))
                             ProgressView(value: Double(lv.into), total: Double(lv.span)).tint(Theme.accent)
-                            Text("\(Focus.streak(sessions))-day streak · \(lv.span - lv.into) to level \(lv.level + 1)").font(.verdana(.caption)).foregroundStyle(.secondary)
+                            Text("\(Focus.streak(sessions))-day streak · \(lv.span - lv.into) to level \(lv.level + 1)").font(.app(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -378,7 +378,7 @@ struct FocusScreen: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("\(s.finished) of \(s.picked) done in \(s.actualMinutes) min")
                                     Text("\(s.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute())) · \(s.focusPercent)% focused · \(s.device == "ios" ? "iPhone" : s.device == "mac" ? "Mac" : "Web")")
-                                        .font(.verdana(.caption)).foregroundStyle(.secondary)
+                                        .font(.app(.caption)).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Text("+\(s.points)").bold().foregroundStyle(.green)
@@ -415,10 +415,10 @@ struct FocusScreen: View {
                 let on = focus.finished.contains(o.id)
                 Button { focus.toggleFinished(o.id) } label: {
                     HStack {
-                        Image(systemName: on ? "checkmark.circle.fill" : "circle").foregroundStyle(on ? o.task.color.color : .secondary).font(.verdana(.title3))
+                        Image(systemName: on ? "checkmark.circle.fill" : "circle").foregroundStyle(on ? o.task.color.color : .secondary).font(.app(.title3))
                         Text(o.task.title).strikethrough(on).foregroundStyle(on ? .secondary : .primary)
                         Spacer()
-                        Text(o.isHabit ? "Habit" : "Task").font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text(o.isHabit ? "Habit" : "Task").font(.app(.caption)).foregroundStyle(.secondary)
                     }
                     .contentShape(Rectangle())
                 }
@@ -438,7 +438,7 @@ struct FocusScreen: View {
             let unreflected = r.finishedIds.compactMap(model.occurrence).filter { !$0.isResolved }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Time! \(r.finished) of \(r.picked) done").font(.verdana(.headline))
+                    Text("Time! \(r.finished) of \(r.picked) done").font(.app(.headline))
                     Text("\(r.focusPercent)% focused · +\(r.points) points").foregroundStyle(.secondary)
                 }
                 ForEach(unreflected) { o in
@@ -494,7 +494,7 @@ struct FocusScreen: View {
                         Image(systemName: selected.contains(o.id) ? "checkmark.square.fill" : "square").foregroundStyle(selected.contains(o.id) ? Theme.accent : .secondary)
                         Text(o.task.title).foregroundStyle(.primary)
                         Spacer()
-                        Text(o.isHabit ? "habit" : o.isUntilDone ? "until done" : "today").font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text(o.isHabit ? "habit" : o.isUntilDone ? "until done" : "today").font(.app(.caption)).foregroundStyle(.secondary)
                     }
                     .contentShape(Rectangle())
                 }
@@ -591,13 +591,13 @@ struct ReflectionsScreen: View {
             ForEach(list) { r in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(r.taskTitle).font(.verdana(.headline)).lineLimit(1)
-                        Text(r.isMissed ? "Didn't do it" : "Done").font(.verdana(.caption2).bold()).foregroundStyle(r.isMissed ? .red : .green)
+                        Text(r.taskTitle).font(.app(.headline)).lineLimit(1)
+                        Text(r.isMissed ? "Didn't do it" : "Done").font(.app(.caption2).bold()).foregroundStyle(r.isMissed ? .red : .green)
                             .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill((r.isMissed ? Color.red : .green).opacity(0.14)))
                         Spacer()
-                        Text(r.createdAt.formatted(.dateTime.month(.abbreviated).day())).font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text(r.createdAt.formatted(.dateTime.month(.abbreviated).day())).font(.app(.caption)).foregroundStyle(.secondary)
                     }
-                    Text(r.text).font(.verdana(.callout))
+                    Text(r.text).font(.app(.callout))
                 }
                 .padding(.vertical, 4)
             }
@@ -611,11 +611,22 @@ struct SettingsScreen: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var model: MobileModel
     @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
+    @AppStorage(AppFont.key) private var fontFamily = AppFont.defaultFamily
     var body: some View {
         Form {
             Section {
                 Picker("Theme", selection: $appearance) { ForEach(AppearanceMode.allCases) { Text($0.title).tag($0.rawValue) } }
-            } header: { Text("Appearance") } footer: { Text("This iPhone only. Dark is the default.") }
+                Picker("Font", selection: $fontFamily) {
+                    Section { ForEach(AppFont.presets, id: \.family) { p in Text(p.label).font(p.family == AppFont.system ? .body : .custom(p.family, size: 17)).tag(p.family) } }
+                    Section("All fonts") {
+                        ForEach(UIFont.familyNames.sorted().filter { f in !AppFont.presets.contains { $0.family == f } }, id: \.self) { f in
+                            Text(f).font(.custom(f, size: 17)).tag(f)
+                        }
+                    }
+                }
+                .pickerStyle(.navigationLink)
+                .onChange(of: fontFamily) { _, _ in CadenceMobileApp.styleNavigationBars() }
+            } header: { Text("Appearance") } footer: { Text("This iPhone only. Dark and Verdana are the defaults.") }
             Section {
                 Picker("Ring shows", selection: $store.settings.ringShowsLeft) {
                     Text("What's left").tag(true); Text("What's done").tag(false)
@@ -641,7 +652,7 @@ struct SettingsScreen: View {
             } header: { Text("Reflections") } footer: { Text("Every check-off needs a reflection. The minimum can't go below 20 words.") }
             Section {
                 Text("Google Calendar, Calendly, Google Tasks, booking and screen time are set up on the Mac app or the website; what they bring in syncs here.")
-                    .font(.verdana(.footnote)).foregroundStyle(.secondary)
+                    .font(.app(.footnote)).foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Settings")
@@ -679,7 +690,7 @@ struct AccountScreen: View {
                         Task { await sync.signIn(username: username, password: password, create: creating) }
                     }
                     .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty || password.isEmpty || sync.isSigningIn)
-                    if case .error(let msg) = sync.status { Text(msg).foregroundStyle(.red).font(.verdana(.footnote)) }
+                    if case .error(let msg) = sync.status { Text(msg).foregroundStyle(.red).font(.app(.footnote)) }
                 } footer: {
                     Text("Use the same account as the Mac app and the website. You can also use Cadence on this iPhone without an account; it just won't sync.")
                 }

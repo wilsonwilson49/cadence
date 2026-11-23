@@ -9,12 +9,21 @@ struct CadenceMobileApp: App {
     @Environment(\.scenePhase) private var phase
     @AppStorage(AppearanceMode.key) private var appearance = AppearanceMode.dark.rawValue
 
-    init() {
-        // Titles in Verdana, like the rest of the app and the Mac and web versions.
+    init() { Self.styleNavigationBars() }
+
+    /// Navigation titles in the app's font (Settings › Appearance). Called again when the font changes.
+    static func styleNavigationBars() {
         let nav = UINavigationBarAppearance()
         nav.configureWithDefaultBackground()
-        if let f = UIFont(name: "Verdana", size: 29) { nav.largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: f)] }
-        if let f = UIFont(name: "Verdana-Bold", size: 16) { nav.titleTextAttributes = [.font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: f)] }
+        let family = AppFont.family
+        func font(_ size: CGFloat, bold: Bool) -> UIFont {
+            if family == AppFont.system { return .systemFont(ofSize: size, weight: bold ? .bold : .regular) }
+            let base = UIFont(name: family, size: size * AppFont.scale) ?? .systemFont(ofSize: size)
+            guard bold, let d = base.fontDescriptor.withSymbolicTraits(.traitBold) else { return base }
+            return UIFont(descriptor: d, size: 0)
+        }
+        nav.largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: font(32, bold: false))]
+        nav.titleTextAttributes = [.font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: font(17, bold: true))]
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
     }
@@ -28,7 +37,7 @@ struct CadenceMobileApp: App {
                 .environmentObject(model.focus)
                 .environmentObject(model.study)
                 .tint(Theme.accent)
-                .font(.verdana(.body))
+                .modifier(AppFontScope())
                 .preferredColorScheme((AppearanceMode(rawValue: appearance) ?? .dark).colorScheme)
         }
         .onChange(of: phase) { _, p in model.scenePhaseChanged(p) }

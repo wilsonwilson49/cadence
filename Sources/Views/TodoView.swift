@@ -96,7 +96,7 @@ struct TodoView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 SectionTitle(text: title, symbol: symbol)
-                Text("\(items.filter(\.isDone).count)/\(items.count) done").font(.verdana(.caption)).foregroundStyle(.secondary)
+                Text("\(items.filter(\.isDone).count)/\(items.count) done").font(.app(.caption)).foregroundStyle(.secondary)
             }
             Card {
                 VStack(spacing: 0) {
@@ -151,7 +151,7 @@ struct TodoView: View {
         if groups.isEmpty {
             VStack(spacing: 10) {
                 Image(systemName: "calendar").font(.system(size: 36)).foregroundStyle(.secondary)
-                Text(search.isEmpty ? "No upcoming events" : "No matches").font(.verdana(.title3).weight(.semibold))
+                Text(search.isEmpty ? "No upcoming events" : "No matches").font(.app(.title3).weight(.semibold))
                 if search.isEmpty {
                     Text("Create one with New Event, or connect Google Calendar or Calendly in Settings.").foregroundStyle(.secondary)
                 }
@@ -176,7 +176,7 @@ struct TodoView: View {
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "checklist").font(.system(size: 36)).foregroundStyle(.secondary)
-            Text(search.isEmpty ? "No tasks yet" : "No matches").font(.verdana(.title3).weight(.semibold))
+            Text(search.isEmpty ? "No tasks yet" : "No matches").font(.app(.title3).weight(.semibold))
             if search.isEmpty {
                 Text("Create a task with ⌘N. Tasks can repeat daily, on certain weekdays, monthly or yearly.")
                     .foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -197,7 +197,7 @@ private struct TaskDefinitionRow: View {
         HStack(spacing: 12) {
             Circle().fill(task.color.color).frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 3) {
-                Text(task.title).font(.verdana(.body).weight(.medium))
+                Text(task.title).font(.app(.body).weight(.medium))
                 HStack(spacing: 10) {
                     Label(task.planSummary ?? "Once", systemImage: "repeat")
                     Label(task.timeMinutes.map { timeString(minutes: $0) } ?? "Any time", systemImage: "clock")
@@ -232,18 +232,18 @@ private struct TaskDefinitionRow: View {
                         Label("On Google Calendar", systemImage: "calendar")
                     }
                 }
-                .font(.verdana(.caption))
+                .font(.app(.caption))
                 .foregroundStyle(.secondary)
                 .labelStyle(CompactLabelStyle())
             }
             Spacer()
             HStack(spacing: 4) {
                 ForEach(task.channels.sorted { $0.rawValue < $1.rawValue }) { ch in
-                    Image(systemName: ch.symbol).font(.verdana(.caption)).foregroundStyle(.secondary).help(ch.label)
+                    Image(systemName: ch.symbol).font(.app(.caption)).foregroundStyle(.secondary).help(ch.label)
                 }
             }
             if task.recurrence.isRepeating && !task.isUntilDone {
-                Text("\(task.completions.count) done").font(.verdana(.caption)).foregroundStyle(.secondary).monospacedDigit()
+                Text("\(task.completions.count) done").font(.app(.caption)).foregroundStyle(.secondary).monospacedDigit()
             }
             Button("Edit") { model.edit(task) }.controlSize(.small)
             Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }

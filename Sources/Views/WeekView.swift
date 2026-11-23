@@ -90,9 +90,9 @@ struct WeekView: View {
                 let isToday = day.isToday
                 VStack(spacing: 2) {
                     Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                        .font(.verdana(.caption2).weight(.semibold)).foregroundStyle(.secondary)
+                        .font(.app(.caption2).weight(.semibold)).foregroundStyle(.secondary)
                     Text(day.formatted(.dateTime.day()))
-                        .font(.verdana(.title3).weight(isToday ? .bold : .regular))
+                        .font(.app(.title3).weight(isToday ? .bold : .regular))
                         .foregroundStyle(isToday ? .white : .primary)
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(isToday ? Color.accentColor : .clear))
@@ -496,7 +496,7 @@ struct WeekSelectionBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(picked.isEmpty ? "Click tasks to pick them, or pick a whole day:" : "\(picked.count) picked")
-                .font(.verdana(.callout).weight(.semibold))
+                .font(.app(.callout).weight(.semibold))
             if picked.isEmpty {
                 ForEach(days, id: \.self) { d in
                     Button(d.formatted(.dateTime.weekday(.abbreviated))) { pickDay(d) }.controlSize(.small)
@@ -538,12 +538,12 @@ struct WeekSelectionBar: View {
         }
         .sheet(isPresented: $checkingOff) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Check off \(picked.count) item\(picked.count == 1 ? "" : "s")").font(.verdana(.headline))
-                Text("One reflection, saved for each of them.").font(.verdana(.caption)).foregroundStyle(.secondary)
+                Text("Check off \(picked.count) item\(picked.count == 1 ? "" : "s")").font(.app(.headline))
+                Text("One reflection, saved for each of them.").font(.app(.caption)).foregroundStyle(.secondary)
                 TextEditor(text: $reflection).frame(height: 90).border(.separator)
                 let need = store.settings.minReflectionWords, have = countWords(reflection)
                 HStack {
-                    if have < need { Text("\(need - have) more word\(need - have == 1 ? "" : "s")").font(.verdana(.caption)).foregroundStyle(.secondary) }
+                    if have < need { Text("\(need - have) more word\(need - have == 1 ? "" : "s")").font(.app(.caption)).foregroundStyle(.secondary) }
                     Spacer()
                     Button("Cancel") { checkingOff = false }
                     Button("Check off") {

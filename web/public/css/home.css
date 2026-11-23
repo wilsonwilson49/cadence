@@ -17,9 +17,16 @@
   }
 }
 
+/* Settings › Appearance › Font (this device; Verdana unless changed). "custom" sets --sans inline to any installed font. */
+:root[data-font="system"] { --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; --base: 14px; }
+:root[data-font="helvetica"] { --sans: "Helvetica Neue", Helvetica, Arial, sans-serif; --base: 14px; }
+:root[data-font="georgia"] { --sans: Georgia, "Times New Roman", Times, serif; --base: 14.5px; }
+:root[data-font="mono"] { --sans: Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+:root[data-font="custom"] { --base: 14px; }
+
 * { box-sizing: border-box; }
 html { scroll-behavior: auto; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 13.5px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--text); font: var(--base, 13.5px)/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .muted { color: var(--muted); }

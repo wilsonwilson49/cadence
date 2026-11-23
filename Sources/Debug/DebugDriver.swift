@@ -42,6 +42,14 @@ enum DebugDriver {
                                                              items: [ProjectItem(title: "Pick dates"), ProjectItem(title: "Book flights", due: DateKey.string(Date().adding(days: 10)))])]
         }
         if let s = LaunchOptions.value("-screen"), let screen = Screen(rawValue: s) { model.screen = screen }
+        // -exportIcons <dir> [font family]: writes the icon PNGs (mac, ios, web) in that font, then quits.
+        if let i = LaunchOptions.args.firstIndex(of: "-exportIcons"), i + 1 < LaunchOptions.args.count {
+            let dir = URL(fileURLWithPath: LaunchOptions.args[i + 1])
+            let family = i + 2 < LaunchOptions.args.count && !LaunchOptions.args[i + 2].hasPrefix("-") ? LaunchOptions.args[i + 2] : AppFont.defaultFamily
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? AppIconArt.export(to: dir, family: family)
+            exit(0)
+        }
         // -nagPreview pushy|strict: shows that reminder window (for screenshots).
         if let l = LaunchOptions.value("-nagPreview"), let level = NagLevel(rawValue: l) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { model.nag.preview(level) }

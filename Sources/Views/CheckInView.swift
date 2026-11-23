@@ -40,7 +40,7 @@ struct CheckInView: View {
                     .frame(width: 46, height: 46)
                     .background(Circle().fill(Color.orange))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(reason).font(.verdana(.title2).bold())
+                    Text(reason).font(.app(.title2).bold())
                     Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) + " · "
                          + (items.isEmpty ? "nothing scheduled" : done == items.count ? "all done" : left == 0 ? "all settled" : "\(left) left"))
                         .foregroundStyle(.secondary)
@@ -72,7 +72,7 @@ struct CheckInView: View {
                         ForEach(Array(ordered.enumerated()), id: \.element.id) { i, occ in
                             if i == firstHabit || i == firstOngoing {
                                 Label(i == firstHabit ? "Habits" : "Until done", systemImage: i == firstHabit ? "arrow.triangle.2.circlepath" : "flame")
-                                    .font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                                    .font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(.top, i > 0 ? 8 : 2).padding(.bottom, 2)
                             } else if i > 0 { Divider().padding(.leading, 42) }
                             ChecklistRow(occ: occ, onToggle: { o in
@@ -92,14 +92,14 @@ struct CheckInView: View {
 
             if !upcoming.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Still ahead on your calendar").font(.verdana(.headline))
+                    Text("Still ahead on your calendar").font(.app(.headline))
                     ForEach(upcoming.prefix(4)) { ev in
                         HStack(spacing: 8) {
                             RoundedRectangle(cornerRadius: 2).fill(ev.color).frame(width: 3, height: 18)
                             Text(ev.start.map(timeString) ?? "").monospacedDigit().foregroundStyle(.secondary).frame(width: 74, alignment: .leading)
                             Text(ev.title).lineLimit(1)
                         }
-                        .font(.verdana(.callout))
+                        .font(.app(.callout))
                     }
                 }
             }

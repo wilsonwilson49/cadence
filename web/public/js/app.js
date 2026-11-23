@@ -1115,6 +1115,16 @@ function addBlockedSite(raw) {
   store.updateSettings({ blockedSites: [...list, d] }); render();
 }
 
+/** The app's typeface. Stored on this device and applied before first paint (see app.html); same choices as the Mac and iPhone. */
+const FONT_CHOICES = [['verdana', 'Verdana'], ['system', 'System'], ['helvetica', 'Helvetica'], ['georgia', 'Georgia'], ['mono', 'Menlo / monospace'], ['custom', 'Another font…']];
+const currentFont = () => { try { return localStorage.getItem('cadence:font') || 'verdana'; } catch { return 'verdana'; } };
+function setFont(v) {
+  try { localStorage.setItem('cadence:font', v); } catch { /* private mode: still applies for this visit */ }
+  const r = document.documentElement;
+  if (v.startsWith('custom:')) { r.dataset.font = 'custom'; r.style.setProperty('--sans', `"${v.slice(7).replace(/[^\w .-]/g, '')}", Verdana, sans-serif`); }
+  else { r.dataset.font = v; r.style.removeProperty('--sans'); }
+}
+
 /** Dark / light / match the system. Stored on this device and applied before first paint (see app.html). */
 const currentTheme = () => { try { return localStorage.getItem('cadence:theme') || 'dark'; } catch { return 'dark'; } };
 function setTheme(t) {
@@ -1136,6 +1146,11 @@ function settingsView() {
     <div><h3>Appearance</h3><div class="card">
       <div class="srow"><div>Theme<div class="small muted">This device. Dark is the default.</div></div>
         <select class="input" data-theme-pick>${[['dark', 'Dark'], ['light', 'Light'], ['system', 'Match the system']].map(([v, l]) => `<option value="${v}" ${currentTheme() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="srow"><div>Font<div class="small muted">This device. Verdana is the default; “Another font…” takes the name of any font installed on this computer.</div></div>
+        <div class="row" style="justify-content:flex-end;flex-wrap:wrap">
+          <select class="input" data-font-pick>${FONT_CHOICES.map(([v, l]) => `<option value="${v}" ${(currentFont().startsWith('custom:') ? 'custom' : currentFont()) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          ${currentFont().startsWith('custom:') || ui.fontCustom ? `<form class="row" data-form="font-custom"><input class="input" id="fontName" placeholder="e.g. Avenir Next" value="${esc(currentFont().startsWith('custom:') ? currentFont().slice(7) : '')}" style="min-width:160px" autocomplete="off"><button class="btn">Use</button></form>` : ''}</div></div>
+      <div class="srow"><div class="small muted" style="font-family:var(--sans)">The quick brown fox jumps over the lazy dog. 0123456789</div></div>
     </div></div>
 
     <div><h3>Tough love</h3><div class="card">
@@ -3624,6 +3639,10 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.pdate) { setProjectDate(el, el.value); return; }
   if (el.dataset.themePick !== undefined) { setTheme(el.value); return; }
+  if (el.dataset.fontPick !== undefined) {
+    if (el.value === 'custom') { ui.fontCustom = true; render(); setTimeout(() => $('#fontName')?.focus(), 0); return; }
+    ui.fontCustom = false; setFont(el.value); render(); return;
+  }
   if (el.dataset.siteSuggest !== undefined) { if (el.value) addBlockedSite(el.value); return; }
   if (el.dataset.pjDue !== undefined) { const v = el.value; if (v) projOps.setDue(v === 'none' ? null : M.dateKey(M.addDays(new Date(), Number(v)))); return; }
   if (el.dataset.selColor !== undefined) { const c = el.value; if (c) selEdit(t => { t.color = c; }, 'Color changed'); return; }
@@ -3748,6 +3767,11 @@ document.addEventListener('submit', async e => {
     const f = ($('#cardFront')?.value || '').trim(), b = ($('#cardBack')?.value || '').trim(), cid = $('#cardCourse')?.value;
     if (f && cid) store.editCourse(cid, c => { c.cards.push(M.newCard(f, b)); });
     setTimeout(() => $('#cardFront')?.focus(), 0);
+    return;
+  }
+  if (kind === 'font-custom') {
+    const name = ($('#fontName')?.value || '').replace(/[^\w .-]/g, '').trim();
+    if (name) { setFont(`custom:${name}`); ui.fontCustom = false; render(); toast(`Font: ${name}`, { icon: 'check' }); }
     return;
   }
   if (kind === 'site-add') { addBlockedSite($('#siteNew')?.value); setTimeout(() => $('#siteNew')?.focus(), 0); return; }

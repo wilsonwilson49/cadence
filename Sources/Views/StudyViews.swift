@@ -57,8 +57,8 @@ private struct StudySetup: View {
                 ForEach(StudyMode.startable) { m in
                     Button { mode = m } label: {
                         VStack(alignment: .leading, spacing: 6) {
-                            Label(m.title, systemImage: m.symbol).font(.verdana(.headline))
-                            Text(m.blurb).font(.verdana(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Label(m.title, systemImage: m.symbol).font(.app(.headline))
+                            Text(m.blurb).font(.app(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                         }
                         .padding(12)
@@ -114,7 +114,7 @@ private struct StudySetup: View {
                 PhaseBanner(course: c)
                 if !c.openMistakes.isEmpty {
                     Label("You'll start with \(c.openMistakes.count) thing\(c.openMistakes.count == 1 ? "" : "s") you got wrong last time.", systemImage: "arrow.uturn.backward.circle")
-                        .font(.verdana(.callout)).foregroundStyle(.orange)
+                        .font(.app(.callout)).foregroundStyle(.orange)
                 }
             }
             Picker("Each interval ends", selection: $draft.taskBased) {
@@ -126,11 +126,11 @@ private struct StudySetup: View {
                 HStack(spacing: 6) {
                     ForEach(Array(ids.enumerated()), id: \.element) { n, id in
                         if let i = draft.periods.firstIndex(where: { $0.id == id }) {
-                            if n > 0 { Image(systemName: "chevron.right").font(.verdana(.caption2)).foregroundStyle(.tertiary) }
+                            if n > 0 { Image(systemName: "chevron.right").font(.app(.caption2)).foregroundStyle(.tertiary) }
                             VStack(spacing: 4) {
-                                Label(draft.periods[i].title, systemImage: draft.periods[i].kind.symbol).font(.verdana(.caption).weight(.semibold)).lineLimit(1)
+                                Label(draft.periods[i].title, systemImage: draft.periods[i].kind.symbol).font(.app(.caption).weight(.semibold)).lineLimit(1)
                                 if draft.taskBased {
-                                    Text("\(draft.periods[i].tasks.count) task\(draft.periods[i].tasks.count == 1 ? "" : "s")").font(.verdana(.caption2)).foregroundStyle(.secondary)
+                                    Text("\(draft.periods[i].tasks.count) task\(draft.periods[i].tasks.count == 1 ? "" : "s")").font(.app(.caption2)).foregroundStyle(.secondary)
                                 } else {
                                     MinutesField(value: $draft.periods[i].minutes)
                                 }
@@ -148,7 +148,7 @@ private struct StudySetup: View {
             HStack {
                 Text(draft.taskBased ? "Tick off each interval's tasks, then move on."
                      : "About \(durationString(seconds: draft.cycleMinutes * draft.repeats * 60)) in all. Change any length; it's just for this session unless you save it.")
-                    .font(.verdana(.caption)).foregroundStyle(.secondary)
+                    .font(.app(.caption)).foregroundStyle(.secondary)
                 Spacer()
                 if let c = saved {
                     if c.periods != draft.periods || c.repeats != draft.repeats || c.autoAdvance != draft.autoAdvance || c.taskBased != draft.taskBased {
@@ -171,10 +171,10 @@ private struct StudySetup: View {
             HStack {
                 Text("How long")
                 MinutesField(value: $offlineMinutes, range: 0...600, choices: [30, 45, 60, 90, 120, 180])
-                Text(offlineMinutes == 0 ? "(0 = until I stop)" : "").font(.verdana(.caption)).foregroundStyle(.secondary)
+                Text(offlineMinutes == 0 ? "(0 = until I stop)" : "").font(.app(.caption)).foregroundStyle(.secondary)
             }
             Text("Close the laptop or walk away from it. If you use the computer during the session, Cadence notes it and reminds you.")
-                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -198,14 +198,14 @@ private struct StudySetup: View {
 
     private func lastSummary(_ l: StudyLog) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill").font(.verdana(.title2)).foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").font(.app(.title2)).foregroundStyle(.green)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Logged \(durationString(seconds: l.minutes * 60)) of \(l.title)").font(.verdana(.headline))
+                Text("Logged \(durationString(seconds: l.minutes * 60)) of \(l.title)").font(.app(.headline))
                 Text([l.mode.title,
                       l.mode == .dynamic ? "\(l.completed) period\(l.completed == 1 ? "" : "s")" : l.mode == .timed ? "\(l.completed) round\(l.completed == 1 ? "" : "s")" : nil,
                       l.mode == .offline ? (l.screenSeconds > 30 ? "computer used \(durationString(seconds: l.screenSeconds))" : "screen-free") : nil,
                       l.phase.map { "\($0.title) phase" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(.verdana(.caption)).foregroundStyle(.secondary)
+                    .font(.app(.caption)).foregroundStyle(.secondary)
             }
             Spacer()
             Button { study.lastLog = nil } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
@@ -224,9 +224,9 @@ struct PhaseBanner: View {
         let p = phase ?? course.phase
         let r = course.rules(for: p)
         HStack(spacing: 10) {
-            Text(p.title.uppercased()).font(.verdana(.caption).weight(.heavy)).foregroundStyle(.white)
+            Text(p.title.uppercased()).font(.app(.caption).weight(.heavy)).foregroundStyle(.white)
                 .padding(.horizontal, 8).padding(.vertical, 3).background(Capsule().fill(course.color.color))
-            Text(p.blurb).font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(2)
+            Text(p.blurb).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(2)
             Spacer()
             RuleChip(label: "Homework", rule: r.homework)
             RuleChip(label: "Quiz", rule: r.quiz)
@@ -243,7 +243,7 @@ struct RuleChip: View {
             Image(systemName: rule == .open ? "book" : rule == .textbook ? "text.book.closed" : "book.closed.fill").font(.system(size: 9))
             Text("\(label): \(rule.title)")
         }
-        .font(.verdana(.caption2).weight(.semibold)).foregroundStyle(c)
+        .font(.app(.caption2).weight(.semibold)).foregroundStyle(c)
         .padding(.horizontal, 7).padding(.vertical, 3)
         .background(Capsule().fill(c.opacity(0.13)))
     }
@@ -261,11 +261,11 @@ private struct RunningStudy: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Label(r.mode.title, systemImage: r.mode.symbol).font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
-                        Text(r.title).font(.verdana(.title2).bold())
+                        Label(r.mode.title, systemImage: r.mode.symbol).font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                        Text(r.title).font(.app(.title2).bold())
                     }
                     Spacer()
-                    Text("\(clockString(Int(r.elapsed(study.now)))) so far").font(.verdana(.callout).monospacedDigit()).foregroundStyle(.secondary)
+                    Text("\(clockString(Int(r.elapsed(study.now)))) so far").font(.app(.callout).monospacedDigit()).foregroundStyle(.secondary)
                     Button { study.update { $0.togglePause() } } label: {
                         Label(r.paused ? "Resume" : "Pause", systemImage: r.paused ? "play.fill" : "pause.fill")
                     }
@@ -306,7 +306,7 @@ private struct BigClock: View {
             VStack(spacing: 2) {
                 Text(clockString(seconds)).font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(seconds < 0 ? .orange : .primary)
-                Text(caption).font(.verdana(.callout)).foregroundStyle(.secondary)
+                Text(caption).font(.app(.callout)).foregroundStyle(.secondary)
             }
         }
         .frame(width: 200, height: 200)
@@ -325,7 +325,7 @@ private struct TimedRunView: View {
                 BigClock(seconds: st.secondsLeft, fraction: Double(st.secondsLeft) / max(1, total),
                          caption: st.onBreak ? "break" : "studying", tint: st.onBreak ? .green : .accentColor)
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(st.onBreak ? "Break" : "Round \(st.round) of \(run.rounds)").font(.verdana(.title3).bold())
+                    Text(st.onBreak ? "Break" : "Round \(st.round) of \(run.rounds)").font(.app(.title3).bold())
                     Text(st.onBreak ? "Stand up, stretch, drink some water, look away from the screen." : "Just \(run.title). Phone away.")
                         .foregroundStyle(.secondary)
                     HStack(spacing: 5) {
@@ -334,7 +334,7 @@ private struct TimedRunView: View {
                                 .frame(width: 26, height: 7)
                         }
                     }
-                    Text("\(run.studyMinutes) min study · \(run.breakMinutes) min break").font(.verdana(.caption)).foregroundStyle(.secondary)
+                    Text("\(run.studyMinutes) min study · \(run.breakMinutes) min break").font(.app(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
             }
@@ -354,7 +354,7 @@ private struct OfflineRunView: View {
                 BigClock(seconds: left ?? elapsed, fraction: left.map { Double($0) / Double(max(1, run.plannedMinutes * 60)) } ?? 1,
                          caption: left == nil ? "away" : (left ?? 0) < 0 ? "over" : "left", tint: .teal)
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Away from the screen").font(.verdana(.title3).bold())
+                    Text("Away from the screen").font(.app(.title3).bold())
                     Text("Close the laptop or walk away. Paper, textbook, whiteboard. Come back and end the session when you're done.")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Label(run.screenSeconds < 10 ? "Computer not used so far" : "Computer used \(durationString(seconds: run.screenSeconds)) so far",
@@ -381,11 +381,11 @@ private struct ClassPeriodRunView: View {
             if run.showPhase != false, let c = course { PhaseBanner(course: c, phase: run.phase) }
             // The cycle, with where you are.
             HStack(spacing: 6) {
-                Text("Cycle \(run.cycle)").font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                Text("Cycle \(run.cycle)").font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(Array(run.periods.enumerated()), id: \.element.id) { i, p in
                     Button { study.update { $0.index = i; $0.wrapUp = false; $0.periodStart = $0.elapsed() } } label: {
                         Label(p.title, systemImage: i < run.index || run.wrapUp ? "checkmark.circle.fill" : p.kind.symbol)
-                            .font(.verdana(.caption).weight(i == run.index && !run.wrapUp ? .bold : .regular))
+                            .font(.app(.caption).weight(i == run.index && !run.wrapUp ? .bold : .regular))
                             .padding(.horizontal, 9).padding(.vertical, 5)
                             .background(Capsule().fill(i == run.index && !run.wrapUp ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.05)))
                             .foregroundStyle(i < run.index || run.wrapUp ? .secondary : .primary)
@@ -409,7 +409,7 @@ private struct ClassPeriodRunView: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Label(p.title, systemImage: p.kind.symbol).font(.verdana(.title2).bold())
+                            Label(p.title, systemImage: p.kind.symbol).font(.app(.title2).bold())
                             if let rule { RuleChip(label: "Notes", rule: rule) }
                         }
                         if !p.blurb.isEmpty { Text(p.blurb).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
@@ -426,7 +426,7 @@ private struct ClassPeriodRunView: View {
                             .padding(.top, 2)
                         } else if run.taskBased {
                             Text("No tasks programmed for this period. Add them under Courses, or move on when you're done.")
-                                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                                .font(.app(.caption)).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
@@ -444,7 +444,7 @@ private struct ClassPeriodRunView: View {
                         Button("Add", action: addMistake).disabled(mistake.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                     if !run.mistakes.isEmpty {
-                        Text("This session: " + run.mistakes.joined(separator: " · ")).font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text("This session: " + run.mistakes.joined(separator: " · ")).font(.app(.caption)).foregroundStyle(.secondary)
                     }
                 }
                 HStack {
@@ -477,7 +477,7 @@ private struct ClassPeriodRunView: View {
     @ViewBuilder private func wrapUp(_ course: Course?) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Label(run.showPhase == false ? "All intervals done" : "Cycle \(run.cycle) done", systemImage: "flag.checkered").font(.verdana(.title2).bold())
+                Label(run.showPhase == false ? "All intervals done" : "Cycle \(run.cycle) done", systemImage: "flag.checkered").font(.app(.title2).bold())
                 Text(run.showPhase == false ? "Go again, or finish and log it." : "Repeat and move on to the next phase if it seems good.").foregroundStyle(.secondary)
                 HStack(spacing: 10) {
                     Button { study.update { $0.repeatCycle(phase: run.phase) } } label: {
@@ -518,7 +518,7 @@ struct MistakeList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Label(title, systemImage: "arrow.uturn.backward.circle").font(.verdana(.callout).weight(.semibold)).foregroundStyle(.orange)
+            Label(title, systemImage: "arrow.uturn.backward.circle").font(.app(.callout).weight(.semibold)).foregroundStyle(.orange)
             ForEach(course.openMistakes) { m in
                 HStack {
                     Button { store.editCourse(course.id) { c in if let i = c.mistakes.firstIndex(where: { $0.id == m.id }) { c.mistakes[i].resolvedAt = Date() } } } label: {
@@ -527,7 +527,7 @@ struct MistakeList: View {
                     .buttonStyle(.plain).help("Got it now")
                     Text(m.text)
                     Spacer()
-                    Text(m.addedAt.formatted(.dateTime.month(.abbreviated).day())).font(.verdana(.caption)).foregroundStyle(.secondary)
+                    Text(m.addedAt.formatted(.dateTime.month(.abbreviated).day())).font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -559,8 +559,8 @@ private struct StudyStats: View {
     private func tile(_ value: String, _ label: String, _ symbol: String, _ c: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Image(systemName: symbol).foregroundStyle(c)
-            Text(value).font(.verdana(.title2).bold().monospacedDigit())
-            Text(label).font(.verdana(.caption)).foregroundStyle(.secondary)
+            Text(value).font(.app(.title2).bold().monospacedDigit())
+            Text(label).font(.app(.caption)).foregroundStyle(.secondary)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -586,7 +586,7 @@ private struct StudyHistory: View {
                             Text(mins[i] > 0 ? "\(mins[i])" : "").font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
                             RoundedRectangle(cornerRadius: 3).fill(d.isToday ? Color.accentColor : Color.indigo.opacity(0.6))
                                 .frame(height: max(2, CGFloat(mins[i]) / CGFloat(top) * 90))
-                            Text(d.formatted(.dateTime.weekday(.narrow))).font(.verdana(.caption2)).foregroundStyle(.secondary)
+                            Text(d.formatted(.dateTime.weekday(.narrow))).font(.app(.caption2)).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -605,7 +605,7 @@ private struct StudyHistory: View {
                                 Text(l.title)
                                 Text([l.startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute()), l.mode.title,
                                       l.phase.map { "\($0.title) phase" }, l.note.isEmpty ? nil : l.note].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                    .font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
                             }
                             Spacer()
                             Text(durationString(seconds: l.minutes * 60)).monospacedDigit()
@@ -634,8 +634,8 @@ private struct CoursesPanel: View {
                         HStack {
                             RoundedRectangle(cornerRadius: 2).fill(c.color.color).frame(width: 4, height: 28)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(c.title).font(.verdana(.callout).weight(.medium))
-                                Text("\(c.phase.title)\(c.chapter.isEmpty ? "" : " · \(c.chapter)")").font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                Text(c.title).font(.app(.callout).weight(.medium))
+                                Text("\(c.phase.title)\(c.chapter.isEmpty ? "" : " · \(c.chapter)")").font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
                             }
                             Spacer()
                         }
@@ -654,7 +654,7 @@ private struct CoursesPanel: View {
                 .padding(.top, 4)
                 if courses.isEmpty {
                     Text("A preset is a set of intervals you study with: the class period, 25 on / 5 off, or your own. Make one per subject if you like (Chemistry, CS), each with its own lengths, tasks and phase.")
-                        .font(.verdana(.caption)).foregroundStyle(.secondary).padding(.top, 6)
+                        .font(.app(.caption)).foregroundStyle(.secondary).padding(.top, 6)
                 }
             }
             .frame(width: 220)
@@ -705,18 +705,18 @@ private struct CourseEditor: View {
                     }
                     .pickerStyle(.segmented).labelsHidden()
                     Text("These overlap a lot with the class periods, so it's guidance: some ideas to try while studying.")
-                        .font(.verdana(.caption)).foregroundStyle(.secondary)
+                        .font(.app(.caption)).foregroundStyle(.secondary)
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
                         GridRow {
-                            Text("Phase").font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
-                            Text("Homework").font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
-                            Text("Quiz").font(.verdana(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                            Text("Phase").font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                            Text("Homework").font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                            Text("Quiz").font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
                         }
                         ForEach(StudyPhase.allCases) { p in
                             GridRow {
                                 VStack(alignment: .leading, spacing: 0) {
                                     Text(p.title).fontWeight(p == c.phase ? .bold : .regular)
-                                    Text(p.blurb).font(.verdana(.caption2)).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(p.blurb).font(.app(.caption2)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 rulePicker(p, \.homework)
                                 rulePicker(p, \.quiz)
@@ -737,7 +737,7 @@ private struct CourseEditor: View {
                         .pickerStyle(.segmented).fixedSize().labelsHidden()
                     }
                     Text(c.taskBased ? "Each interval ends when you've ticked off its tasks." : "Each interval ends when its time is up (\(durationString(seconds: c.cycleMinutes * 60)) per round). Tasks are a checklist along the way.")
-                        .font(.verdana(.caption)).foregroundStyle(.secondary)
+                        .font(.app(.caption)).foregroundStyle(.secondary)
                     HStack(spacing: 14) {
                         HStack(spacing: 4) { Text("Repeat"); MinutesField(value: Binding(get: { c.repeats }, set: { v in edit { $0.repeats = v } }), range: 1...20, suffix: "×", choices: [1, 2, 3, 4, 6, 8]) }
                         Toggle("Move on by itself when time's up", isOn: Binding(get: { c.autoAdvance }, set: { v in edit { $0.autoAdvance = v } })).toggleStyle(.checkbox)
@@ -795,7 +795,7 @@ private struct CourseEditor: View {
             HStack(spacing: 8) {
                 Toggle("", isOn: Binding(get: { p.enabled }, set: { v in edit { $0.periods[i].enabled = v } })).labelsHidden()
                 Image(systemName: p.kind.symbol).foregroundStyle(.secondary).frame(width: 18)
-                TextField("Period name", text: bind(\.title)).textFieldStyle(.plain).font(.verdana(.body).weight(.medium))
+                TextField("Period name", text: bind(\.title)).textFieldStyle(.plain).font(.app(.body).weight(.medium))
                 if !c.taskBased {
                     MinutesField(value: Binding(get: { p.minutes }, set: { v in edit { $0.periods[i].minutes = v } }))
                 }
@@ -805,20 +805,20 @@ private struct CourseEditor: View {
             }
             .opacity(p.enabled ? 1 : 0.5)
             TextField("What to do in this period", text: bind(\.blurb), axis: .vertical)
-                .textFieldStyle(.plain).font(.verdana(.caption)).foregroundStyle(.secondary).padding(.leading, 52)
+                .textFieldStyle(.plain).font(.app(.caption)).foregroundStyle(.secondary).padding(.leading, 52)
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(Array(p.tasks.enumerated()), id: \.offset) { ti, t in
                     HStack {
-                        Image(systemName: "square").font(.verdana(.caption)).foregroundStyle(.secondary)
-                        Text(t).font(.verdana(.callout))
+                        Image(systemName: "square").font(.app(.caption)).foregroundStyle(.secondary)
+                        Text(t).font(.app(.callout))
                         Spacer()
-                        Button { edit { $0.periods[i].tasks.remove(at: ti) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).font(.verdana(.caption))
+                        Button { edit { $0.periods[i].tasks.remove(at: ti) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).font(.app(.caption))
                     }
                 }
                 HStack {
-                    Image(systemName: "plus").font(.verdana(.caption)).foregroundStyle(.secondary)
+                    Image(systemName: "plus").font(.app(.caption)).foregroundStyle(.secondary)
                     TextField("Add a task for this period", text: Binding(get: { newTask[p.id] ?? "" }, set: { newTask[p.id] = $0 }))
-                        .textFieldStyle(.plain).font(.verdana(.callout))
+                        .textFieldStyle(.plain).font(.app(.callout))
                         .onSubmit {
                             let t = (newTask[p.id] ?? "").trimmingCharacters(in: .whitespaces)
                             guard !t.isEmpty else { return }
@@ -846,7 +846,7 @@ struct MinutesField: View {
                 .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 46)
             Menu {
                 ForEach(choices.filter(range.contains), id: \.self) { m in Button("\(m) \(suffix)") { value = m } }
-            } label: { Text(suffix).font(.verdana(.caption)) }
+            } label: { Text(suffix).font(.app(.caption)) }
             .menuStyle(.borderlessButton).menuIndicator(.visible).fixedSize()
         }
     }

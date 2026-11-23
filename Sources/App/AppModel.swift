@@ -253,7 +253,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
             .environmentObject(m.calendly).environmentObject(m.importer)
             .environmentObject(m.focus).environmentObject(m.screenTime).environmentObject(m.study)
             .tint(Theme.accent)
-            .font(.verdana(.body))
+            .modifier(AppFontScope())
     }
 
     // MARK: Running in the background

@@ -142,7 +142,7 @@ final class NagEngine: ObservableObject {
                 onOpen: { [weak self] in preview ? self?.dismiss() : self?.openCadence(occ) })
             .environmentObject(model.store)
             .tint(Theme.accent)
-            .font(.verdana(.body))
+            .modifier(AppFontScope())
     }
 
     private func showPanel(_ occ: Occurrence, preview: Bool = false) {
@@ -225,18 +225,18 @@ struct NagView: View {
 
     var body: some View {
         VStack(spacing: strict ? 18 : 12) {
-            if preview { Text("Preview — this is what it looks like").font(.verdana(.caption)).foregroundStyle(.secondary) }
+            if preview { Text("Preview — this is what it looks like").font(.app(.caption)).foregroundStyle(.secondary) }
             Image(systemName: strict ? "lock.fill" : "exclamationmark.bubble.fill")
                 .font(.system(size: strict ? 40 : 28)).foregroundStyle(strict ? Color.red : .orange)
-            Text("STILL NOT DONE").font(.verdana(.caption).weight(.semibold)).tracking(1.5).foregroundStyle(.secondary)
+            Text("STILL NOT DONE").font(.app(.caption).weight(.semibold)).tracking(1.5).foregroundStyle(.secondary)
             Text(t.title).font(Theme.heading(strict ? 40 : 26)).multilineTextAlignment(.center).lineLimit(3)
             Text("\(since) · reminder \(max(1, count))\(count > 1 ? ", every \(t.nagMinutes) min" : "")")
-                .font(.verdana(.callout)).foregroundStyle(.secondary)
+                .font(.app(.callout)).foregroundStyle(.secondary)
             if !putOff.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Put off \(putOff.count) time\(putOff.count == 1 ? "" : "s") today:").font(.verdana(.caption).weight(.semibold))
+                    Text("Put off \(putOff.count) time\(putOff.count == 1 ? "" : "s") today:").font(.app(.caption).weight(.semibold))
                     ForEach(Array(putOff.suffix(3).enumerated()), id: \.offset) { _, p in
-                        Text("\(timeString(p.at)) — “\(p.reason)”").font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                        Text("\(timeString(p.at)) — “\(p.reason)”").font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 .padding(8).frame(maxWidth: 420, alignment: .leading)
@@ -244,7 +244,7 @@ struct NagView: View {
             }
             if strict {
                 Text("Your distracting apps and blocked websites stay blocked until this is done.")
-                    .font(.verdana(.callout)).foregroundStyle(.secondary)
+                    .font(.app(.callout)).foregroundStyle(.secondary)
             }
             HStack(spacing: 10) {
                 Button { onCheckOff() } label: { Label("Check it off…", systemImage: "checkmark.circle") .padding(.horizontal, 6) }
@@ -259,7 +259,7 @@ struct NagView: View {
             }
             if strict {
                 VStack(spacing: 8) {
-                    Text("Not now? Say why, in a few words.").font(.verdana(.callout).weight(.semibold))
+                    Text("Not now? Say why, in a few words.").font(.app(.callout).weight(.semibold))
                     HStack {
                         TextField("e.g. at dinner with family, back at 8", text: $reason)
                             .textFieldStyle(.roundedBorder).frame(width: 340)
@@ -270,7 +270,7 @@ struct NagView: View {
                         Button("Put it off") { onSnooze(minutes, reason) }.disabled(reasonWords < wordsNeeded)
                     }
                     if reasonWords < wordsNeeded {
-                        Text("\(wordsNeeded - reasonWords) more word\(wordsNeeded - reasonWords == 1 ? "" : "s")").font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text("\(wordsNeeded - reasonWords) more word\(wordsNeeded - reasonWords == 1 ? "" : "s")").font(.app(.caption)).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.top, 10)
@@ -368,8 +368,8 @@ final class DistractionBlocker {
         p.backgroundColor = .clear
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.contentView = NSHostingView(rootView: VStack(spacing: 6) {
-            Label("Blocked", systemImage: "lock.fill").font(.verdana(.headline)).foregroundStyle(.red)
-            Text(text).font(.verdana(.callout)).multilineTextAlignment(.center)
+            Label("Blocked", systemImage: "lock.fill").font(.app(.headline)).foregroundStyle(.red)
+            Text(text).font(.app(.callout)).multilineTextAlignment(.center)
             Button("Open Cadence") { [weak self] in self?.hideHUD(); self?.model.openChecklist() }.controlSize(.small)
         }
         .padding(16).frame(width: 420)

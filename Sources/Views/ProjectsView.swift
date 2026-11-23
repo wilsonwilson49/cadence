@@ -42,7 +42,7 @@ private struct ProjectList: View {
                     if gantt && !active.isEmpty {
                         HStack {
                             Text("Every project on one chart. Click a project's name to fold it; click a subtask to open its project.")
-                                .font(.verdana(.caption)).foregroundStyle(.secondary)
+                                .font(.app(.caption)).foregroundStyle(.secondary)
                             Spacer()
                             Button("Fold all") { collapsed = Set(active.map(\.id)) }.controlSize(.small)
                             Button("Unfold all") { collapsed = [] }.controlSize(.small)
@@ -57,7 +57,7 @@ private struct ProjectList: View {
                     } else if active.isEmpty {
                         Card {
                             VStack(alignment: .leading, spacing: 8) {
-                                Label("No projects yet", systemImage: "square.stack.3d.up").font(.verdana(.headline))
+                                Label("No projects yet", systemImage: "square.stack.3d.up").font(.app(.headline))
                                 Text("A project is anything with several steps: an essay, a science fair entry, a trip. Add subtasks, split those into smaller ones, and give any of them a deadline. Deadlines coming up show on your Today list.")
                                     .foregroundStyle(.secondary)
                                 Button { newProject() } label: { Label("Start a project", systemImage: "plus") }
@@ -76,7 +76,7 @@ private struct ProjectList: View {
                             }
                             .padding(.top, 8)
                         } label: {
-                            Text("Archived (\(archived.count))").font(.verdana(.headline))
+                            Text("Archived (\(archived.count))").font(.app(.headline))
                         }
                     }
                 }
@@ -108,8 +108,8 @@ private struct ProjectCard: View {
                 HStack(alignment: .top) {
                     RoundedRectangle(cornerRadius: 2).fill(project.color.color).frame(width: 4, height: 34)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(project.title.isEmpty ? "Untitled project" : project.title).font(.verdana(.headline)).lineLimit(1)
-                        Text(p.total == 0 ? "No subtasks yet" : "\(p.done) of \(p.total) done").font(.verdana(.caption)).foregroundStyle(.secondary)
+                        Text(project.title.isEmpty ? "Untitled project" : project.title).font(.app(.headline)).lineLimit(1)
+                        Text(p.total == 0 ? "No subtasks yet" : "\(p.done) of \(p.total) done").font(.app(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     if p.total > 0 { ProgressRing(done: p.done, total: p.total, size: 34, lineWidth: 4) }
@@ -118,7 +118,7 @@ private struct ProjectCard: View {
                 HStack(spacing: 6) {
                     if let d = project.due { DueChip(due: d, done: project.isDone) }
                     if overdue > 0 {
-                        Label("\(overdue) overdue", systemImage: "exclamationmark.circle.fill").font(.verdana(.caption2).weight(.semibold)).foregroundStyle(.red)
+                        Label("\(overdue) overdue", systemImage: "exclamationmark.circle.fill").font(.app(.caption2).weight(.semibold)).foregroundStyle(.red)
                     }
                     Spacer()
                 }
@@ -129,7 +129,7 @@ private struct ProjectCard: View {
                         Spacer()
                         DueChip(due: n.item.due!, compact: true)
                     }
-                    .font(.verdana(.caption))
+                    .font(.app(.caption))
                 }
             }
             .padding(14)
@@ -215,7 +215,7 @@ private struct ProjectDetail: View {
                         DayButton(title: "Deadline", symbol: "flag.fill", key: Binding(get: { project.due }, set: { v in edit { $0.due = v } }),
                                   status: DeadlineStatus.of(due: p.due, done: p.isDone))
                         Text(prog.total == 0 ? "Add subtasks below" : "\(prog.done) of \(prog.total) done")
-                            .font(.verdana(.callout)).foregroundStyle(.secondary)
+                            .font(.app(.callout)).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
@@ -274,7 +274,7 @@ private struct ProjectDetail: View {
             Spacer()
             Text("Click to pick (⌘/⇧ for several). The dashed + boxes add subtasks.").foregroundStyle(.secondary)
         }
-        .font(.verdana(.caption))
+        .font(.app(.caption))
     }
 
     /// Under the timeline and map: edit the one picked row.
@@ -282,7 +282,7 @@ private struct ProjectDetail: View {
         if editor.picked.count == 1, let sid = editor.picked.first, let row = p.rows(collapsed: collapsed).first(where: { $0.id == sid }) {
             Card {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Selected").font(.verdana(.caption)).foregroundStyle(.secondary)
+                    Text("Selected").font(.app(.caption)).foregroundStyle(.secondary)
                     ItemRow(editor: editor, row: row, collapsed: $collapsed, focused: $focusedItem, showPath: true)
                 }
             }
@@ -362,7 +362,7 @@ private struct ProjectDetail: View {
                 })
         }
         Text("Tip: Return adds the next subtask, Tab moves it in a level, ⇧Tab out. Click a row's edge to pick it (⌘ or ⇧ for several, or ⇧-drag a box), then change them all from the bar. Press ⌘/ for every shortcut.")
-            .font(.verdana(.caption)).foregroundStyle(.secondary)
+            .font(.app(.caption)).foregroundStyle(.secondary)
     }
 
     private func addTop() {
@@ -420,13 +420,13 @@ private struct ItemRow: View {
                 .onSubmit { addSibling() }
 
             if hasKids {
-                Text("\(p.done)/\(p.total)").font(.verdana(.caption).monospacedDigit()).foregroundStyle(.secondary)
+                Text("\(p.done)/\(p.total)").font(.app(.caption).monospacedDigit()).foregroundStyle(.secondary)
                 ProgressView(value: Double(p.done), total: Double(p.total)).frame(width: 50).controlSize(.small)
             }
             if item.isUrgent || hovering {
                 Button { edit { p in p.update(item.id) { $0.urgent = item.isUrgent ? nil : true } } } label: {
                     Label("Urgent", systemImage: item.isUrgent ? "exclamationmark.circle.fill" : "exclamationmark.circle")
-                        .font(.verdana(.caption).weight(.semibold))
+                        .font(.app(.caption).weight(.semibold))
                         .foregroundStyle(item.isUrgent ? Color.red : .secondary)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Capsule().fill((item.isUrgent ? Color.red : .secondary).opacity(item.isUrgent ? 0.14 : 0.08)))
@@ -435,7 +435,7 @@ private struct ItemRow: View {
                 .help(item.isUrgent ? "Urgent: on today's list and in today's progress ring. Click to unmark. (U)" : "Mark urgent: put it on today's list and in today's progress ring (U)")
             }
             if row.conflict {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.verdana(.caption))
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.app(.caption))
                     .help("This deadline is after \(row.limit.map(shortDay) ?? "")—the deadline of what it's part of.")
             }
             if hovering || item.start != nil {
@@ -518,7 +518,7 @@ struct DayButton: View {
                     Text(placeholder ?? title)
                 }
             }
-            .font(.verdana(.caption).weight(.medium).monospacedDigit())
+            .font(.app(.caption).weight(.medium).monospacedDigit())
             .foregroundStyle(key == nil ? Color.secondary : status == .later || status == .none ? Color.primary : status.color)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(Capsule().fill((key == nil || status == .later || status == .none ? Color.secondary : status.color).opacity(key == nil ? 0.08 : 0.15)))
@@ -527,7 +527,7 @@ struct DayButton: View {
         .help(key == nil ? "Set a \(title.lowercased())" : "Change the \(title.lowercased())")
         .popover(isPresented: $open) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(title).font(.verdana(.headline))
+                Text(title).font(.app(.headline))
                 DatePicker(title, selection: $picked, displayedComponents: .date).datePickerStyle(.graphical).labelsHidden()
                 HStack {
                     if key != nil { Button("Remove", role: .destructive) { key = nil; open = false } }
@@ -578,7 +578,7 @@ struct ProjectUpcomingSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     SectionTitle(text: "Coming up in projects", symbol: "flag", count: list.count)
-                    Text("not counted in today's progress").font(.verdana(.caption)).foregroundStyle(.secondary)
+                    Text("not counted in today's progress").font(.app(.caption)).foregroundStyle(.secondary)
                     Spacer()
                     if store.projectToday().isEmpty { ProjectTodayMenu() }
                 }
@@ -605,7 +605,7 @@ struct ProjectTodayMenu: View {
         } label: {
             Text("On today: \(projectTodayChoices.first { $0.0 == store.settings.projectTodayDays }?.1.lowercased() ?? "due today")")
         }
-        .menuStyle(.borderlessButton).fixedSize().font(.verdana(.caption))
+        .menuStyle(.borderlessButton).fixedSize().font(.app(.caption))
         .help("Which until-done tasks and project subtasks join today’s list and its progress ring (urgent ones always do)")
     }
 }
@@ -638,7 +638,7 @@ private struct ProjectDeadlineRow: View {
                     }
                 }
                 Text(([d.project.title.isEmpty ? "Untitled project" : d.project.title] + d.path).joined(separator: " › "))
-                    .font(.verdana(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             if let due = d.due { DueChip(due: due, done: done) }
