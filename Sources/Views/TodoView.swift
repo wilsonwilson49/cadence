@@ -120,9 +120,9 @@ struct TodoView: View {
     @ViewBuilder private var taskList: some View {
         let tasks = store.tasks.filter { $0.archived != true && !$0.isEvent && !$0.isHabit && matches($0.title) }
         let untilDone = tasks.filter(\.isUntilDone).sorted { $0.startDate > $1.startDate }
-        let repeating = tasks.filter { !$0.isUntilDone && $0.recurrence.isRepeating }.sorted { $0.title < $1.title }
+        let repeating = tasks.filter { !$0.isUntilDone && !$0.isBonus && $0.recurrence.isRepeating }.sorted { $0.title < $1.title }
         let oneOff = tasks.filter { !$0.isUntilDone && !$0.recurrence.isRepeating && !$0.isBonus }.sorted { $0.startDate > $1.startDate }
-        let bonus = tasks.filter(\.isBonus).sorted { ($0.bonusUsedUp ? 1 : 0, $1.createdAt) < ($1.bonusUsedUp ? 1 : 0, $0.createdAt) }
+        let bonus = tasks.filter(\.isBonus).sorted { ($0.bonusFinished ? 1 : 0, $1.createdAt) < ($1.bonusFinished ? 1 : 0, $0.createdAt) }
         if tasks.isEmpty { emptyState }
         if !untilDone.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
@@ -207,9 +207,11 @@ private struct TaskDefinitionRow: View {
                 Text(task.title).font(.app(.body).weight(.medium))
                 HStack(spacing: 10) {
                     if task.isBonus {
-                        Label("Bonus · \(task.bonusSummary)", systemImage: "star").foregroundStyle(task.bonusUsedUp ? Color.green : .secondary)
-                        if task.startDate.startOfDay > Date().startOfDay {
-                            Label("From \(task.startDate.formatted(.dateTime.month(.abbreviated).day()))", systemImage: "calendar")
+                        Label(task.bonusFinished ? "Bonus · all done" : "Bonus · \(task.bonusSummary)", systemImage: "star")
+                            .foregroundStyle(task.bonusFinished ? Color.green : .secondary)
+                        if let r = task.bonusRepeatSummary { Label(r, systemImage: "repeat") }
+                        if !task.bonusFinished, task.bonusRound(on: Date()) == nil || task.bonusUsedUp, let next = task.bonusNextRound(after: Date()) {
+                            Label("Next: \(next.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))", systemImage: "arrow.forward.circle")
                         }
                     } else {
                     Label(task.planSummary ?? "Once", systemImage: "repeat")

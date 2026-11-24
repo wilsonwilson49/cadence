@@ -266,13 +266,37 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   const three = { ...once, id: 'b3', bonusLimit: 3, completions: { '2026-11-23': 'x', '2026-11-23#2': 'x' } };
   check(M2.nextBonusKey(three, day) === '2026-11-23#3' && M2.bonusKeysOn(three, day).join() === '2026-11-23,2026-11-23#2', 'bonus: second and third the same day get their own keys');
   check(M2.bonusLeft(three) === 1 && M2.bonusSummary(three) === '2 of 3 done' && !M2.makeOccurrence(three, day).done, 'bonus: counts toward its limit');
-  const many = { ...once, id: 'bn', bonusLimit: 0, completions: Object.fromEntries([...Array(12)].map((_, i) => [`2026-11-${10 + i}`, 'x'])) };
+  const many = { ...once, id: 'bn', bonusLimit: 0, startDate: new Date(2026, 10, 1).toISOString(), completions: Object.fromEntries([...Array(12)].map((_, i) => [`2026-11-${10 + i}`, 'x'])) };
   check(M2.bonusLeft(many) == null && M2.bonusListed(many, later) && M2.bonusSummary(many) === 'Done 12 times · no limit', 'bonus: no limit');
   check(M2.parseKey('2026-11-23#2').getDate() === 23 && M2.makeOccurrence(three, day, '2026-11-23#2').done, 'bonus: keys with #n read as their day');
   const habit = { id: 'h', kind: 'habit', title: 'Read', startDate: day.toISOString(), recurrence: { ...rec, frequency: 'daily' }, completions: { '2026-11-22': 'x' } };
   check(!M2.bonusUsedUp(habit), 'bonus: "used up" never applies to other tasks');
   check(M2.focusPoints({ finished: 2, picked: 2, focusPercent: 95, bonus: 2 }) === 95 && M2.focusPoints({ finished: 0, picked: 0, focusPercent: 50, bonus: 1 }) === 15,
     'bonus: 15 points each, multiplied, not part of clearing the list');
+}
+// Repeating bonus tasks: a fresh round each time it comes around (schedule), or after a break (cycle).
+{
+  const M2 = await import('../public/js/model.js');
+  const rec = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } }, D = (m, d) => new Date(2026, m, d);
+  const daily = { id: 'd', kind: 'bonus', title: 'Push-ups', startDate: D(10, 20).toISOString(), recurrence: { ...rec, frequency: 'daily' }, bonusLimit: 2,
+    completions: { '2026-11-23': 'x', '2026-11-23#2': 'x', '2026-11-22': 'x' } };
+  check(!M2.isHabit(daily) && !M2.occurs(daily, D(10, 23)), 'bonus repeat: not a habit, not on day lists');
+  check(M2.bonusUsedUp(daily, D(10, 23)) && M2.bonusListed(daily, D(10, 23)) && M2.makeOccurrence(daily, D(10, 23)).done, 'bonus repeat: used up today, shown ticked');
+  check(M2.bonusLeft(daily, D(10, 22)) === 1 && M2.bonusLeft(daily, D(10, 24)) === 2 && M2.bonusListed(daily, D(10, 24)), 'bonus repeat: each day starts fresh, nothing carries over');
+  check(M2.bonusNextRound(daily, D(10, 23)).getDate() === 24 && M2.bonusRepeatSummary(daily) === 'Every day, each time', 'bonus repeat: next round, summary');
+  const weekly = { ...daily, id: 'w', bonusLimit: undefined, recurrence: { ...rec, frequency: 'weekly', weekdays: [2] }, completions: { '2026-11-25': 'x' } };   // Mondays
+  const r = M2.bonusRound(weekly, D(10, 25));
+  check(M2.dateKey(r.start) === '2026-11-23' && M2.dateKey(r.end) === '2026-11-30' && M2.bonusUsedUp(weekly, D(10, 27)) && !M2.bonusListed(weekly, D(10, 27)) && M2.bonusListed(weekly, D(10, 30)),
+    'bonus repeat: weekly round lasts until the next Monday');
+  const ending = { ...daily, id: 'e', completions: {}, recurrence: { ...rec, frequency: 'daily', end: { onDate: { _0: D(10, 25).toISOString() } } } };
+  check(M2.bonusListed(ending, D(10, 25)) && !M2.bonusListed(ending, D(10, 26)) && M2.bonusFinished(ending, D(10, 26)), 'bonus repeat: stops after its end date');
+  const cyc = { id: 'c', kind: 'bonus', title: 'Deep clean', startDate: D(10, 1).toISOString(), recurrence: rec, bonusLimit: 2, cycleGapDays: 7, cycleTimes: 3,
+    completions: { '2026-11-03': 'x', '2026-11-05': 'x' } };
+  check(M2.bonusListed(cyc, D(10, 5)) && !M2.bonusListed(cyc, D(10, 8)) && M2.bonusListed(cyc, D(10, 12)) && M2.bonusLeft(cyc, D(10, 12)) === 2,
+    'bonus cycle: used up, 7-day break, then a fresh round');
+  check(M2.bonusRepeatSummary(cyc) === 'Back 1 week after it’s done · round 2 of 3' && !M2.bonusFinished(cyc, D(10, 8)), 'bonus cycle: summary');
+  const all = { ...cyc, cycleTimes: 1 };
+  check(M2.bonusFinished(all, D(10, 9)) && !M2.bonusListed(all, D(10, 20)), 'bonus cycle: done for good after its last round');
 }
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

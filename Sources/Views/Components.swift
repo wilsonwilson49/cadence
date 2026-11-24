@@ -222,8 +222,14 @@ struct ChecklistRow: View {
                             .foregroundStyle(occ.isOverdue ? .red : .secondary)
                     }
                     if occ.task.isBonus {
+                        // "2× today" only when the round is longer than today (otherwise the summary already says it).
                         let today = occ.task.bonusKeys(on: occ.day).count
-                        Label("Bonus · \(occ.task.bonusSummary)\(today > 0 && !occ.isDone ? " · \(today)× today" : "")", systemImage: "star")
+                        let showToday = today > 0 && !occ.isDone && today != occ.task.bonusRoundKeys(on: occ.day).count
+                        Label("Bonus · \(occ.task.bonusSummary(on: occ.day))\(showToday ? " · \(today)× today" : "")", systemImage: "star")
+                        if let r = occ.task.bonusRepeatSummary, !compact { Label(r, systemImage: "repeat").lineLimit(1) }
+                        if occ.isDone, let next = occ.task.bonusNextRound(after: occ.day), !compact {
+                            Text("back \(next.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))")
+                        }
                         if !compact && !occ.isDone { Text("+\(Bonus.points) in focus").foregroundStyle(.yellow) }
                     } else if let s = occ.start {
                         Label(timeString(s), systemImage: "clock")
@@ -233,7 +239,7 @@ struct ChecklistRow: View {
                     if occ.isUntilDone && !compact && !occ.isResolved {
                         Label(occ.task.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1)
                     }
-                    if let plan = occ.task.planSummary, !compact {
+                    if let plan = occ.task.planSummary, !compact, !occ.task.isBonus {
                         Label(plan, systemImage: occ.task.isUntilDone ? "flame" : "repeat").lineLimit(1)
                     }
                     if let trigger = occ.task.after.flatMap(store.task) {
@@ -363,7 +369,7 @@ struct OccurrenceMenu: View {
             Button("Didn't do it… (reflect on why)") { model.beginReflection(occ, missed: true) }
         }
         Button("Edit task…") { model.edit(occ.task) }
-        if occ.task.recurrence.isRepeating && !occ.task.isUntilDone {
+        if occ.task.recurrence.isRepeating && !occ.task.isUntilDone && !occ.task.isBonus {
             Button("Skip this occurrence") { store.skip(occ) }
         }
         Divider()
@@ -379,7 +385,7 @@ struct DeleteMenu: View {
 
     var body: some View {
         let t = occ.task, verb = t.isImported ? "Hide" : "Delete"
-        if t.recurrence.isRepeating {
+        if t.recurrence.isRepeating && !t.isBonus {
             let day = (t.isUntilDone ? t.currentRepStart(on: occ.day) : nil) ?? occ.day
             Menu("\(verb)…") {
                 Button("Only this one (\(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())))") {

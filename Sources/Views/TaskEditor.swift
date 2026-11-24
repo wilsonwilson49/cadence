@@ -68,8 +68,9 @@ struct TaskEditor: View {
                     let wasBonus = task.isBonus
                     task.kind = k
                     if k == "bonus" {
-                        // Optional extras: no date to miss, no schedule, no reminders.
-                        task.recurrence = Recurrence(); endMode = 0; task.mode = nil; task.habit = nil
+                        // Optional extras: no date to miss, no time, no reminders. A repeat schedule (or a task's
+                        // "after it's done, with a break") carries over.
+                        task.mode = nil; task.habit = nil
                         task.after = nil; task.afterMinutes = nil; task.armedAt = nil; task.armedBy = nil
                         task.channels = []; task.nag = nil; hasTime = false
                         if isNew && task.color == .blue { task.color = .yellow }
@@ -472,9 +473,13 @@ struct TaskEditor: View {
     @ViewBuilder private var bonusSection: some View {
         let limit = task.bonusLimit ?? 1
         let saved = store.task(task.id)
+        let repeats = task.cycleGapDays != nil || task.recurrence.isRepeating
         Section {
-            DatePicker("On your list from", selection: $task.startDate, displayedComponents: .date)
-            Picker("Can be checked off", selection: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 })) {
+            DatePicker(repeats ? "Starts" : "On your list from", selection: $task.startDate, displayedComponents: .date)
+            Picker(repeats ? "Each time, it can be checked off" : "Can be checked off", selection: Binding(get: { limit }, set: {
+                task.bonusLimit = $0 == 1 ? nil : $0
+                if $0 <= 0 { task.cycleGapDays = nil; task.cycleTimes = nil }   // with no limit, it's never "done"
+            })) {
                 ForEach(Array(Set(Bonus.limitChoices + [limit])).sorted { ($0 <= 0 ? Int.max : $0) < ($1 <= 0 ? Int.max : $1) }, id: \.self) { n in
                     Text(Bonus.limitLabel(n)).tag(n)
                 }
@@ -484,15 +489,67 @@ struct TaskEditor: View {
             }
             if let saved, saved.bonusCount > 0 {
                 LabeledContent("So far") {
-                    Text("\(saved.bonusSummary)\(saved.bonusUsedUp ? ": off your list" : "")").foregroundStyle(.secondary)
+                    Text("Checked off \(saved.bonusCount) time\(saved.bonusCount == 1 ? "" : "s")\(saved.bonusFinished ? ": all done" : repeats ? " (this time: \(saved.bonusSummary.lowercased()))" : "")")
+                        .foregroundStyle(.secondary)
                 }
             }
         } header: { Text("Bonus") } footer: {
-            Text(limit <= 0 ? "No limit: it stays on your list, and you can check it off as many times as you like (several times a day too)."
-                 : limit == 1 ? "Check it off once and it's done for good. It never shows as overdue or missed if you don't."
-                 : "It stays on your list until you've checked it off \(limit) times (several times a day is fine), then it's done for good.")
+            Text(limit <= 0 ? "No limit: check it off as many times as you like (several times a day too)\(repeats ? ", each time it comes around" : "")."
+                 : limit == 1 ? (repeats ? "Check it off once each time it comes around." : "Check it off once and it's done for good. It never shows as overdue or missed if you don't.")
+                 : "It stays on your list until you've checked it off \(limit) times (several times a day is fine)\(repeats ? ", then waits until it comes around again" : ", then it's done for good").")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
+        Section {
+            Picker("Comes back", selection: bonusRepeat) {
+                Text("No, just once").tag(Frequency.none.rawValue)
+                ForEach(Frequency.allCases.filter { $0 != .none }) { Text($0.label).tag($0.rawValue) }
+                if limit > 0 { Text("After it's done, with a break").tag("cycle") }
+            }
+            if task.cycleGapDays != nil {
+                HStack {
+                    Stepper(value: $cycleGap, in: 1...365) { Text("Break before it comes back: \(cycleGap)") }
+                    Picker("", selection: $cycleWeeks) { Text(cycleGap == 1 ? "day" : "days").tag(false); Text(cycleGap == 1 ? "week" : "weeks").tag(true) }
+                        .labelsHidden().fixedSize()
+                }
+                Stepper("Times in total: \(cycleTimes)", value: $cycleTimes, in: 1...99)
+                Label("Once it's been checked off\(limit == 1 ? "" : " \(limit) times"), it takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back: \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total.",
+                      systemImage: "flame")
+                    .font(.app(.caption)).foregroundStyle(.secondary)
+            } else if task.recurrence.isRepeating {
+                Stepper(value: $task.recurrence.interval, in: 1...99) {
+                    Text(task.recurrence.interval == 1 ? "Every \(task.recurrence.frequency.unit)"
+                         : "Every \(task.recurrence.interval) \(task.recurrence.frequency.unit)s")
+                }
+                if task.recurrence.frequency == .weekly {
+                    WeekdayPicker(selection: $task.recurrence.weekdays)
+                }
+                Picker("Ends", selection: $endMode) {
+                    Text("Never").tag(0)
+                    Text("On a date").tag(1)
+                    Text("After a number of times").tag(2)
+                }
+                if endMode == 1 {
+                    DatePicker("End date", selection: $endDate, in: task.startDate..., displayedComponents: .date)
+                } else if endMode == 2 {
+                    Stepper("\(endCount) times", value: $endCount, in: 1...999)
+                }
+                Text("\(previewRecurrence.summary(start: task.startDate)). Each time it comes around it's a fresh start: anything not checked off doesn't carry over.")
+                    .font(.app(.caption)).foregroundStyle(.secondary)
+            }
+        } header: { Text("Comes back") }
+    }
+
+    /// A bonus task's "Comes back": just once, on a schedule (like a habit's), or after it's done with a break (like a task's).
+    private var bonusRepeat: Binding<String> {
+        Binding(get: { task.cycleGapDays != nil ? "cycle" : task.recurrence.frequency.rawValue }, set: { v in
+            if v == "cycle" {
+                task.recurrence = Recurrence(); endMode = 0
+                task.cycleGapDays = cycleGap * (cycleWeeks ? 7 : 1); task.cycleTimes = cycleTimes
+            } else {
+                task.cycleGapDays = nil; task.cycleTimes = nil
+                task.recurrence.frequency = Frequency(rawValue: v) ?? .none
+            }
+        })
     }
 
     // MARK: Habits (Atomic Habits)
@@ -812,8 +869,10 @@ struct TaskEditor: View {
             t.habit = h
         } else { t.habit = nil }
         if t.isBonus {
-            t.timeMinutes = nil; t.recurrence = Recurrence(); t.mode = nil; t.dueDate = nil; t.urgent = nil
-            t.cycleGapDays = nil; t.cycleTimes = nil
+            t.timeMinutes = nil; t.mode = nil; t.dueDate = nil; t.urgent = nil
+            if task.cycleGapDays != nil && t.bonusMax != nil {
+                t.recurrence = Recurrence(); t.cycleGapDays = cycleGap * (cycleWeeks ? 7 : 1); t.cycleTimes = cycleTimes
+            } else { t.cycleGapDays = nil; t.cycleTimes = nil }
             t.after = nil; t.afterMinutes = nil; t.armedAt = nil; t.armedBy = nil
             t.channels = []; t.nag = nil; t.nagEvery = nil; t.busy = false
             if let l = t.bonusLimit, l == 1 { t.bonusLimit = nil }

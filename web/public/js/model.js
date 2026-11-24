@@ -56,7 +56,7 @@ export const isSilent = task => !(task.channels && task.channels.length);
 export const isEvent = task => task.kind === 'event' || (task.kind !== 'task' && Boolean(task.source));
 /** Habits are anything you repeat on a schedule (Atomic Habits style), kept apart from one-off tasks.
  *  Explicit kind 'habit', or any repeating non-event item (so older repeating tasks became habits). */
-export const isHabit = task => !isEvent(task) && (task.kind === 'habit' || (task.recurrence?.frequency || 'none') !== 'none');
+export const isHabit = task => !isEvent(task) && !isBonus(task) && (task.kind === 'habit' || (task.recurrence?.frequency || 'none') !== 'none');
 export const HABIT_STYLES = [
   ['build', 'Build a new habit'], ['stack', 'Stack it on a habit'], ['replace', 'Replace a bad habit'], ['break', 'Break a habit'],
 ];
@@ -503,24 +503,90 @@ export const afterLabel = m => (m ? `${fmtMinutes(m)} later` : 'Right away');
 export const isWaiting = t => Boolean(t?.after && !t.armedAt);
 
 // Bonus tasks (kind "bonus"): optional extras, listed but never required: no date to miss, no reminders, not in
-// today's progress, never overdue. Each one finished during a focus session is worth extra points. They can be
-// checked off a set number of times in all (bonusLimit: none = once, 0 = no limit); a second check-off the same
-// day goes under "yyyy-MM-dd#2", and so on. Same rules as Sources/Model/Bonus.swift.
+// today's progress, never overdue. Each one finished during a focus session is worth extra points.
+// They come around in rounds, each with a limit (bonusLimit: none = once, 0 = no limit); a second check-off the same
+// day goes under "yyyy-MM-dd#2", and so on. Just once: one round from the start date. On a schedule (the habits'
+// repeat rules): a new round on each repeat day, lasting until the next. After it's done, with a break (cycleGapDays,
+// cycleTimes, like a task's): once a round is used up, a break, then the next. Same rules as Sources/Model/Bonus.swift.
 export const BONUS_POINTS = 15;
 export const BONUS_LIMITS = [1, 2, 3, 5, 10, 0];
 export const bonusLimitLabel = n => (n <= 0 ? 'No limit' : n === 1 ? 'Once' : `${n} times`);
 export const isBonus = t => t?.kind === 'bonus';
-/** How many times it can be checked off in all; null = no limit. */
+/** How many times each round can be checked off; null = no limit. */
 export const bonusMax = t => (t.bonusLimit == null ? 1 : t.bonusLimit <= 0 ? null : t.bonusLimit);
+export const isBonusCycle = t => isBonus(t) && t.cycleGapDays != null && bonusMax(t) != null;
 export const bonusCount = t => Object.keys(t.completions || {}).length;
-export const bonusLeft = t => { const m = bonusMax(t); return m == null ? null : Math.max(0, m - bonusCount(t)); };
-/** A bonus task checked off as many times as it can be (never true for anything else). */
-export const bonusUsedUp = t => isBonus(t) && bonusLeft(t) === 0;
 const bonusIndex = k => Number(String(k).split('#')[1]) || 1;
+const bonusKeyOrder = (a, b) => (a.slice(0, 10) < b.slice(0, 10) ? -1 : a.slice(0, 10) > b.slice(0, 10) ? 1 : bonusIndex(a) - bonusIndex(b));
+/** A cycle's rounds so far: finished ones ({ start, end: the day after its last check-off }), then the open or
+ *  upcoming one (end null), unless all of them are done. */
+export function bonusCycleRounds(t) {
+  const max = bonusMax(t);
+  if (max == null) return [{ start: startOfDay(new Date(t.startDate)), end: null }];
+  const keys = Object.keys(t.completions || {}).sort(bonusKeyOrder), out = [];
+  let start = startOfDay(new Date(t.startDate));
+  for (let i = 0; i < Math.max(1, t.cycleTimes || 1); i++) {
+    const from = dateKey(start), inRound = keys.filter(k => k.slice(0, 10) >= from);
+    if (inRound.length < max) { out.push({ start, end: null }); break; }
+    const last = parseKey(inRound[max - 1]);
+    out.push({ start, end: addDays(last, 1) });
+    start = addDays(last, Math.max(0, t.cycleGapDays || 0));
+  }
+  return out;
+}
+function nextBonusRepeat(t, day) {
+  for (let c = addDays(startOfDay(day), 1), i = 0; i < 400; c = addDays(c, 1), i++) if (occursByPattern(t, c)) return c;
+  return null;
+}
+/** The round `day` falls in: { start, end } (end = the day after it, or null = open-ended); null when there's no
+ *  round then (before it starts, during a break, after the last one). */
+export function bonusRound(t, day) {
+  if (!isBonus(t)) return null;
+  const d = startOfDay(day);
+  if (isBonusCycle(t)) return bonusCycleRounds(t).find(r => d >= r.start && (!r.end || d < r.end)) ?? null;
+  if ((t.recurrence?.frequency || 'none') !== 'none') {
+    const s = repStartOn(t, d);
+    if (!s) return null;
+    let end = nextBonusRepeat(t, s);
+    if (!end) {
+      // The last one: it lasts one repeat (a day, a week…), and never past an end date.
+      const n = Math.max(1, t.recurrence.interval || 1), f = t.recurrence.frequency;
+      end = f === 'daily' ? addDays(s, n) : f === 'weekly' ? addDays(s, 7 * n) : addMonths(s, f === 'yearly' ? 12 * n : n);
+      const e = endOf(t.recurrence);
+      if (e.type === 'onDate') end = new Date(Math.min(+end, +addDays(startOfDay(e.date), 1)));
+    }
+    return d < end ? { start: s, end } : null;
+  }
+  const s = startOfDay(new Date(t.startDate));
+  return d >= s ? { start: s, end: null } : null;
+}
+/** When the next round starts (for "back on Tue"). */
+export function bonusNextRound(t, day) {
+  const d = startOfDay(day);
+  if (isBonusCycle(t)) return bonusCycleRounds(t).find(r => r.start > d)?.start ?? null;
+  if ((t.recurrence?.frequency || 'none') !== 'none') return nextBonusRepeat(t, d);
+  const s = startOfDay(new Date(t.startDate));
+  return s > d ? s : null;
+}
+/** The check-offs in the round `day` falls in. */
+export function bonusRoundKeys(t, day) {
+  const r = bonusRound(t, day);
+  if (!r) return [];
+  const from = dateKey(r.start), to = r.end ? dateKey(r.end) : null;
+  return Object.keys(t.completions || {}).filter(k => k.slice(0, 10) >= from && (!to || k.slice(0, 10) < to)).sort(bonusKeyOrder);
+}
+/** Check-offs left in the round on `day`; null = no limit; 0 when there's no round then. */
+export function bonusLeft(t, day = new Date()) {
+  if (!bonusRound(t, day)) return 0;
+  const m = bonusMax(t);
+  return m == null ? null : Math.max(0, m - bonusRoundKeys(t, day).length);
+}
+/** Nothing more to check off on `day` (used up, on a break, or not started). Never true for anything else. */
+export const bonusUsedUp = (t, day = new Date()) => isBonus(t) && bonusLeft(t, day) === 0;
 /** The check-offs made on `day`, in order. */
 export function bonusKeysOn(t, day) {
   const base = dateKey(day);
-  return Object.keys(t.completions || {}).filter(k => k === base || k.startsWith(`${base}#`)).sort((a, b) => bonusIndex(a) - bonusIndex(b));
+  return Object.keys(t.completions || {}).filter(k => k === base || k.startsWith(`${base}#`)).sort(bonusKeyOrder);
 }
 /** The key the next check-off on `day` goes under. */
 export function nextBonusKey(t, day) {
@@ -532,18 +598,35 @@ export function nextBonusKey(t, day) {
 }
 /** For its row: the next free check-off, or once it's used up, the last one made that day (so it shows ticked). */
 export function bonusKeyOn(t, day) {
-  const keys = bonusUsedUp(t) ? bonusKeysOn(t, day) : [];
+  const keys = bonusUsedUp(t, day) ? bonusKeysOn(t, day) : [];
   return keys.length ? keys[keys.length - 1] : nextBonusKey(t, day);
 }
-/** On the bonus list that day: from its start date, while it can still be checked off (or it was used up that day). */
-export const bonusListed = (t, day) => isBonus(t) && !t.archived && startOfDay(day) >= startOfDay(new Date(t.startDate))
-  && (!bonusUsedUp(t) || bonusKeysOn(t, day).length > 0);
-/** "Once", "2 of 3 done", "Done 5 times · no limit". */
-export function bonusSummary(t) {
-  const n = bonusCount(t), max = bonusMax(t);
+/** On the bonus list that day: during a round, while it can still be checked off (or it was used up that day). */
+export const bonusListed = (t, day) => isBonus(t) && !t.archived && Boolean(bonusRound(t, day))
+  && (!bonusUsedUp(t, day) || bonusKeysOn(t, day).length > 0);
+/** This round: "Once", "Done", "2 of 3 done", "Done 5 times · no limit". */
+export function bonusSummary(t, day = new Date()) {
+  const n = bonusRoundKeys(t, day).length, max = bonusMax(t);
   if (max == null) return n ? `Done ${n} time${n === 1 ? '' : 's'} · no limit` : 'As often as you like';
   if (max === 1) return n ? 'Done' : 'Once';
   return n ? `${Math.min(n, max)} of ${max} done` : `Up to ${max} times`;
+}
+/** How it comes back, or null: "Every day", "Back 3 days after it's done · round 2 of 5". */
+export function bonusRepeatSummary(t) {
+  if (isBonusCycle(t)) {
+    const gap = t.cycleGapDays, rounds = bonusCycleRounds(t), times = Math.max(1, t.cycleTimes || 1);
+    const g = gap > 0 && gap % 7 === 0 ? `${gap / 7} week${gap === 7 ? '' : 's'}` : `${gap} day${gap === 1 ? '' : 's'}`;
+    if (rounds.length >= times && rounds[rounds.length - 1].end) return `All ${times} rounds done`;
+    return `Back ${g} after it’s done · round ${rounds.length} of ${times}`;
+  }
+  if ((t.recurrence?.frequency || 'none') !== 'none') return recurrenceSummary(t.recurrence, new Date(t.startDate)) + (bonusMax(t) === 1 ? '' : ', each time');
+  return null;
+}
+/** Finished for good: a once-only one used up, a cycle's last round done, or a schedule that has ended. */
+export function bonusFinished(t, now = new Date()) {
+  const d = startOfDay(now);
+  if (bonusRound(t, d) && !bonusUsedUp(t, d)) return false;
+  return !bonusNextRound(t, d) && d >= startOfDay(new Date(t.startDate));
 }
 /** Y once X is checked off at `now`: a one-off on the next whole minute after the delay, with its reminder. */
 export function armFollowUp(f, triggerId, key, now = new Date()) {

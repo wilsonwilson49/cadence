@@ -80,7 +80,8 @@ enum DebugDriver {
                 if let o = model.store.todayChecklist().first(where: { !$0.isResolved && !$0.isEvent }) { model.workOn(o) }
             }
         }
-        // -bonusDemo [edit|sprint|work]: adds two bonus tasks (once, and no limit with one check-off today), then shows
+        // -bonusDemo [edit|sprint|work]: adds bonus tasks (once; every day up to twice, done once today; back two weeks
+        // after it's done, 4 times), then shows
         // Today, a new bonus task in the editor, a sprint with the push-ups ticked twice, or work mode on one.
         if let mode = LaunchOptions.value("-bonusDemo") ?? (LaunchOptions.has("-bonusDemo") ? "today" : nil) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -89,20 +90,19 @@ enum DebugDriver {
                     var desk = PlanTask(title: "Tidy the desk", startDate: today, channels: [], color: .yellow)
                     desk.kind = "bonus"
                     var push = PlanTask(title: "20 push-ups", startDate: today, channels: [], color: .orange)
-                    push.kind = "bonus"; push.bonusLimit = 0; push.priority = "high"
+                    push.kind = "bonus"; push.bonusLimit = 2; push.priority = "high"; push.recurrence.frequency = .daily
                     push.completions[DateKey.string(today)] = Date()
-                    model.store.upsert(desk); model.store.upsert(push)
+                    var fridge = PlanTask(title: "Deep-clean the fridge", startDate: today, channels: [], color: .teal)
+                    fridge.kind = "bonus"; fridge.cycleGapDays = 14; fridge.cycleTimes = 4
+                    model.store.upsert(desk); model.store.upsert(push); model.store.upsert(fridge)
                 }
                 switch mode {
                 case "edit":
-                    var t = PlanTask(title: "Read one extra chapter", startDate: today, channels: [], color: .yellow)
-                    t.kind = "bonus"; t.bonusLimit = 3
-                    model.editingTask = t
-                    model.windows.showMain()
+                    if let t = model.store.tasks.first(where: { $0.title == "20 push-ups" }) { model.edit(t) }
                 case "sprint", "sprintEnd":
                     let picks = model.store.todayChecklist().filter { !$0.isResolved && !$0.isEvent }.prefix(3).map(\.id)
                     model.focus.start(minutes: 25, picked: Array(picks))
-                    if let p = model.store.tasks.first(where: { $0.isBonus && $0.bonusLimit == 0 }) { model.focus.tickBonus(p); model.focus.tickBonus(p) }
+                    if let p = model.store.tasks.first(where: { $0.title == "20 push-ups" }) { model.focus.tickBonus(p); model.focus.tickBonus(p) }
                     model.screen = .focus; model.windows.showMain()
                     // sprintEnd (with -wallPreview skip): time's up a moment later, so the reflections and score show.
                     if mode == "sprintEnd" { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { model.focus.end() } }

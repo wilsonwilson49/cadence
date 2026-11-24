@@ -73,7 +73,7 @@ struct ScoreItem: Codable, Identifiable, Hashable {
 extension PlanTask {
     /// Habits are anything you repeat on a schedule (kept apart from one-off tasks): kind "habit", or any
     /// repeating non-event item, so older repeating tasks became habits. Same rule as isHabit() on the web.
-    var isHabit: Bool { !isEvent && (kind == "habit" || recurrence.isRepeating) }
+    var isHabit: Bool { !isEvent && !isBonus && (kind == "habit" || recurrence.isRepeating) }
 
     /// "After I pour my coffee, I will meditate." and friends.
     var habitSentence: String? {

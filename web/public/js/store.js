@@ -326,7 +326,7 @@ class Store {
     let key = occ.key;
     if (M.isBonus(t)) {
       // A bonus task goes under its next free check-off that day, and stops at its limit.
-      if (M.bonusUsedUp(t)) return false;
+      if (M.bonusUsedUp(t, occ.day)) return false;
       if (t.completions?.[key]) key = M.nextBonusKey(t, occ.day);
     }
     const missed = { ...t.missed };

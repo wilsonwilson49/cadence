@@ -594,7 +594,7 @@ final class Store: ObservableObject {
         var key = occ.key
         if t.isBonus {
             // A bonus task goes under its next free check-off that day, and stops at its limit.
-            guard !t.bonusUsedUp else { return }
+            guard !t.bonusUsedUp(on: occ.day) else { return }
             if t.completions[key] != nil { key = t.nextBonusKey(on: occ.day) }
         }
         t.completions[key] = Date()

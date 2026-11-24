@@ -261,11 +261,16 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (showDate || o.overdue) meta.push(`<span class="${o.overdue ? 'red' : ''}">${M.fmtDay(o.day, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`);
   if (o.bonus) {
     const today = M.bonusKeysOn(t, o.day).length;
-    meta.push(`<span>${ic('star')}Bonus · ${esc(M.bonusSummary(t))}${today && !o.done ? ` · ${today}× today` : ''}</span>`);
+    // "2× today" only when the round is longer than today (otherwise the summary already says it).
+    const showToday = today && !o.done && today !== M.bonusRoundKeys(t, o.day).length;
+    meta.push(`<span>${ic('star')}Bonus · ${esc(M.bonusSummary(t, o.day))}${showToday ? ` · ${today}× today` : ''}</span>`);
+    const rep = !compact && M.bonusRepeatSummary(t), next = o.done && !compact && M.bonusNextRound(t, o.day);
+    if (rep) meta.push(`<span class="ellipsis">${ic('repeat')}${esc(rep)}</span>`);
+    if (next) meta.push(`<span>back ${M.fmtDay(next, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`);
     if (!compact && !o.done) meta.push(`<span class="bonus-pts">+${M.BONUS_POINTS} in focus</span>`);
   } else meta.push(o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : compact ? '' : `<span>${ic('sun')}Any time</span>`);
   if (M.isUntilDone(t) && !compact && !o.resolved) meta.push(`<span>${ic('flame')}${esc(M.carryLabel(t, o.day))}</span>`);
-  const plan = M.planSummary(t);
+  const plan = o.bonus ? null : M.planSummary(t);
   if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
   const trig = t.after && store.tasks.get(t.after);
   if (trig) meta.push(`<span class="ellipsis">${ic('right')}after ${esc(trig.title)}</span>`);
@@ -302,7 +307,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
     ${hasRefl ? `<span class="muted" title="Reflection saved">${ic('quote')}</span>` : ''}
     ${ctx === 'checkin' ? '' : `<div class="actions">
       <button class="btn ghost sm" data-act="edit" data-task="${t.id}">Edit</button>
-      ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
+      ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) && !o.bonus ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
       ${M.isUntilDone(t) && t.urgent && !o.resolved ? `<button class="btn ghost sm" data-act="task-urgent" data-task="${t.id}" data-off="1" title="Back to due later">Not urgent</button>` : ''}
       ${o.bonus && !o.done && M.bonusKeysOn(t, o.day).length ? `<button class="btn ghost sm" data-act="bonus-undo" data-task="${t.id}" title="Take back the last check-off today">Undo one</button>` : ''}
     </div>`}
@@ -1138,14 +1143,15 @@ function todoView() {
   } else {
     const tasks = [...store.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && !M.isHabit(x) && match(x.title));
     const untilDone = tasks.filter(x => M.isUntilDone(x)).sort((a, b) => b.startDate.localeCompare(a.startDate));
-    const repeating = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency !== 'none').sort((a, b) => a.title.localeCompare(b.title));
+    const repeating = tasks.filter(x => !M.isUntilDone(x) && !M.isBonus(x) && x.recurrence.frequency !== 'none').sort((a, b) => a.title.localeCompare(b.title));
     const once = tasks.filter(x => !M.isUntilDone(x) && !M.isBonus(x) && x.recurrence.frequency === 'none').sort((a, b) => b.startDate.localeCompare(a.startDate));
-    const bonus = tasks.filter(M.isBonus).sort((a, b) => M.bonusUsedUp(a) - M.bonusUsedUp(b) || String(b.createdAt).localeCompare(String(a.createdAt)));
+    const bonus = tasks.filter(M.isBonus).sort((a, b) => M.bonusFinished(a) - M.bonusFinished(b) || String(b.createdAt).localeCompare(String(a.createdAt)));
     const row = x => {
       const next = M.nextOccurrence(x);
       const doneCount = Object.keys(x.completions || {}).length;
       const fin = M.isUntilDone(x) && M.finishOf(x), cst = M.isCycle(x) && M.cycleStatus(x);
-      const status = M.isBonus(x) ? `<span class="${M.bonusUsedUp(x) ? 'green' : ''}">${ic('star')}Bonus · ${esc(M.bonusSummary(x))}</span>`
+      const bNext = M.isBonus(x) && !M.bonusFinished(x) && (!M.bonusRound(x, new Date()) || M.bonusUsedUp(x)) && M.bonusNextRound(x, new Date());
+      const status = M.isBonus(x) ? `<span class="${M.bonusFinished(x) ? 'green' : ''}">${ic('star')}Bonus · ${M.bonusFinished(x) ? 'all done' : esc(M.bonusSummary(x))}</span>${M.bonusRepeatSummary(x) ? `<span>${ic('repeat')}${esc(M.bonusRepeatSummary(x))}</span>` : ''}${bNext ? `<span>${ic('right')}Next: ${M.fmtDay(bNext, { weekday: 'short', month: 'short', day: 'numeric' })}</span>` : ''}`
         : cst ? (cst.finished ? `<span class="green">${ic('check')}All ${cst.times} done</span>`
           : cst.nextStart ? `<span>${ic('clock')}Back ${M.fmtDay(cst.nextStart, { month: 'short', day: 'numeric' })} · round ${cst.round} of ${cst.times}</span>`
           : `<span>${ic('flame')}Round ${cst.round} of ${cst.times}</span>`)
@@ -1159,7 +1165,7 @@ function todoView() {
         <div class="grow"><div class="title">${esc(x.title)}</div><div class="meta">
           ${M.isBonus(x) ? '' : `<span>${ic('repeat')}${esc(M.planSummary(x) || 'Once')}</span>
           <span>${ic('clock')}${x.timeMinutes != null ? M.fmtTimeMinutes(x.timeMinutes) : 'Any time'}</span>`}${status}
-          ${x.recurrence.frequency !== 'none' && !M.isUntilDone(x) ? `<span>${doneCount} done</span>` : ''}</div></div>
+          ${x.recurrence.frequency !== 'none' && !M.isUntilDone(x) && !M.isBonus(x) ? `<span>${doneCount} done</span>` : ''}</div></div>
         <button class="btn sm" data-act="edit" data-task="${x.id}">Edit</button>
         <button class="btn ghost sm icon danger" data-act="delete-task" data-task="${x.id}" title="Delete task">${ic('trash')}</button></div>`;
     };
@@ -2307,15 +2313,38 @@ function editorDialog(m) {
 
 /** A bonus task's settings: when it's on your list from, and how many times it can be checked off. */
 function bonusFieldset(m) {
-  const d = m.draft, limit = d.bonusLimit ?? 1, saved = store.tasks.get(d.id);
+  const d = m.draft, limit = d.bonusLimit ?? 1, saved = store.tasks.get(d.id), r = d.recurrence;
+  const cyc = d.cycleGapDays != null, repeats = cyc || r.frequency !== 'none';
   const opts = [...new Set([...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 50, 100, 0], limit])].sort((a, b) => (a <= 0 ? Infinity : a) - (b <= 0 ? Infinity : b));
+  const unit = M.FREQUENCIES.find(f => f[0] === r.frequency)?.[2] || 'day';
+  const preview = { ...r, end: m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} } };
   return `<div class="fieldset"><div class="legend">${ic('star')} Bonus</div>
-    <div class="grid2"><label class="field"><span>On your list from</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
-      <label class="field"><span>Can be checked off</span><select class="input" data-edit="bonusLimit" data-rerender>${opts.map(n => `<option value="${n}" ${n === limit ? 'selected' : ''}>${M.bonusLimitLabel(n)}</option>`).join('')}</select></label></div>
-    ${saved && M.bonusCount(saved) ? `<div class="small">So far: ${esc(M.bonusSummary(saved))}${M.bonusUsedUp(saved) ? ' (off your list)' : ''}</div>` : ''}
-    <div class="small muted">${limit <= 0 ? 'No limit: it stays on your list, and you can check it off as many times as you like (several times a day too).'
-      : limit === 1 ? 'Check it off once and it’s done for good. It never shows as overdue or missed if you don’t.'
-      : `It stays on your list until you’ve checked it off ${limit} times (several times a day is fine), then it’s done for good.`}</div></div>`;
+    <div class="grid2"><label class="field"><span>${repeats ? 'Starts' : 'On your list from'}</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
+      <label class="field"><span>${repeats ? 'Each time, it can be checked off' : 'Can be checked off'}</span><select class="input" data-edit="bonusLimit" data-rerender>${opts.map(n => `<option value="${n}" ${n === limit ? 'selected' : ''}>${M.bonusLimitLabel(n)}</option>`).join('')}</select></label></div>
+    ${saved && M.bonusCount(saved) ? `<div class="small">Checked off ${M.bonusCount(saved)} time${M.bonusCount(saved) === 1 ? '' : 's'} so far${M.bonusFinished(saved) ? ': all done' : repeats ? ` (this time: ${esc(M.bonusSummary(saved).toLowerCase())})` : ''}</div>` : ''}
+    <div class="small muted">${limit <= 0 ? `No limit: check it off as many times as you like (several times a day too)${repeats ? ', each time it comes around' : ''}.`
+      : limit === 1 ? (repeats ? 'Check it off once each time it comes around.' : 'Check it off once and it’s done for good. It never shows as overdue or missed if you don’t.')
+      : `It stays on your list until you’ve checked it off ${limit} times (several times a day is fine)${repeats ? ', then waits until it comes around again' : ', then it’s done for good'}.`}</div></div>
+  <div class="fieldset"><div class="legend">Comes back</div>
+    <div class="grid2"><label class="field"><span>Comes back</span><select class="input" data-edit="bonusRepeat" data-rerender>
+      <option value="none" ${!cyc && r.frequency === 'none' ? 'selected' : ''}>No, just once</option>
+      ${M.FREQUENCIES.filter(([v]) => v !== 'none').map(([v, l]) => `<option value="${v}" ${!cyc && r.frequency === v ? 'selected' : ''}>${l}</option>`).join('')}
+      ${limit > 0 ? `<option value="cycle" ${cyc ? 'selected' : ''}>After it’s done, with a break</option>` : ''}</select></label>
+      ${!cyc && r.frequency !== 'none' ? `<label class="field"><span>Every</span><div class="row"><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="interval" data-rerender value="${r.interval}"><span>${unit}${r.interval > 1 ? 's' : ''}</span></div></label>` : ''}</div>
+    ${cyc ? `<div class="grid2"><label class="field"><span>Break before it comes back</span><div class="row">
+        <input class="input" type="number" min="1" max="365" style="width:80px" data-edit="cycleGap" data-rerender value="${m.cycleGap}">
+        <select class="input" style="width:auto" data-edit="cycleUnit" data-rerender><option value="days" ${m.cycleUnit === 'days' ? 'selected' : ''}>days</option><option value="weeks" ${m.cycleUnit === 'weeks' ? 'selected' : ''}>weeks</option></select></div></label>
+      <label class="field"><span>Times in total</span><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="cycleTimes" data-rerender value="${m.cycleTimes}"></label></div>
+      <div class="small muted">${ic('flame')} Once it’s been checked off${limit === 1 ? '' : ` ${limit} times`}, it takes a ${m.cycleGap}-${m.cycleUnit === 'weeks' ? 'week' : 'day'} break and comes back: ${m.cycleTimes} time${m.cycleTimes == 1 ? '' : 's'} in total.</div>` : ''}
+    ${!cyc && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
+      <button type="button" class="btn sm" data-act="edit-weekdays">Weekdays</button></div>` : ''}
+    ${!cyc && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
+        <option value="never" ${m.endMode === 'never' ? 'selected' : ''}>Never</option><option value="onDate" ${m.endMode === 'onDate' ? 'selected' : ''}>On a date</option>
+        <option value="afterCount" ${m.endMode === 'afterCount' ? 'selected' : ''}>After a number of times</option></select></label>
+      ${m.endMode === 'onDate' ? `<label class="field"><span>End date</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
+      ${m.endMode === 'afterCount' ? `<label class="field"><span>Times</span><input class="input" type="number" min="1" max="999" data-edit="endCount" data-rerender value="${m.endCount}"></label>` : ''}</div>
+      <div class="small muted">${esc(M.recurrenceSummary(preview, M.parseKey(m.date)))}. Each time it comes around it’s a fresh start: anything not checked off doesn’t carry over.</div>` : ''}
+  </div>`;
 }
 
 function readEditorInputs() {
@@ -2336,11 +2365,27 @@ function readEditorInputs() {
   if (val('after')) m.draft.after = val('after').value;
   if (val('afterMinutes')) { const v = Number(val('afterMinutes').value); if (v) m.draft.afterMinutes = v; else delete m.draft.afterMinutes; }
   if (val('hasDue')) m.hasDue = val('hasDue').checked;
-  if (val('bonusLimit')) { const v = Number(val('bonusLimit').value); if (v === 1) delete m.draft.bonusLimit; else m.draft.bonusLimit = v; }
+  if (val('bonusLimit')) {
+    const v = Number(val('bonusLimit').value);
+    if (v === 1) delete m.draft.bonusLimit; else m.draft.bonusLimit = v;
+    if (v <= 0) { delete m.draft.cycleGapDays; delete m.draft.cycleTimes; }   // with no limit, a round is never "done"
+  }
   if (val('dueDate')?.value) m.dueDate = val('dueDate').value;
   if (val('cycleGap')) m.cycleGap = Math.min(365, Math.max(1, Number(val('cycleGap').value) || 1));
   if (val('cycleUnit')) m.cycleUnit = val('cycleUnit').value;
   if (val('cycleTimes')) m.cycleTimes = Math.min(99, Math.max(1, Number(val('cycleTimes').value) || 1));
+  // A bonus task's "Comes back": just once, on a schedule (like a habit's), or after it's done with a break (like a task's).
+  const bv = val('bonusRepeat')?.value;
+  if (bv === 'cycle' && (m.draft.bonusLimit ?? 1) > 0) {
+    m.draft.recurrence = { ...m.draft.recurrence, frequency: 'none', interval: 1, weekdays: [] };
+    m.draft.cycleGapDays = m.cycleGap * (m.cycleUnit === 'weeks' ? 7 : 1); m.draft.cycleTimes = m.cycleTimes;
+  } else if (bv) {
+    // (A break needs a limit: with "No limit" it falls back to just once.)
+    const f = M.FREQUENCIES.some(([v]) => v === bv) ? bv : 'none';
+    delete m.draft.cycleGapDays; delete m.draft.cycleTimes;
+    if (f === 'weekly' && m.draft.recurrence.frequency !== 'weekly' && !m.draft.recurrence.weekdays.length) m.draft.recurrence.weekdays = [M.weekday(M.parseKey(m.date))];
+    m.draft.recurrence.frequency = f;
+  }
   const fv = val('frequency')?.value, wasLongTerm = m.draft.mode === 'longTerm', wasCycle = M.isCycle(m.draft);
   if (fv === 'cycle') {
     // After it's done, with a break: no dates, so no repeat schedule.
@@ -2403,8 +2448,12 @@ async function saveEditor() {
   } else delete t.habit;
   if (M.isBonus(t)) {
     // Optional extras: no time, schedule, reminders or follow-up trigger of their own.
-    delete t.timeMinutes; t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
-    for (const k of ['mode', 'dueDate', 'urgent', 'cycleGapDays', 'cycleTimes', 'after', 'afterMinutes', 'armedAt', 'armedBy', 'nag', 'nagEvery']) delete t[k];
+    delete t.timeMinutes;
+    if (t.cycleGapDays != null && M.bonusMax(t) != null) {
+      t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+      t.cycleGapDays = m.cycleGap * (m.cycleUnit === 'weeks' ? 7 : 1); t.cycleTimes = m.cycleTimes;
+    } else { delete t.cycleGapDays; delete t.cycleTimes; }
+    for (const k of ['mode', 'dueDate', 'urgent', 'after', 'afterMinutes', 'armedAt', 'armedBy', 'nag', 'nagEvery']) delete t[k];
     t.channels = []; t.busy = false;
     if (t.bonusLimit === 1) delete t.bonusLimit;
   } else delete t.bonusLimit;
@@ -2415,7 +2464,7 @@ async function saveEditor() {
   if (M.isCycle(t) && t.mode === 'untilDone') {
     t.cycleGapDays = m.cycleGap * (m.cycleUnit === 'weeks' ? 7 : 1); t.cycleTimes = m.cycleTimes;
     t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
-  } else { delete t.cycleGapDays; delete t.cycleTimes; }
+  } else if (!M.isBonus(t)) { delete t.cycleGapDays; delete t.cycleTimes; }
   if (t.mode === 'untilDone' && !M.isCycle(t) && t.recurrence.frequency === 'none' && m.hasDue) t.dueDate = M.iso(M.parseKey(m.dueDate)); else delete t.dueDate;
   if (t.after) {
     // A follow-up keeps the date and time it was set off at (or none yet); it has no schedule of its own.
@@ -3642,9 +3691,9 @@ const actions = {
     const m = ui.modal, k = el.dataset.kind, d = m.draft, wasBonus = M.isBonus(d);
     d.kind = k;
     if (k === 'bonus') {
-      // Optional extras: no date to miss, no schedule, no reminders.
-      d.recurrence = { ...d.recurrence, frequency: 'none', interval: 1, weekdays: [] }; m.endMode = 'never';
-      for (const x of ['mode', 'habit', 'after', 'afterMinutes', 'armedAt', 'armedBy', 'nag', 'nagEvery', 'cycleGapDays', 'cycleTimes']) delete d[x];
+      // Optional extras: no date to miss, no time, no reminders. A repeat schedule (or a task's "after it's done,
+      // with a break") carries over.
+      for (const x of ['mode', 'habit', 'after', 'afterMinutes', 'armedAt', 'armedBy', 'nag', 'nagEvery']) delete d[x];
       d.channels = []; m.hasTime = false;
       if (m.isNew && d.color === 'blue') d.color = 'yellow';
     } else if (wasBonus) {

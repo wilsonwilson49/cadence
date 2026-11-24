@@ -49,11 +49,11 @@ struct MobileRow: View {
                     }
                     if t.isBonus {
                         let today = t.bonusKeys(on: occ.day).count
-                        Label("Bonus · \(t.bonusSummary)\(today > 0 && !occ.isDone ? " · \(today)× today" : "")", systemImage: "star").lineLimit(1)
+                        Label("Bonus · \(t.bonusSummary(on: occ.day))\(today > 0 && !occ.isDone && today != t.bonusRoundKeys(on: occ.day).count ? " · \(today)× today" : "")", systemImage: "star").lineLimit(1)
                     }
                     if let s = occ.start { Label(timeString(s), systemImage: "clock") }
                     if occ.isUntilDone && !occ.isResolved { Label(t.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1) }
-                    else if let p = t.planSummary { Label(p, systemImage: "repeat").lineLimit(1) }
+                    else if let p = t.isBonus ? t.bonusRepeatSummary : t.planSummary { Label(p, systemImage: "repeat").lineLimit(1) }
                     if let p = t.priorityLevel, !occ.isResolved {
                         Image(systemName: p.symbol).foregroundStyle(p.color).accessibilityLabel("\(p.title) priority")
                     }
@@ -336,7 +336,10 @@ struct EditorSheet: View {
                     let limit = task.bonusLimit ?? 1
                     Section {
                         DatePicker("On your list from", selection: $task.startDate, displayedComponents: .date)
-                        Picker("Can be checked off", selection: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 })) {
+                        Picker(task.cycleGapDays != nil || task.recurrence.isRepeating ? "Each time, up to" : "Can be checked off", selection: Binding(get: { limit }, set: {
+                            task.bonusLimit = $0 == 1 ? nil : $0
+                            if $0 <= 0 { task.cycleGapDays = nil; task.cycleTimes = nil }
+                        })) {
                             ForEach(Array(Set(Bonus.limitChoices + [limit])).sorted { ($0 <= 0 ? Int.max : $0) < ($1 <= 0 ? Int.max : $1) }, id: \.self) { n in
                                 Text(Bonus.limitLabel(n)).tag(n)
                             }
@@ -345,10 +348,33 @@ struct EditorSheet: View {
                             Stepper("Exactly \(limit) time\(limit == 1 ? "" : "s")", value: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 }), in: 1...999)
                         }
                         if let saved = model.store.task(task.id), saved.bonusCount > 0 {
-                            LabeledContent("So far", value: saved.bonusSummary)
+                            LabeledContent("So far", value: "\(saved.bonusCount) time\(saved.bonusCount == 1 ? "" : "s")\(saved.bonusFinished ? ", all done" : "")")
                         }
                     } header: { Text("Bonus") } footer: {
-                        Text(limit <= 0 ? "No limit: check it off as often as you like." : limit == 1 ? "Check it off once and it's done for good." : "It stays on your list until you've checked it off \(limit) times.")
+                        Text(limit <= 0 ? "No limit: check it off as often as you like." : limit == 1 ? "Check it off once each time it comes around." : "It stays on your list until you've checked it off \(limit) times, each time it comes around.")
+                    }
+                    Section {
+                        Picker("Comes back", selection: Binding(get: { task.cycleGapDays != nil ? "cycle" : task.recurrence.frequency.rawValue }, set: { v in
+                            if v == "cycle" { task.recurrence = Recurrence(); task.cycleGapDays = task.cycleGapDays ?? 7; task.cycleTimes = task.cycleTimes ?? 3 }
+                            else { task.cycleGapDays = nil; task.cycleTimes = nil; task.recurrence.frequency = Frequency(rawValue: v) ?? .none }
+                        })) {
+                            Text("No, just once").tag(Frequency.none.rawValue)
+                            ForEach(Frequency.allCases.filter { $0 != .none }) { Text($0.label).tag($0.rawValue) }
+                            if limit > 0 { Text("After it's done, with a break").tag("cycle") }
+                        }
+                        if task.cycleGapDays != nil {
+                            Stepper("Break: \(task.cycleGapDays ?? 7) day\(task.cycleGapDays == 1 ? "" : "s")", value: Binding(get: { task.cycleGapDays ?? 7 }, set: { task.cycleGapDays = $0 }), in: 1...365)
+                            Stepper("Times in total: \(task.cycleTimes ?? 3)", value: Binding(get: { task.cycleTimes ?? 3 }, set: { task.cycleTimes = $0 }), in: 1...99)
+                        } else if task.recurrence.isRepeating {
+                            Stepper(task.recurrence.interval == 1 ? "Every \(task.recurrence.frequency.unit)" : "Every \(task.recurrence.interval) \(task.recurrence.frequency.unit)s",
+                                    value: $task.recurrence.interval, in: 1...99)
+                            if task.recurrence.frequency == .weekly {
+                                WeekdayChips(selection: $task.recurrence.weekdays, start: task.startDate)
+                            }
+                        }
+                    } header: { Text("Comes back") } footer: {
+                        if task.recurrence.isRepeating { Text("Each time it comes around it's a fresh start: anything not checked off doesn't carry over.") }
+                        else if task.cycleGapDays != nil { Text("Once it's been checked off, it takes a break, then comes back.") }
                     }
                 }
                 if !task.isBonus {
@@ -472,7 +498,7 @@ struct EditorSheet: View {
         let wasBonus = task.isBonus
         task.kind = k
         if k == "bonus" {
-            task.recurrence = Recurrence(); task.mode = nil; task.habit = nil; hasTime = false
+            task.mode = nil; task.habit = nil; hasTime = false
             task.after = nil; task.afterMinutes = nil; task.armedAt = nil; task.armedBy = nil
             task.channels = []; task.nag = nil; task.busy = false
             if isNew && task.color == .blue { task.color = .yellow }
@@ -605,7 +631,9 @@ struct EditorSheet: View {
             t.habit = h
         } else { t.habit = nil }
         if t.isBonus {
-            t.timeMinutes = nil; t.recurrence = Recurrence(); t.mode = nil; t.dueDate = nil; t.urgent = nil
+            t.timeMinutes = nil; t.mode = nil; t.dueDate = nil; t.urgent = nil
+            if t.cycleGapDays != nil && t.bonusMax != nil { t.recurrence = Recurrence(); t.cycleTimes = t.cycleTimes ?? 3 }
+            else { t.cycleGapDays = nil; t.cycleTimes = nil }
             t.after = nil; t.afterMinutes = nil; t.armedAt = nil; t.armedBy = nil
             t.channels = []; t.nag = nil; t.nagEvery = nil; t.busy = false
         } else { t.bonusLimit = nil }
