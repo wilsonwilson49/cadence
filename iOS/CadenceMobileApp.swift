@@ -80,6 +80,8 @@ final class MobileModel: ObservableObject {
         guard !started else { return }
         started = true
         focus.model = self
+        // A bonus task checked off while a focus session runs counts for the session.
+        store.onComplete = { [weak self] t, key in self?.focus.noteCompleted(t, key: key) }
         #if DEBUG
         // Test runs: -server <url> -login <user> <password> -tab <n> -noNotifyPrompt
         if let server = LaunchOptions.value("-server") { sync.serverURL = server }
@@ -138,7 +140,7 @@ final class MobileModel: ObservableObject {
     // MARK: Actions
 
     func reflect(_ occ: Occurrence, missed: Bool = false) {
-        if let t = store.task(occ.task.id) { reflecting = ReflectTarget(occ: Occurrence(task: t, day: occ.day), missed: missed) }
+        if let t = store.task(occ.task.id) { reflecting = ReflectTarget(occ: Occurrence(task: t, day: occ.day, fixedKey: occ.fixedKey), missed: missed) }
     }
 
     func toggle(_ occ: Occurrence) {
@@ -174,7 +176,7 @@ final class MobileModel: ObservableObject {
     func occurrence(_ id: String) -> Occurrence? {
         let parts = id.split(separator: "|").map(String.init)
         guard parts.count == 2, let uuid = UUID(uuidString: parts[0]), let t = store.task(uuid), let day = DateKey.date(parts[1]) else { return nil }
-        return Occurrence(task: t, day: day)
+        return Occurrence(task: t, day: day, fixedKey: t.isBonus ? parts[1] : nil)
     }
 
     // MARK: Notifications
@@ -290,14 +292,33 @@ final class MobileFocus: ObservableObject {
     @Published private(set) var awaySeconds = 0
     @Published private(set) var now = Date()
     @Published var result: FocusSession?
+    /// Bonus tasks ticked during the session (reflected on at the end), and ones checked off elsewhere meanwhile.
+    @Published private(set) var bonusTicks: [UUID] = []
+    @Published private(set) var bonusCredited: [String] = []
 
     init(store: Store) { self.store = store }
+
+    func bonusDone(_ id: UUID) -> Int {
+        bonusTicks.filter { $0 == id }.count + bonusCredited.filter { $0.hasPrefix(id.uuidString + "|") }.count
+    }
+    func canTickBonus(_ t: PlanTask) -> Bool {
+        guard running, t.isBonus else { return false }
+        guard let left = store.task(t.id)?.bonusLeft else { return true }
+        return bonusTicks.filter { $0 == t.id }.count < left
+    }
+    func tickBonus(_ t: PlanTask) { if canTickBonus(t) { bonusTicks.append(t.id) } }
+    func untickBonus(_ id: UUID) { if let i = bonusTicks.lastIndex(of: id) { bonusTicks.remove(at: i) } }
+    func noteCompleted(_ t: PlanTask, key: String) {
+        let id = "\(t.id.uuidString)|\(key)"
+        if running, t.isBonus, !bonusCredited.contains(id) { bonusCredited.append(id) }
+    }
 
     var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(now).rounded(.up))) }
     var clock: String { String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60) }
 
     func start(minutes: Int, picked: [String]) {
         self.minutes = minutes; self.picked = picked; finished = []; awaySeconds = 0; awaySince = nil
+        bonusTicks = []; bonusCredited = []
         startedAt = Date(); endsAt = startedAt.addingTimeInterval(Double(minutes * 60)); now = startedAt
         id = UUID(); result = nil; running = true
         tickTimer()
@@ -341,11 +362,26 @@ final class MobileFocus: ObservableObject {
         if let a = awaySince { awaySeconds += Int(max(0, end.timeIntervalSince(a))); awaySince = nil }
         let elapsed = max(1, Int(end.timeIntervalSince(startedAt)))
         let percent = Int((100 * Double(elapsed - min(elapsed, awaySeconds)) / Double(elapsed)).rounded())
+        // Ticked bonus tasks, each with its own check-off key and never past its limit.
+        let today = Date().startOfDay
+        var sim: [UUID: PlanTask] = [:], ticked: [String] = []
+        for tid in bonusTicks {
+            guard var t = sim[tid] ?? store.task(tid), t.isBonus, !t.bonusUsedUp else { continue }
+            let key = t.nextBonusKey(on: today)
+            ticked.append("\(tid.uuidString)|\(key)")
+            t.completions[key] = Date(); sim[tid] = t
+        }
+        let extras = ticked + bonusCredited
         var s = FocusSession(id: id, startedAt: startedAt, endedAt: end, plannedMinutes: minutes,
                              actualMinutes: Int((Double(elapsed) / 60).rounded()), picked: picked.count, finished: finished.count,
-                             points: Focus.points(finished: finished.count, picked: picked.count, focusPercent: percent))
+                             points: Focus.points(finished: finished.count, picked: picked.count, focusPercent: percent, bonus: extras.count))
         s.finishedIds = finished
         s.finishedTitles = finished.compactMap { model?.occurrence($0)?.task.title }
+        if !extras.isEmpty {
+            s.bonus = extras.count; s.bonusIds = extras
+            s.bonusTitles = extras.compactMap { model?.occurrence($0)?.task.title }
+        }
+        bonusTicks = []; bonusCredited = []
         s.awaySeconds = awaySeconds; s.focusPercent = percent; s.device = "ios"
         store.saveFocusSession(s)
         result = s

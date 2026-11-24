@@ -94,6 +94,12 @@ struct TodayScreen: View {
                         Text("These stay on your list until you check them off or mark them “didn't do it”.")
                     }
                 }
+                let bonus = store.bonusTasks()
+                if !bonus.isEmpty {
+                    Section { ForEach(bonus) { MobileRow(occ: $0) } } header: { Text("Bonus") } footer: {
+                        Text("Optional extras, not counted in today's progress. Each one you finish during a focus session is +\(Bonus.points) points.")
+                    }
+                }
                 if !later.isEmpty {
                     Section {
                         ForEach(later) { o in
@@ -376,7 +382,7 @@ struct FocusScreen: View {
                         ForEach(sessions.prefix(8)) { s in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(s.finished) of \(s.picked) done in \(s.actualMinutes) min")
+                                    Text("\(s.finished) of \(s.picked) done in \(s.actualMinutes) min\(s.bonusCount > 0 ? " · \(s.bonusCount) bonus" : "")")
                                     Text("\(s.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute())) · \(s.focusPercent)% focused · \(s.device == "ios" ? "iPhone" : s.device == "mac" ? "Mac" : "Web")")
                                         .font(.app(.caption)).foregroundStyle(.secondary)
                                 }
@@ -425,6 +431,28 @@ struct FocusScreen: View {
                 .buttonStyle(.plain)
             }
         } footer: { Text("Tick each as you finish. You'll write the reflections when time's up. Leaving Cadence counts as time away.") }
+        let bonus = store.bonusTasks().filter { !$0.isDone || focus.bonusDone($0.task.id) > 0 }
+        if !bonus.isEmpty {
+            Section {
+                ForEach(bonus) { o in
+                    let n = focus.bonusDone(o.task.id), can = focus.canTickBonus(o.task)
+                    HStack {
+                        Button { focus.tickBonus(o.task) } label: {
+                            HStack {
+                                Image(systemName: n > 0 ? "star.fill" : "star").foregroundStyle(n > 0 ? Color.yellow : .secondary).font(.app(.title3))
+                                Text(o.task.title).foregroundStyle(.primary)
+                            }
+                        }
+                        .buttonStyle(.plain).disabled(!can)
+                        Spacer()
+                        if n > 0 { Text("×\(n) +\(n * Bonus.points)").monospacedDigit().foregroundStyle(.yellow) }
+                        if focus.bonusTicks.contains(o.task.id) {
+                            Button { focus.untickBonus(o.task.id) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
+                        }
+                    }
+                }
+            } header: { Text("Bonus · +\(Bonus.points) each") } footer: { Text("Optional. Tap one each time you do it.") }
+        }
         Section {
             Button { focus.addFiveMinutes() } label: { Label("Add 5 minutes", systemImage: "plus") }
             Button("End now", role: .destructive) { focus.end() }
@@ -435,11 +463,11 @@ struct FocusScreen: View {
         let open = store.todayChecklist().filter { !$0.isResolved }
         let selected = picks ?? Set(open.map(\.id))
         if let r = focus.result {
-            let unreflected = r.finishedIds.compactMap(model.occurrence).filter { !$0.isResolved }
+            let unreflected = (r.finishedIds + (r.bonusIds ?? [])).compactMap(model.occurrence).filter { !$0.isResolved && !$0.task.bonusUsedUp }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Time! \(r.finished) of \(r.picked) done").font(.app(.headline))
-                    Text("\(r.focusPercent)% focused · +\(r.points) points").foregroundStyle(.secondary)
+                    Text("\(r.focusPercent)% focused · +\(r.points) points\(r.bonusCount > 0 ? " · \(r.bonusCount) bonus" : "")").foregroundStyle(.secondary)
                 }
                 ForEach(unreflected) { o in
                     HStack { Text(o.task.title); Spacer(); Button("Reflect & check off") { model.reflect(o) }.buttonStyle(.borderedProminent).controlSize(.small) }
@@ -508,7 +536,7 @@ struct FocusScreen: View {
                 focus.start(minutes: minutes, picked: open.map(\.id).filter(selected.contains))
                 picks = nil
             } label: { Label("Start \(Focus.label(minutes)) focus", systemImage: "scope").frame(maxWidth: .infinity) }
-            .buttonStyle(.borderedProminent).disabled(selected.isEmpty)
+            .buttonStyle(.borderedProminent).disabled(selected.isEmpty && store.openBonusTasks().isEmpty)
             .listRowBackground(Color.clear)
         } footer: {
             Text("10 points per item finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.")

@@ -453,7 +453,7 @@ final class Store: ObservableObject {
     /// One-off tasks from earlier days that were never checked off.
     func overdue(today: Date = Date()) -> [Occurrence] {
         let t = today.startOfDay
-        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.isUntilDone && !$0.recurrence.isRepeating && $0.startDate.startOfDay < t && !$0.hasHistory }
+        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.isBonus && !$0.isUntilDone && !$0.recurrence.isRepeating && $0.startDate.startOfDay < t && !$0.hasHistory && !$0.isWaiting }
             .map { Occurrence(task: $0, day: $0.startDate.startOfDay) }
             .sorted { $0.day < $1.day }
     }
@@ -591,15 +591,25 @@ final class Store: ObservableObject {
         guard countWords(text) >= settings.minReflectionWords,
               let i = tasks.firstIndex(where: { $0.id == occ.task.id }) else { return }
         var t = tasks[i]
-        t.completions[occ.key] = Date()
-        t.missed?[occ.key] = nil
-        if let minutes, minutes > 0 { t.timeTaken = (t.timeTaken ?? [:]).merging([occ.key: minutes]) { $1 } }
+        var key = occ.key
+        if t.isBonus {
+            // A bonus task goes under its next free check-off that day, and stops at its limit.
+            guard !t.bonusUsedUp else { return }
+            if t.completions[key] != nil { key = t.nextBonusKey(on: occ.day) }
+        }
+        t.completions[key] = Date()
+        t.missed?[key] = nil
+        if let minutes, minutes > 0 { t.timeTaken = (t.timeTaken ?? [:]).merging([key: minutes]) { $1 } }
         tasks[i] = t
-        armFollowUps(of: t.id, key: occ.key)
+        armFollowUps(of: t.id, key: key)
         reflections.insert(Reflection(taskID: occ.task.id, taskTitle: occ.task.title,
-                                      occurrenceKey: occ.key, text: text), at: 0)
+                                      occurrenceKey: key, text: text), at: 0)
         if tasks[i].source == "gtasks" { onGoogleTaskChange?(tasks[i], "completed") }
+        onComplete?(tasks[i], key)
     }
+
+    /// Set by the app: a check-off just happened (a bonus task finished during a focus session counts for it).
+    var onComplete: ((PlanTask, String) -> Void)?
 
     /// Set by the app: pushes a Google Tasks item's status ("completed" / "needsAction") to Google.
     var onGoogleTaskChange: ((PlanTask, String) -> Void)?

@@ -105,6 +105,8 @@ final class AppModel: ObservableObject {
         }
         sync.onSignedIn = { [unowned google] in Task { await google.checkServer() } }
         sync.onSignedOut = { [unowned google] in google.resetServerMode() }
+        // A bonus task checked off while a focus session runs counts for the session.
+        store.onComplete = { [unowned self] t, key in self.focus.noteCompleted(t, key: key) }
         // Checking off (or unchecking) a Google Tasks item updates it in Google.
         store.onGoogleTaskChange = { [unowned google] t, status in
             Task { try? await google.updateGoogleTask(listID: t.sourceCalendar ?? "@default", taskID: t.googleTaskID ?? "", fields: ["status": status]) }
@@ -232,7 +234,7 @@ final class AppModel: ObservableObject {
         reflectionMissed = missed
         reflectionMinutes = missed ? nil : minutes
         // Re-read the task so the sheet sees the latest state.
-        if let t = store.task(occ.task.id) { reflectionTarget = Occurrence(task: t, day: occ.day) }
+        if let t = store.task(occ.task.id) { reflectionTarget = Occurrence(task: t, day: occ.day, fixedKey: occ.fixedKey) }
     }
 
     /// The X box: "didn't do it / couldn't" asks why; clicking it again undoes it.

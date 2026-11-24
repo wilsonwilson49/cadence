@@ -83,7 +83,8 @@ export function dateKey(d) {
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
 }
 export function parseKey(k) {
-  const [y, m, d] = k.split('-').map(Number);
+  // A bonus task's extra check-offs on a day are "yyyy-MM-dd#2", "#3", …
+  const [y, m, d] = String(k).split('#')[0].split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
@@ -334,6 +335,8 @@ export function occurs(task, day) {
   if (task.archived) return false;
   // A follow-up that hasn't been set off yet is on no list.
   if (task.after && !task.armedAt) return false;
+  // Bonus tasks aren't on any day: they have their own list (store.bonusTasks), so nothing reminds or counts them.
+  if (isBonus(task)) return false;
   const d = startOfDay(day);
   if (d < startOfDay(task.startDate)) return false;
   if (!isUntilDone(task)) return occursByPattern(task, d);
@@ -442,11 +445,13 @@ export function rrule(rec, start) {
 }
 
 // ---------- occurrences ----------
-export function makeOccurrence(task, day) {
+export function makeOccurrence(task, day, fixedKey = null) {
   const d = startOfDay(day);
   // Before the new one's time, today's item is still the previous one (see heldOver).
-  const held = heldOver(task, d);
-  const key = held ? held.key : dateKey(d);
+  // A bonus task's is its next free check-off that day (or its last one once it's used up), unless one is given.
+  const bonus = isBonus(task);
+  const held = bonus || fixedKey ? null : heldOver(task, d);
+  const key = fixedKey || (bonus ? bonusKeyOn(task, d) : held ? held.key : dateKey(d));
   const start = task.timeMinutes != null ? dayAt(d, task.timeMinutes) : null;
   const event = isEvent(task);
   const done = !event && Boolean(task.completions && task.completions[key]);
@@ -460,8 +465,9 @@ export function makeOccurrence(task, day) {
     event,
     busy: isBusy(task),
     held: Boolean(held),
+    bonus,
     done, missed, resolved: done || missed,
-    overdue: !event && !done && !missed && d < startOfDay(new Date()),
+    overdue: !bonus && !event && !done && !missed && d < startOfDay(new Date()),
   };
 }
 
@@ -495,6 +501,50 @@ export function sortOccurrences(a, b) {
 export const AFTER_CHOICES = [0, 5, 10, 15, 30, 60, 120, 240];
 export const afterLabel = m => (m ? `${fmtMinutes(m)} later` : 'Right away');
 export const isWaiting = t => Boolean(t?.after && !t.armedAt);
+
+// Bonus tasks (kind "bonus"): optional extras, listed but never required: no date to miss, no reminders, not in
+// today's progress, never overdue. Each one finished during a focus session is worth extra points. They can be
+// checked off a set number of times in all (bonusLimit: none = once, 0 = no limit); a second check-off the same
+// day goes under "yyyy-MM-dd#2", and so on. Same rules as Sources/Model/Bonus.swift.
+export const BONUS_POINTS = 15;
+export const BONUS_LIMITS = [1, 2, 3, 5, 10, 0];
+export const bonusLimitLabel = n => (n <= 0 ? 'No limit' : n === 1 ? 'Once' : `${n} times`);
+export const isBonus = t => t?.kind === 'bonus';
+/** How many times it can be checked off in all; null = no limit. */
+export const bonusMax = t => (t.bonusLimit == null ? 1 : t.bonusLimit <= 0 ? null : t.bonusLimit);
+export const bonusCount = t => Object.keys(t.completions || {}).length;
+export const bonusLeft = t => { const m = bonusMax(t); return m == null ? null : Math.max(0, m - bonusCount(t)); };
+/** A bonus task checked off as many times as it can be (never true for anything else). */
+export const bonusUsedUp = t => isBonus(t) && bonusLeft(t) === 0;
+const bonusIndex = k => Number(String(k).split('#')[1]) || 1;
+/** The check-offs made on `day`, in order. */
+export function bonusKeysOn(t, day) {
+  const base = dateKey(day);
+  return Object.keys(t.completions || {}).filter(k => k === base || k.startsWith(`${base}#`)).sort((a, b) => bonusIndex(a) - bonusIndex(b));
+}
+/** The key the next check-off on `day` goes under. */
+export function nextBonusKey(t, day) {
+  const base = dateKey(day), c = t.completions || {};
+  if (!c[base]) return base;
+  let n = 2;
+  while (c[`${base}#${n}`]) n++;
+  return `${base}#${n}`;
+}
+/** For its row: the next free check-off, or once it's used up, the last one made that day (so it shows ticked). */
+export function bonusKeyOn(t, day) {
+  const keys = bonusUsedUp(t) ? bonusKeysOn(t, day) : [];
+  return keys.length ? keys[keys.length - 1] : nextBonusKey(t, day);
+}
+/** On the bonus list that day: from its start date, while it can still be checked off (or it was used up that day). */
+export const bonusListed = (t, day) => isBonus(t) && !t.archived && startOfDay(day) >= startOfDay(new Date(t.startDate))
+  && (!bonusUsedUp(t) || bonusKeysOn(t, day).length > 0);
+/** "Once", "2 of 3 done", "Done 5 times · no limit". */
+export function bonusSummary(t) {
+  const n = bonusCount(t), max = bonusMax(t);
+  if (max == null) return n ? `Done ${n} time${n === 1 ? '' : 's'} · no limit` : 'As often as you like';
+  if (max === 1) return n ? 'Done' : 'Once';
+  return n ? `${Math.min(n, max)} of ${max} done` : `Up to ${max} times`;
+}
 /** Y once X is checked off at `now`: a one-off on the next whole minute after the delay, with its reminder. */
 export function armFollowUp(f, triggerId, key, now = new Date()) {
   const raw = +now + Math.max(0, Number(f.afterMinutes) || 0) * 60_000;
@@ -647,8 +697,9 @@ export const focusLengths = list => [...new Set((Array.isArray(list) ? list : DE
 /** "25 min", "1h 30m", "2h". */
 export const fmtFocusLength = m => m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m / 60}h`;
 export function focusMultiplier(percent) { return percent >= 90 ? 1.5 : percent >= 75 ? 1.25 : 1; }
-export function focusPoints({ finished, picked, focusPercent }) {
-  return Math.round(finished * 10 * focusMultiplier(focusPercent ?? 100) + (picked && finished >= picked ? 20 : 0));
+/** `finished`/`picked`: the list (not bonus tasks); `bonus`: bonus tasks finished, 15 points each before the multiplier. */
+export function focusPoints({ finished, picked, focusPercent, bonus = 0 }) {
+  return Math.round((finished * 10 + bonus * BONUS_POINTS) * focusMultiplier(focusPercent ?? 100) + (picked && finished >= picked ? 20 : 0));
 }
 /** Levels: 2 at 100 points, 3 at 300, 4 at 600… (each level needs 100 more than the last). */
 export const levelStart = level => 50 * (level - 1) * level;

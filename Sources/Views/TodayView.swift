@@ -103,6 +103,17 @@ struct TodayView: View {
                         Card { VStack(spacing: 0) { rows(ongoing) } }
                     }
                 }
+                let bonus = store.bonusTasks()
+                if !bonus.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(text: "Bonus", symbol: "star", count: bonus.filter { !$0.isDone }.count)
+                            Text("optional · not counted in today's progress · +\(Bonus.points) each in a focus session")
+                                .font(.app(.caption)).foregroundStyle(.secondary)
+                        }
+                        Card { VStack(spacing: 0) { rows(bonus) } }
+                    }
+                }
                 if !later.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {

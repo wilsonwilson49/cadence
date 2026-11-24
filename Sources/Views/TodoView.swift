@@ -121,7 +121,8 @@ struct TodoView: View {
         let tasks = store.tasks.filter { $0.archived != true && !$0.isEvent && !$0.isHabit && matches($0.title) }
         let untilDone = tasks.filter(\.isUntilDone).sorted { $0.startDate > $1.startDate }
         let repeating = tasks.filter { !$0.isUntilDone && $0.recurrence.isRepeating }.sorted { $0.title < $1.title }
-        let oneOff = tasks.filter { !$0.isUntilDone && !$0.recurrence.isRepeating }.sorted { $0.startDate > $1.startDate }
+        let oneOff = tasks.filter { !$0.isUntilDone && !$0.recurrence.isRepeating && !$0.isBonus }.sorted { $0.startDate > $1.startDate }
+        let bonus = tasks.filter(\.isBonus).sorted { ($0.bonusUsedUp ? 1 : 0, $1.createdAt) < ($1.bonusUsedUp ? 1 : 0, $0.createdAt) }
         if tasks.isEmpty { emptyState }
         if !untilDone.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
@@ -139,6 +140,12 @@ struct TodoView: View {
             VStack(alignment: .leading, spacing: 6) {
                 SectionTitle(text: "One-time", symbol: "1.circle", count: oneOff.count)
                 Card { VStack(spacing: 0) { taskRows(oneOff) } }
+            }
+        }
+        if !bonus.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionTitle(text: "Bonus", symbol: "star", count: bonus.count)
+                Card { VStack(spacing: 0) { taskRows(bonus) } }
             }
         }
     }
@@ -199,9 +206,17 @@ private struct TaskDefinitionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title).font(.app(.body).weight(.medium))
                 HStack(spacing: 10) {
+                    if task.isBonus {
+                        Label("Bonus · \(task.bonusSummary)", systemImage: "star").foregroundStyle(task.bonusUsedUp ? Color.green : .secondary)
+                        if task.startDate.startOfDay > Date().startOfDay {
+                            Label("From \(task.startDate.formatted(.dateTime.month(.abbreviated).day()))", systemImage: "calendar")
+                        }
+                    } else {
                     Label(task.planSummary ?? "Once", systemImage: "repeat")
                     Label(task.timeMinutes.map { timeString(minutes: $0) } ?? "Any time", systemImage: "clock")
-                    if task.isCycle {
+                    }
+                    if task.isBonus {
+                    } else if task.isCycle {
                         let st = task.cycleStatus()
                         if st.finished {
                             Label("All \(st.times) done", systemImage: "checkmark.circle").foregroundStyle(.green)

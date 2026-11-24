@@ -259,7 +259,11 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   const t = o.task;
   const meta = [];
   if (showDate || o.overdue) meta.push(`<span class="${o.overdue ? 'red' : ''}">${M.fmtDay(o.day, { weekday: 'short', month: 'short', day: 'numeric' })}</span>`);
-  meta.push(o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : compact ? '' : `<span>${ic('sun')}Any time</span>`);
+  if (o.bonus) {
+    const today = M.bonusKeysOn(t, o.day).length;
+    meta.push(`<span>${ic('star')}Bonus · ${esc(M.bonusSummary(t))}${today && !o.done ? ` · ${today}× today` : ''}</span>`);
+    if (!compact && !o.done) meta.push(`<span class="bonus-pts">+${M.BONUS_POINTS} in focus</span>`);
+  } else meta.push(o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : compact ? '' : `<span>${ic('sun')}Any time</span>`);
   if (M.isUntilDone(t) && !compact && !o.resolved) meta.push(`<span>${ic('flame')}${esc(M.carryLabel(t, o.day))}</span>`);
   const plan = M.planSummary(t);
   if (plan && !compact) meta.push(`<span>${ic(M.isUntilDone(t) ? 'flame' : 'repeat')}${esc(plan)}</span>`);
@@ -280,7 +284,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   if (o.overdue) meta.push('<span class="red"><b>Overdue</b></span>');
   if (t.source === 'calendly') meta.push(`<span>${ic('people')}Calendly</span>`);
   if (t.source === 'google') meta.push(`<span>${ic('cal')}Google</span>`);
-  if (M.isSilent(t)) meta.push(`<span title="No notifications">${ic('bell-off')}</span>`);
+  if (M.isSilent(t) && !o.bonus) meta.push(`<span title="No notifications">${ic('bell-off')}</span>`);
   if (t.externalURL && !compact) meta.push(`<a href="${esc(t.externalURL)}" target="_blank" rel="noopener" title="Open meeting link">${ic('link')}</a>`);
   if (o.missed) meta.unshift(`<span class="red"><b>Didn’t do it</b></span>`);
   const steps = M.habitSteps(t);
@@ -290,8 +294,9 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   return `<div class="crow ${o.done ? 'done' : ''} ${o.missed ? 'missed' : ''} ${ui.justDone.has(o.id) ? 'just-done' : ''}">
     <button class="checkbtn" style="${o.done ? `color:${color(t.color)}` : ''}" data-act="toggle" data-occ="${esc(o.id)}" data-ctx="${ctx}"
       title="${o.done ? 'Mark as not done' : 'Complete — you’ll write a short reflection first'}">${ic(o.done ? 'checked' : 'circle')}</button>
-    <button class="missbtn ${o.missed ? 'on' : ''}" data-act="miss" data-occ="${esc(o.id)}" data-ctx="${ctx}"
-      title="${o.missed ? 'Undo “didn’t do it”' : 'Didn’t do it / couldn’t — you’ll reflect on why'}">${ic('x')}</button>
+    ${o.bonus ? `<span class="bonus-star" title="Bonus task: optional, +${M.BONUS_POINTS} points when you finish it during a focus session">${ic('star-fill')}</span>`
+      : `<button class="missbtn ${o.missed ? 'on' : ''}" data-act="miss" data-occ="${esc(o.id)}" data-ctx="${ctx}"
+      title="${o.missed ? 'Undo “didn’t do it”' : 'Didn’t do it / couldn’t — you’ll reflect on why'}">${ic('x')}</button>`}
     ${compact ? '' : `<span class="bar" style="background:${color(t.color)}"></span>`}
     <div class="grow"><div class="title ellipsis">${esc(t.title)}</div><div class="meta">${meta.join('')}</div>${steps.length && !compact ? stepList(o, ctx) : ''}</div>
     ${hasRefl ? `<span class="muted" title="Reflection saved">${ic('quote')}</span>` : ''}
@@ -299,6 +304,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
       <button class="btn ghost sm" data-act="edit" data-task="${t.id}">Edit</button>
       ${t.recurrence.frequency !== 'none' && !M.isUntilDone(t) ? `<button class="btn ghost sm" data-act="skip" data-occ="${esc(o.id)}" title="Skip this occurrence">Skip</button>` : ''}
       ${M.isUntilDone(t) && t.urgent && !o.resolved ? `<button class="btn ghost sm" data-act="task-urgent" data-task="${t.id}" data-off="1" title="Back to due later">Not urgent</button>` : ''}
+      ${o.bonus && !o.done && M.bonusKeysOn(t, o.day).length ? `<button class="btn ghost sm" data-act="bonus-undo" data-task="${t.id}" title="Take back the last check-off today">Undo one</button>` : ''}
     </div>`}
   </div>`;
 }
@@ -313,7 +319,8 @@ function stepList(o, ctx = '') {
 function findOcc(id) {
   const [taskId, key] = id.split('|');
   const t = store.tasks.get(taskId);
-  return t ? M.makeOccurrence(t, M.parseKey(key)) : null;
+  // A bonus task's id names one particular check-off ("…#2").
+  return t ? M.makeOccurrence(t, M.parseKey(key), M.isBonus(t) ? key : null) : null;
 }
 
 function empty(icon, title, text) {
@@ -450,6 +457,9 @@ function todayView() {
         <span class="small muted" style="font-weight:400">stays on your list until you check it off or mark it “didn’t do it”</span></div>
       <div class="card">${ongoing.map(o => crow(o)).join('')}</div>
       <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div></div>` : ''}
+    ${(() => { const bonus = store.bonusTasks(); return bonus.length ? `<div><div class="section-title">${ic('star')}Bonus <span class="count">${bonus.filter(o => !o.done).length}</span>
+        <span class="small muted" style="font-weight:400">optional · not counted in today’s progress · +${M.BONUS_POINTS} each in a focus session</span></div>
+      <div class="card">${bonus.map(o => crow(o)).join('')}</div></div>` : ''; })()}
     ${later.length ? `<div><div class="section-title">${ic('clock')}Due later <span class="count">${later.length}</span>
         <span class="small muted" style="font-weight:400">not counted in today’s progress · mark one urgent to work on it today</span><span class="grow"></span>${projectTodaySelect()}</div>
       <div class="card">${later.map(o => { const d = M.untilDoneDeadline(o.task, o.day);
@@ -614,8 +624,35 @@ const workClock = () => {
   return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+// Bonus tasks during a session: ticked on the Focus page (reflected on when it ends), or checked off anywhere
+// else while it runs (store.onComplete). Each is +15 points before the multiplier; they're not part of the list.
+const bonusDone = id => (focus.bonusTicks || []).filter(x => x === id).length + (focus.bonusCredited || []).filter(x => x.startsWith(`${id}|`)).length;
+function canTickBonus(t) {
+  if (!focus.running || !M.isBonus(t)) return false;
+  const left = M.bonusLeft(store.tasks.get(t.id) || t);
+  return left == null || (focus.bonusTicks || []).filter(x => x === t.id).length < left;
+}
+/** The ticked bonus tasks as check-offs to reflect on, each with its own key ("…#2"), never past its limit. */
+function tickedBonusOccs() {
+  const today = new Date(), sim = new Map(), out = [];
+  for (const id of focus.bonusTicks || []) {
+    const t = sim.get(id) ?? store.tasks.get(id);
+    if (!t || !M.isBonus(t) || M.bonusUsedUp(t)) continue;
+    const key = M.nextBonusKey(t, today);
+    out.push(M.makeOccurrence(store.tasks.get(id), today, key));
+    sim.set(id, { ...t, completions: { ...t.completions, [key]: M.iso(new Date()) } });
+  }
+  return out;
+}
+store.onComplete = (t, key) => {
+  const id = `${t.id}|${key}`;
+  if (!focus.running || !M.isBonus(t) || (focus.bonusCredited || []).includes(id) || focus.finished.includes(id)) return;
+  focus.bonusCredited = [...(focus.bonusCredited || []), id];
+  saveFocus();
+};
+
 function startFocus(minutes, picked, work = null) {
-  Object.assign(focus, { running: true, id: M.uuid(), startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000, minutes, picked, finished: [],
+  Object.assign(focus, { running: true, id: M.uuid(), startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000, minutes, picked, finished: [], bonusTicks: [], bonusCredited: [],
     awayMs: 0, awaySince: document.hasFocus() ? null : Date.now(), mode: work ? 'work' : 'sprint', workId: work?.id ?? null, title: work?.task.title ?? null });
   ui.focusResult = null;
   saveFocus(); render(); focusTick();
@@ -644,19 +681,24 @@ function endFocus({ quiet = false } = {}) {
   const away = Math.min(elapsed, awayNow());
   const focusPercent = Math.round(100 * (elapsed - away) / elapsed);
   const finished = focus.finished.length, picked = focus.picked.length;
+  // Bonus tasks don't count toward clearing the list; each one finished is worth bonus points instead.
+  const isB = id => M.isBonus(findOcc(id)?.task);
+  const ticked = tickedBonusOccs(), extras = [...ticked.map(o => o.id), ...(focus.bonusCredited || [])];
   const session = store.saveFocusSession({
     id: focus.id, startedAt: M.iso(new Date(focus.startedAt)), endedAt: M.iso(new Date(end)), plannedMinutes: focus.minutes,
     actualMinutes: Math.round(elapsed / 60_000), picked, finished, finishedTitles: focus.finished.map(id => findOcc(id)?.task.title).filter(Boolean),
     finishedIds: focus.finished, awaySeconds: Math.round(away / 1000), focusPercent, device: 'web',
-    points: M.focusPoints({ finished, picked, focusPercent }),
+    points: M.focusPoints({ finished: focus.finished.filter(id => !isB(id)).length, picked: focus.picked.filter(id => !isB(id)).length, focusPercent,
+      bonus: extras.length + focus.finished.filter(isB).length }),
+    ...(extras.length ? { bonus: extras.length, bonusIds: extras, bonusTitles: extras.map(id => findOcc(id)?.task.title).filter(Boolean) } : {}),
     ...(focus.mode === 'work' ? { mode: 'work', title: focus.title, occurrenceID: focus.workId } : {}),
-  }, { skip: focus.mode === 'work' && elapsed < 60_000 && !finished });
-  Object.assign(focus, { running: false });
+  }, { skip: focus.mode === 'work' && elapsed < 60_000 && !finished && !extras.length });
+  Object.assign(focus, { running: false, bonusTicks: [], bonusCredited: [] });
   saveFocus();
   ui.focusResult = session;
   if (quiet) { render(); return; }
-  reflectQueue(focus.finished.map(findOcc).filter(Boolean));
-  reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#82a8ef' },
+  reflectQueue([...focus.finished.map(findOcc).filter(Boolean), ...ticked]);
+  reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done${extras.length ? ` + ${extras.length} bonus` : ''}`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#82a8ef' },
     store.settings.defaultChannels);
   navigate('focus');
 }
@@ -711,12 +753,14 @@ function focusView() {
       <div class="focus-clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" class="track"/>
         <circle cx="100" cy="100" r="90" class="bar" data-focus-ring style="stroke-dasharray:${2 * Math.PI * 90};stroke-dashoffset:${2 * Math.PI * 90 * (1 - left / (focus.minutes * 60_000))}"/></svg>
         <div class="fc-inner"><div class="fc-time" data-focus-clock>${fmtClock(left)}</div><div class="small muted">${focus.finished.length} of ${occs.length} done</div>
+          ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length ? `<div class="small bonus-pts">${ic('star-fill')} ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length} bonus</div>` : ''}
           <div class="tiny muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div></div>
       <div class="grow stack" style="gap:10px;min-width:0">
         <div class="small muted">Tap Done as you finish each one. You’ll write the reflections when time’s up, so the clock is only for doing.</div>
-        <div class="card">${occs.map(o => { const on = focus.finished.includes(o.id); return `<div class="crow ${on ? 'done' : ''}">
+        ${occs.length ? `<div class="card">${occs.map(o => { const on = focus.finished.includes(o.id); return `<div class="crow ${on ? 'done' : ''}">
           <button class="checkbtn" data-act="focus-done" data-occ="${esc(o.id)}" style="${on ? `color:${color(o.task.color)}` : ''}">${ic(on ? 'checked' : 'circle')}</button>
-          <div class="grow"><div class="title ellipsis">${esc(o.task.title)}</div><div class="meta"><span>${M.isHabit(o.task) ? 'Habit' : 'Task'}</span></div></div></div>`; }).join('')}</div>
+          <div class="grow"><div class="title ellipsis">${esc(o.task.title)}</div><div class="meta"><span>${M.isHabit(o.task) ? 'Habit' : 'Task'}</span></div></div></div>`; }).join('')}</div>` : ''}
+        ${bonusCard()}
         <div class="row"><button class="btn" data-act="focus-more">${ic('plus')} 5 minutes</button><span class="grow"></span>
           <button class="btn danger" data-act="focus-end">End now</button></div>
       </div></div>`;
@@ -726,7 +770,8 @@ function focusView() {
     const mins = M.clampFocus(ui.focusMinutes ?? store.settings.focusMinutes ?? 25);
     const lengths = M.focusLengths(store.settings.focusLengths);
     const r = ui.focusResult;
-    const unreflected = r ? (r.finishedIds || []).map(findOcc).filter(o => o && !o.resolved) : [];
+    const unreflected = r ? [...(r.finishedIds || []), ...(r.bonusIds || [])].map(findOcc).filter(o => o && !o.resolved && !M.bonusUsedUp(o.task)) : [];
+    const bonusOpen = store.openBonusTasks();
     const modeSeg = `<div class="seg" role="group" aria-label="Focus mode" style="max-width:440px">
       <button class="${workMode ? 'on' : ''}" data-act="focus-mode" data-m="work">${ic('target')} Work on one task</button>
       <button class="${workMode ? '' : 'on'}" data-act="focus-mode" data-m="sprint">${ic('timer')} Sprint through a list</button></div>`;
@@ -734,11 +779,12 @@ function focusView() {
         ? `${r.finished ? 'Done' : 'Stopped'}: ${esc(r.title || 'work')} after ${M.fmtFocusLength(Math.max(1, r.actualMinutes))}`
         : `Time! ${r.finished} of ${r.picked} done in ${r.actualMinutes} min`}</b>
         <div class="small muted">${r.focusPercent}% focused (${M.fmtDuration(r.awaySeconds)} away) · ×${M.focusMultiplier(r.focusPercent)} · <b class="green">+${r.points} points</b></div>
+        ${r.bonus ? `<div class="small muted">${ic('star-fill')} Bonus: ${esc((r.bonusTitles || []).join(', '))} (+${M.BONUS_POINTS} each)</div>` : ''}
         ${unreflected.length ? `<div class="stack" style="gap:6px;margin-top:10px"><div class="small">Write a reflection for each to check it off:</div>
           ${unreflected.map(o => `<div class="row"><span class="grow ellipsis">${esc(o.task.title)}</span><button class="btn sm primary" data-act="toggle" data-occ="${esc(o.id)}">Reflect &amp; check off</button></div>`).join('')}</div>`
-          : r.finished ? '<div class="small green" style="margin-top:6px">All reflected and checked off.</div>' : ''}</div>
+          : r.finished || r.bonus ? '<div class="small green" style="margin-top:6px">All reflected and checked off.</div>' : ''}</div>
         <button class="btn ghost sm icon" data-act="focus-dismiss" title="Close">${ic('x')}</button></div>` : ''}
-      ${workMode ? workSetup(open) : `<div class="card pad stack" style="gap:14px">
+      ${workMode ? workSetup(open, bonusOpen) : `<div class="card pad stack" style="gap:14px">
         <div><div class="section-title" style="margin:0 0 8px">${ic('timer')}How long?</div>
           <div class="row" style="flex-wrap:wrap">${lengths.map(n => `<span class="flen"><button class="btn ${mins === n ? 'primary' : ''}" data-act="focus-mins" data-m="${n}">${M.fmtFocusLength(n)}</button><button class="flen-x" data-act="focus-len-remove" data-m="${n}" title="Remove this length">${ic('x')}</button></span>`).join('')}
             <span class="flen-custom"><input class="input" type="number" min="1" max="${M.FOCUS_MAX_MINUTES}" style="width:80px" value="${mins}" data-bind="focusMinutes" title="Any length, in minutes"><span class="small muted">min</span></span>
@@ -747,9 +793,10 @@ function focusView() {
         <div><div class="section-title" style="margin:0 0 8px">${ic('list')}What will you get through? <span class="count">${pick.size}</span></div>
           ${open.length ? `<div class="focus-pick">${open.map(o => `<label class="check"><input type="checkbox" data-act-change="focus-pick" value="${esc(o.id)}" ${pick.has(o.id) ? 'checked' : ''}>
             <span class="ellipsis">${esc(o.task.title)}</span><span class="tiny muted">${M.isHabit(o.task) ? 'habit' : M.isUntilDone(o.task) ? 'until done' : 'today'}</span></label>`).join('')}</div>`
-            : '<div class="muted">Nothing open on today’s list. Add a task first.</div>'}</div>
-        <div class="row"><div class="small muted grow">Score: 10 points per task finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.</div>
-          <button class="btn primary" data-act="focus-start" ${pick.size ? '' : 'disabled'}>${ic('target')} Start ${M.fmtFocusLength(mins)} focus</button></div>
+            : `<div class="muted">${bonusOpen.length ? 'Nothing open on today’s list, but there are bonus tasks.' : 'Nothing open on today’s list. Add a task first.'}</div>`}</div>
+        ${bonusOpen.length ? `<div class="small muted">${ic('star')} Bonus: ${esc(bonusOpen.map(o => o.task.title).join(', '))}. They’re listed while the clock runs: tick off any you do for +${M.BONUS_POINTS} points each.</div>` : ''}
+        <div class="row"><div class="small muted grow">Score: 10 points per task finished in time, ${M.BONUS_POINTS} per bonus task, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.</div>
+          <button class="btn primary" data-act="focus-start" ${pick.size || bonusOpen.length ? '' : 'disabled'}>${ic('target')} Start ${M.fmtFocusLength(mins)} focus</button></div>
       </div>`}`;
   }
   return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">${workMode && !focus.running
@@ -759,14 +806,14 @@ function focusView() {
       ${levelCard}${body}
       ${sessions.length ? `<div><div class="section-title">${ic('clock')}Recent sessions</div><div class="card">${sessions.slice(0, 8).map(x => `<div class="crow">
         <span class="evt-time">${M.fmtDay(x.startedAt, { month: 'short', day: 'numeric' })}<small>${M.fmtTime(x.startedAt)}</small></span>
-        <div class="grow"><div class="title ellipsis">${x.mode === 'work' ? `${x.finished ? 'Finished' : 'Worked on'} “${esc(x.title || 'a task')}” for ${M.fmtFocusLength(Math.max(1, x.actualMinutes))}` : `${x.finished} of ${x.picked} done in ${x.actualMinutes} min`}</div>
+        <div class="grow"><div class="title ellipsis">${x.mode === 'work' ? `${x.finished ? 'Finished' : 'Worked on'} “${esc(x.title || 'a task')}” for ${M.fmtFocusLength(Math.max(1, x.actualMinutes))}` : `${x.finished} of ${x.picked} done in ${x.actualMinutes} min`}${x.bonus ? ` · ${x.bonus} bonus` : ''}</div>
           <div class="meta"><span>${x.focusPercent}% focused</span>${x.distractingSeconds ? `<span>${M.fmtDuration(x.distractingSeconds)} in distracting apps</span>` : ''}<span>${x.device === 'mac' ? 'Mac' : 'Web'}</span></div></div>
         <b class="green">+${x.points}</b></div>`).join('')}</div></div>` : ''}
     </div>`;
 }
 
 /** Focus › Work: pick one and it starts straight away. Most important first. */
-function workSetup(open) {
+function workSetup(open, bonus = []) {
   const rank = o => M.priorityRank(o.task);
   const list = open.filter(o => !o.event).map((o, i) => [o, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([o]) => o);
   return `<div class="card pad stack" style="gap:12px">
@@ -779,7 +826,28 @@ function workSetup(open) {
         <span class="bar" style="background:${color(t.color)}"></span>
         <span class="grow"><span class="title ellipsis">${esc(t.title)}</span><span class="meta">${pr ? `<span class="prio prio-${pr}"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]}</span>` : ''}${hd ? hardMeter(hd) : ''}${typ ? `<span>${ic('timer')}usually ${M.fmtMinutes(typ)}</span>` : ''}${o.overdue ? '<span class="red">Overdue</span>' : ''}${o.start ? `<span>${ic('clock')}${M.fmtTime(o.start)}</span>` : ''}</span></span>
         <span class="go">${ic('play')} Work on this</span></button>`;
-    }).join('')}</div>` : '<div class="muted">Nothing open on today’s list.</div>'}</div>`;
+    }).join('')}</div>` : '<div class="muted">Nothing open on today’s list.</div>'}
+    ${bonus.length ? `<div class="section-title" style="margin:6px 0 0">${ic('star')}Bonus <span class="count">${bonus.length}</span>
+        <span class="small muted" style="font-weight:400">optional · +${M.BONUS_POINTS} points when you finish one in a session</span></div>
+      <div class="work-pick">${bonus.map(o => `<button class="work-row" data-act="work-start" data-occ="${esc(o.id)}" title="Start working on this now">
+        <span class="bar" style="background:${color(o.task.color)}"></span>
+        <span class="grow"><span class="title ellipsis">${esc(o.task.title)}</span><span class="meta"><span class="bonus-pts">${ic('star-fill')}+${M.BONUS_POINTS}</span><span>${esc(M.bonusSummary(o.task))}</span></span></span>
+        <span class="go">${ic('play')} Work on this</span></button>`).join('')}</div>` : ''}</div>`;
+}
+
+/** While a sprint runs: the bonus tasks, to tick off each time you do one (up to its limit). */
+function bonusCard() {
+  const list = store.bonusTasks().filter(o => !o.done || bonusDone(o.task.id));
+  if (!list.length) return '';
+  return `<div><div class="section-title" style="margin:0 0 6px">${ic('star')}Bonus <span class="small muted" style="font-weight:400">optional · +${M.BONUS_POINTS} points each, times your focus</span></div>
+    <div class="card">${list.map(o => {
+      const t = o.task, n = bonusDone(t.id), can = canTickBonus(t), mine = (focus.bonusTicks || []).includes(t.id), left = M.bonusLeft(t);
+      return `<div class="crow">
+        <button class="checkbtn bonus-btn ${n ? 'on' : ''}" data-act="bonus-tick" data-task="${t.id}" ${can ? '' : 'disabled'} title="${can ? (n ? 'Did it again' : `Did it: +${M.BONUS_POINTS} points`) : 'That’s its limit'}">${ic(n ? 'star-fill' : 'star')}</button>
+        <div class="grow"><div class="title ellipsis">${esc(t.title)}</div><div class="meta"><span>${left == null ? 'no limit' : left === 0 ? 'used up' : `${left} left`}</span></div></div>
+        ${n ? `<b class="bonus-pts mono">×${n} +${n * M.BONUS_POINTS}</b>` : ''}
+        ${mine ? `<button class="btn ghost sm" data-act="bonus-untick" data-task="${t.id}" title="Take one back">−1</button>` : ''}</div>`;
+    }).join('')}</div></div>`;
 }
 
 /** Focus › Work while it runs: the task as a headline, the clock counting up, and Complete. */
@@ -789,13 +857,15 @@ function workingView() {
   const pr = M.priorityOf(t), hd = M.hardnessOf(t), typ = M.typicalMinutes(t);
   const target = typ || (t.timeMinutes != null ? t.durationMinutes : null);
   const others = store.todayChecklist().filter(x => !x.resolved && !x.event && x.id !== focus.workId);
+  const otherBonus = store.openBonusTasks().filter(x => x.task.id !== o?.task.id);
+  const credited = (focus.bonusCredited || []).length;
   const elapsedMin = (Date.now() - focus.startedAt) / 60_000;
   return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Working on one thing until it’s done.</div></div></div>
     <div class="page stack" style="max-width:980px">
       <div class="work-head" style="border-left-color:${color(t.color)}">
         <div class="kicker">Now working on</div>
         <h2 class="headline">${esc(t.title)}</h2>
-        <div class="meta">${pr ? `<span class="prio prio-${pr}"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]} priority</span>` : ''}${hd ? `<span>${hardMeter(hd)} ${M.HARDNESS[hd - 1]}</span>` : ''}${typ ? `<span>${ic('timer')}usually ${M.fmtMinutes(typ)}</span>` : ''}${o?.overdue ? '<span class="red">Overdue</span>' : ''}</div>
+        <div class="meta">${M.isBonus(t) ? `<span class="bonus-pts">${ic('star-fill')}Bonus · +${M.BONUS_POINTS} points</span>` : ''}${credited ? `<span>${ic('star')}${credited} bonus done on the side</span>` : ''}${pr ? `<span class="prio prio-${pr}"><b>${'!'.repeat(3 - M.priorityRank(t))}</b>${PRIO_LABEL[pr]} priority</span>` : ''}${hd ? `<span>${hardMeter(hd)} ${M.HARDNESS[hd - 1]}</span>` : ''}${typ ? `<span>${ic('timer')}usually ${M.fmtMinutes(typ)}</span>` : ''}${o?.overdue ? '<span class="red">Overdue</span>' : ''}</div>
         ${t.notes ? `<div class="muted notes">${esc(t.notes)}</div>` : ''}
         ${o && M.habitSteps(t).length ? stepList(o, 'work') : ''}
         <div class="row" style="gap:28px;align-items:center;flex-wrap:wrap">
@@ -805,7 +875,8 @@ function workingView() {
         </div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <button class="btn primary" data-act="work-complete" title="Check it off: you’ll write the reflection, with the time already filled in">${ic('check')} Complete</button>
-          ${others.length ? `<select class="input" style="width:auto" data-work-switch aria-label="Switch task"><option value="">Switch task…</option>${others.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}</select>` : ''}
+          ${others.length || otherBonus.length ? `<select class="input" style="width:auto" data-work-switch aria-label="Switch task"><option value="">Switch task…</option>${others.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}
+            ${otherBonus.length ? `<optgroup label="Bonus">${otherBonus.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}</optgroup>` : ''}</select>` : ''}
           <span class="grow"></span>
           <button class="btn danger" data-act="work-stop" title="Stop without checking it off (the time is still logged)">Stop</button>
         </div>
@@ -1048,6 +1119,8 @@ function todoView() {
       <div class="card">${list.map(o => crow(o, { showDate })).join('')}</div></div>`;
     if (overdue.length) body += group('Overdue', 'alert', overdue, true);
     if (ongoing.length) body += group('Until done', 'flame', ongoing, false);
+    const bonus = store.bonusTasks().filter(o => match(o.task.title) && (t.showCompleted || !o.done));
+    if (bonus.length) body += group('Bonus (optional)', 'star', bonus, false);
     for (const [d, list] of groups) {
       const title = M.isToday(d) ? 'Today' : M.daysBetween(new Date(), d) === 1 ? 'Tomorrow' : M.fmtDay(d, { weekday: 'long', month: 'short', day: 'numeric' });
       body += group(title, M.isToday(d) ? 'sun' : 'cal', list, false);
@@ -1066,12 +1139,14 @@ function todoView() {
     const tasks = [...store.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && !M.isHabit(x) && match(x.title));
     const untilDone = tasks.filter(x => M.isUntilDone(x)).sort((a, b) => b.startDate.localeCompare(a.startDate));
     const repeating = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency !== 'none').sort((a, b) => a.title.localeCompare(b.title));
-    const once = tasks.filter(x => !M.isUntilDone(x) && x.recurrence.frequency === 'none').sort((a, b) => b.startDate.localeCompare(a.startDate));
+    const once = tasks.filter(x => !M.isUntilDone(x) && !M.isBonus(x) && x.recurrence.frequency === 'none').sort((a, b) => b.startDate.localeCompare(a.startDate));
+    const bonus = tasks.filter(M.isBonus).sort((a, b) => M.bonusUsedUp(a) - M.bonusUsedUp(b) || String(b.createdAt).localeCompare(String(a.createdAt)));
     const row = x => {
       const next = M.nextOccurrence(x);
       const doneCount = Object.keys(x.completions || {}).length;
       const fin = M.isUntilDone(x) && M.finishOf(x), cst = M.isCycle(x) && M.cycleStatus(x);
-      const status = cst ? (cst.finished ? `<span class="green">${ic('check')}All ${cst.times} done</span>`
+      const status = M.isBonus(x) ? `<span class="${M.bonusUsedUp(x) ? 'green' : ''}">${ic('star')}Bonus · ${esc(M.bonusSummary(x))}</span>`
+        : cst ? (cst.finished ? `<span class="green">${ic('check')}All ${cst.times} done</span>`
           : cst.nextStart ? `<span>${ic('clock')}Back ${M.fmtDay(cst.nextStart, { month: 'short', day: 'numeric' })} · round ${cst.round} of ${cst.times}</span>`
           : `<span>${ic('flame')}Round ${cst.round} of ${cst.times}</span>`)
         : M.isUntilDone(x) ? (fin ? (fin.missed ? `<span class="red">${ic('x')}Not done ${M.fmtDay(M.parseKey(fin.key), { month: 'short', day: 'numeric' })}</span>`
@@ -1082,8 +1157,8 @@ function todoView() {
         : doneCount ? `<span class="green">${ic('check')}Done</span>` : '';
       return `<div class="crow"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:${color(x.color)}"></span>
         <div class="grow"><div class="title">${esc(x.title)}</div><div class="meta">
-          <span>${ic('repeat')}${esc(M.planSummary(x) || 'Once')}</span>
-          <span>${ic('clock')}${x.timeMinutes != null ? M.fmtTimeMinutes(x.timeMinutes) : 'Any time'}</span>${status}
+          ${M.isBonus(x) ? '' : `<span>${ic('repeat')}${esc(M.planSummary(x) || 'Once')}</span>
+          <span>${ic('clock')}${x.timeMinutes != null ? M.fmtTimeMinutes(x.timeMinutes) : 'Any time'}</span>`}${status}
           ${x.recurrence.frequency !== 'none' && !M.isUntilDone(x) ? `<span>${doneCount} done</span>` : ''}</div></div>
         <button class="btn sm" data-act="edit" data-task="${x.id}">Edit</button>
         <button class="btn ghost sm icon danger" data-act="delete-task" data-task="${x.id}" title="Delete task">${ic('trash')}</button></div>`;
@@ -1091,6 +1166,7 @@ function todoView() {
     if (untilDone.length) body += `<div><div class="section-title">${ic('flame')}Kept on your list until done <span class="count">${untilDone.length}</span></div><div class="card">${untilDone.map(row).join('')}</div></div>`;
     if (repeating.length) body += `<div><div class="section-title">${ic('repeat')}Recurring <span class="count">${repeating.length}</span></div><div class="card">${repeating.map(row).join('')}</div></div>`;
     if (once.length) body += `<div><div class="section-title">${ic('check')}One-time <span class="count">${once.length}</span></div><div class="card">${once.map(row).join('')}</div></div>`;
+    if (bonus.length) body += `<div><div class="section-title">${ic('star')}Bonus <span class="count">${bonus.length}</span></div><div class="card">${bonus.map(row).join('')}</div></div>`;
     if (!body) body = empty('list', t.search ? 'No matches' : 'No tasks yet', '');
   }
   return `<div class="header"><div class="grow"><h1>To-Do List</h1><div class="sub">Every task in one place. Repeating things are habits now: they live on the <a href="/app/habits">Habits</a> page.</div></div>
@@ -2128,20 +2204,22 @@ function editorOverlaps(m) {
 
 function editorDialog(m) {
   const d = m.draft, r = d.recurrence, lt = d.mode === 'longTerm', cyc = M.isCycle(d), persist = d.mode === 'untilDone' && !cyc;
-  const isHab = M.isHabit(d), kindName = M.isEvent(d) ? 'Event' : isHab ? 'Habit' : 'Task';
+  const isHab = M.isHabit(d), bonus = M.isBonus(d), kindName = M.isEvent(d) ? 'Event' : bonus ? 'Bonus' : isHab ? 'Habit' : 'Task';
   const unit = M.FREQUENCIES.find(f => f[0] === r.frequency)[2];
   const overlaps = editorOverlaps(m);
   const preview = { ...r, end: m.endMode === 'onDate' ? { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } : m.endMode === 'afterCount' ? { afterCount: { _0: m.endCount } } : { never: {} } };
   const offCheck = o => `<label class="check"><input type="checkbox" data-edit="offset" value="${o}" ${d.reminderOffsets.includes(o) ? 'checked' : ''}>${M.offsetLabel(o)}</label>`;
   return `<form class="dialog" data-form="editor"><div class="body">
-    <div class="row"><h2 class="grow">${m.isNew ? 'New' : 'Edit'} ${kindName}</h2>
+    <div class="row"><h2 class="grow">${m.isNew ? 'New' : 'Edit'} ${bonus ? 'Bonus Task' : kindName}</h2>
       <div class="seg"><button type="button" class="${kindName === 'Task' ? 'on' : ''}" data-act="edit-kind" data-kind="task">${ic('list')} Task</button>
       <button type="button" class="${kindName === 'Habit' ? 'on' : ''}" data-act="edit-kind" data-kind="habit">${ic('habit')} Habit</button>
-      <button type="button" class="${kindName === 'Event' ? 'on' : ''}" data-act="edit-kind" data-kind="event">${ic('cal')} Event</button></div></div>
+      <button type="button" class="${kindName === 'Event' ? 'on' : ''}" data-act="edit-kind" data-kind="event">${ic('cal')} Event</button>
+      <button type="button" class="${kindName === 'Bonus' ? 'on' : ''}" data-act="edit-kind" data-kind="bonus">${ic('star')} Bonus</button></div></div>
     <div class="small muted" style="margin-top:-6px">${M.isEvent(d) ? 'Events show on your calendars only: no checkbox, no reflection.'
+      : bonus ? `Bonus tasks are optional extras: listed on Today and in Focus, but never required, never overdue and never reminding you. Each one you finish during a focus session is worth +${M.BONUS_POINTS} points.`
       : isHab ? 'Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you’re becoming.'
       : 'Tasks go on your checklist; checking one off asks for a short reflection.'}</div>
-    ${presetRow(m)}
+    ${bonus ? '' : presetRow(m)}
     <label class="field"><span>Title</span><input class="input" data-edit="title" value="${esc(d.title)}" placeholder="What do you need to do?" autofocus required></label>
     <label class="field"><span>Notes</span><textarea class="input" data-edit="notes" rows="2" placeholder="Optional details">${esc(d.notes)}</textarea></label>
     ${M.isEvent(d) ? '' : `<div class="fieldset"><div class="legend">Priority and hardness</div>
@@ -2149,7 +2227,7 @@ function editorDialog(m) {
       <div class="row" style="gap:10px;margin-top:10px"><span class="small" style="font-weight:600">Hardness</span>
         <span class="hpick" role="group" aria-label="Hardness">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= (M.hardnessOf(d) || 0) ? 'on' : ''}" style="--hc:${hardColor(M.hardnessOf(d) || i)};height:${9 + 3 * i}px" data-act="edit-hardness" data-v="${i}" title="${i}: ${M.HARDNESS[i - 1]}" aria-label="${i}, ${M.HARDNESS[i - 1]}" aria-pressed="${M.hardnessOf(d) === i}"></button>`).join('')}</span>
         <span class="small muted">${M.hardnessOf(d) ? `${M.hardnessOf(d)} · ${M.HARDNESS[M.hardnessOf(d) - 1]}` : 'Not rated'}</span></div></div>`}
-    <div class="fieldset"><div class="legend">When</div>
+    ${bonus ? bonusFieldset(m) : `<div class="fieldset"><div class="legend">When</div>
       ${M.isEvent(d) || isHab ? '' : `<div class="seg wide" role="group" aria-label="Starts"><button type="button" class="${d.after ? '' : 'on'}" data-act="edit-starts" data-v="">On a date</button><button type="button" class="${d.after ? 'on' : ''}" data-act="edit-starts" data-v="1">${ic('right')} After another task</button></div>`}
       ${d.after ? followUpControls(d) : ''}
       <div class="grid2" ${d.after ? 'style="display:none"' : ''}><label class="field"><span>Date</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
@@ -2195,10 +2273,10 @@ function editorDialog(m) {
           ${r.frequency === 'none' ? `<div class="row" style="flex-wrap:wrap"><label class="check"><input type="checkbox" data-edit="hasDue" data-rerender ${m.hasDue ? 'checked' : ''}>Has a due date</label>
             ${m.hasDue ? `<input class="input" style="width:auto" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"><span class="small muted">It keeps going past the due date, marked “Past due”.</span>` : ''}</div>` : ''}` : ''}`}
     </div>
-    `}
+    `}`}
     ${isHab ? stepFields(m) : ''}
     ${isHab ? habitFields(m) : ''}
-    <div class="fieldset"><div class="legend">Reminders</div>
+    ${bonus ? '' : `<div class="fieldset"><div class="legend">Reminders</div>
       <label class="check"><input type="checkbox" data-edit="notify" data-rerender ${d.channels.length ? 'checked' : ''}>
         ${d.channels.length ? `${ic('bell')} Notify me about this task` : `${ic('bell-off')} No notifications — stays on the checklist quietly`}</label>
       ${d.channels.length ? `
@@ -2207,24 +2285,37 @@ function editorDialog(m) {
       <div class="chans">${M.CHANNELS.map(([c, l, desc]) => `<label class="check" title="${esc(desc)}"><input type="checkbox" data-edit="channel" value="${c}" ${d.channels.includes(c) ? 'checked' : ''}>${l}</label>`).join('')}</div>
       ${!m.hasTime ? `<div class="small muted">Tasks without a time remind at ${M.fmtTimeMinutes(store.settings.untimedReminderMinutes)} on the day.</div>` : ''}` : ''}
       ${d.source ? `<div class="small muted">Imported from ${d.source === 'calendly' ? 'Calendly' : 'Google Calendar'}. Its title and time update on each import.</div>` : ''}
-    </div>
-    ${M.isEvent(d) ? '' : `<div class="fieldset"><div class="legend">For things you’d rather put off</div>
+    </div>`}
+    ${M.isEvent(d) || bonus ? '' : `<div class="fieldset"><div class="legend">For things you’d rather put off</div>
       <div class="seg wide">${M.NAG_LEVELS.map(([k, l]) => `<button type="button" class="${M.nagLevel(d) === k ? 'on' : ''}" data-act="edit-nag" data-nag="${k}">${l}</button>`).join('')}</div>
       <div class="small muted">${esc(M.NAG_LEVELS.find(x => x[0] === M.nagLevel(d))[2])}</div>
       ${M.nagLevel(d) !== 'normal' ? `<label class="field"><span>Comes back every</span><select class="input" data-edit="nagEvery" style="width:auto">${M.NAG_EVERY.map(x => `<option value="${x}" ${M.nagMinutes(d) === x ? 'selected' : ''}>${x === 60 ? 'hour' : `${x} min`}</option>`).join('')}</select></label>` : ''}</div>`}
     ${M.isEvent(d) || isHab ? '' : followUpsFieldset(m)}
     ${M.isEvent(d) ? '' : timeTakenFieldset(m)}
     <div class="fieldset"><div class="legend">Color</div><div class="swatches">${Object.entries(M.COLORS).map(([k, v]) => `<button type="button" class="swatch ${d.color === k ? 'on' : ''}" style="background:${v}" data-act="edit-color" data-color="${k}" title="${k}"></button>`).join('')}</div></div>
-    ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !d.source
+    ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !bonus && !d.source
       ? `<label class="check"><input type="checkbox" data-edit="addToGTasks" ${m.addToGTasks ? 'checked' : ''}>${ic('list')} Also add to Google Tasks</label>` : ''}
     ${d.source === 'gtasks' ? `<div class="small muted">${ic('sync')} Synced with Google Tasks: title, notes, due date and checking it off update Google too.</div>` : ''}
-    ${!store.google.connected || d.googleEventID || d.source ? '' : M.isEvent(d)
+    ${!store.google.connected || d.googleEventID || d.source || bonus ? '' : M.isEvent(d)
       ? `<label class="check"><input type="checkbox" data-edit="syncGoogle" data-rerender ${m.syncGoogle ? 'checked' : ''}>${ic('sync')} Sync with Google Calendar</label>
          <div class="small muted" style="margin-top:-8px">${m.syncGoogle ? `Creates it in your Google Calendar${r.frequency !== 'none' ? ' (with the repeat schedule)' : ''}; edits stay in sync both ways.` : 'Keep this event in Cadence only.'}</div>`
       : `<label class="check"><input type="checkbox" data-edit="addToGoogle" ${m.addToGoogle ? 'checked' : ''}>Also add to Google Calendar${r.frequency !== 'none' ? ' (with the repeat schedule)' : ''}</label>`}
     ${m.error ? `<div class="error">${esc(m.error)}</div>` : ''}
     </div><div class="foot">${!m.isNew ? `<button type="button" class="btn danger" data-act="delete-task" data-task="${d.id}">Delete</button>` : ''}<span class="grow"></span>
-      <button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" ${m.saving ? 'disabled' : ''}>${m.isNew ? (M.isEvent(d) ? 'Add Event' : 'Add Task') : 'Save'}</button></div></form>`;
+      <button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" ${m.saving ? 'disabled' : ''}>${m.isNew ? (M.isEvent(d) ? 'Add Event' : bonus ? 'Add Bonus Task' : 'Add Task') : 'Save'}</button></div></form>`;
+}
+
+/** A bonus task's settings: when it's on your list from, and how many times it can be checked off. */
+function bonusFieldset(m) {
+  const d = m.draft, limit = d.bonusLimit ?? 1, saved = store.tasks.get(d.id);
+  const opts = [...new Set([...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 50, 100, 0], limit])].sort((a, b) => (a <= 0 ? Infinity : a) - (b <= 0 ? Infinity : b));
+  return `<div class="fieldset"><div class="legend">${ic('star')} Bonus</div>
+    <div class="grid2"><label class="field"><span>On your list from</span><input class="input" type="date" data-edit="date" data-rerender value="${m.date}"></label>
+      <label class="field"><span>Can be checked off</span><select class="input" data-edit="bonusLimit" data-rerender>${opts.map(n => `<option value="${n}" ${n === limit ? 'selected' : ''}>${M.bonusLimitLabel(n)}</option>`).join('')}</select></label></div>
+    ${saved && M.bonusCount(saved) ? `<div class="small">So far: ${esc(M.bonusSummary(saved))}${M.bonusUsedUp(saved) ? ' (off your list)' : ''}</div>` : ''}
+    <div class="small muted">${limit <= 0 ? 'No limit: it stays on your list, and you can check it off as many times as you like (several times a day too).'
+      : limit === 1 ? 'Check it off once and it’s done for good. It never shows as overdue or missed if you don’t.'
+      : `It stays on your list until you’ve checked it off ${limit} times (several times a day is fine), then it’s done for good.`}</div></div>`;
 }
 
 function readEditorInputs() {
@@ -2245,6 +2336,7 @@ function readEditorInputs() {
   if (val('after')) m.draft.after = val('after').value;
   if (val('afterMinutes')) { const v = Number(val('afterMinutes').value); if (v) m.draft.afterMinutes = v; else delete m.draft.afterMinutes; }
   if (val('hasDue')) m.hasDue = val('hasDue').checked;
+  if (val('bonusLimit')) { const v = Number(val('bonusLimit').value); if (v === 1) delete m.draft.bonusLimit; else m.draft.bonusLimit = v; }
   if (val('dueDate')?.value) m.dueDate = val('dueDate').value;
   if (val('cycleGap')) m.cycleGap = Math.min(365, Math.max(1, Number(val('cycleGap').value) || 1));
   if (val('cycleUnit')) m.cycleUnit = val('cycleUnit').value;
@@ -2309,6 +2401,13 @@ async function saveEditor() {
     for (const k of HABIT_FIELDS) { const v = String(t.habit?.[k] ?? '').trim(); if (v) h[k] = k === 'limitMinutes' ? Math.max(1, Number(v) || 0) : v; }
     t.habit = h;
   } else delete t.habit;
+  if (M.isBonus(t)) {
+    // Optional extras: no time, schedule, reminders or follow-up trigger of their own.
+    delete t.timeMinutes; t.recurrence = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+    for (const k of ['mode', 'dueDate', 'urgent', 'cycleGapDays', 'cycleTimes', 'after', 'afterMinutes', 'armedAt', 'armedBy', 'nag', 'nagEvery']) delete t[k];
+    t.channels = []; t.busy = false;
+    if (t.bonusLimit === 1) delete t.bonusLimit;
+  } else delete t.bonusLimit;
   if (t.mode === 'longTerm') {
     if (m.endDate < m.date) { m.error = 'The end date has to be on or after the start date.'; renderModal(); return; }
     t.recurrence = { frequency: 'daily', interval: 1, weekdays: [], end: { onDate: { _0: M.iso(M.parseKey(m.endDate)) } } };
@@ -3451,6 +3550,7 @@ const actions = {
   'ring-mode-set': el => store.updateSettings({ ringShowsLeft: el.dataset.v === '1' }),
   'ring-mode': () => store.updateSettings({ ringShowsLeft: !(store.settings.ringShowsLeft ?? true) }),
   'task-urgent': el => store.setUrgent(el.dataset.task, el.dataset.off !== '1'),
+  'bonus-undo': el => { store.undoBonus(el.dataset.task); render(); },
   'quick-save': el => {
     const it = itemById(el.dataset.item);
     if (!it) return;
@@ -3539,8 +3639,18 @@ const actions = {
   },
   'edit-kind': el => {
     readEditorInputs();
-    const m = ui.modal, k = el.dataset.kind, d = m.draft;
+    const m = ui.modal, k = el.dataset.kind, d = m.draft, wasBonus = M.isBonus(d);
     d.kind = k;
+    if (k === 'bonus') {
+      // Optional extras: no date to miss, no schedule, no reminders.
+      d.recurrence = { ...d.recurrence, frequency: 'none', interval: 1, weekdays: [] }; m.endMode = 'never';
+      for (const x of ['mode', 'habit', 'after', 'afterMinutes', 'armedAt', 'armedBy', 'nag', 'nagEvery', 'cycleGapDays', 'cycleTimes']) delete d[x];
+      d.channels = []; m.hasTime = false;
+      if (m.isNew && d.color === 'blue') d.color = 'yellow';
+    } else if (wasBonus) {
+      d.channels = [...store.settings.defaultChannels];
+      if (m.isNew && d.color === 'yellow') d.color = 'blue';
+    }
     if (k === 'event') delete d.mode;   // events have no check-off, so no "until done"/long-term
     if (k === 'habit') {
       // Habits repeat; they start out daily and as building something new.
@@ -3611,6 +3721,8 @@ const actions = {
   'focus-dismiss': () => { ui.focusResult = null; render(); },
   'focus-mode': el => { ui.focusMode = el.dataset.m; try { localStorage.setItem('cadence:focusMode', el.dataset.m); } catch { /* storage blocked */ } render(); },
   'work-start': el => { const o = findOcc(el.dataset.occ); if (o) startWork(o); },
+  'bonus-tick': el => { const t = store.tasks.get(el.dataset.task); if (t && canTickBonus(t)) { focus.bonusTicks = [...(focus.bonusTicks || []), t.id]; saveFocus(); render(); } },
+  'bonus-untick': el => { const a = [...(focus.bonusTicks || [])], i = a.lastIndexOf(el.dataset.task); if (i >= 0) { a.splice(i, 1); focus.bonusTicks = a; saveFocus(); render(); } },
   'work-complete': () => completeWork(),
   'work-stop': () => endFocus({ quiet: true }),
   'week-focus': () => { ui.weekFocus = !weekShowsFocus(); try { localStorage.setItem('cadence:weekFocus', ui.weekFocus ? '1' : '0'); } catch { /* storage blocked */ } render(); },

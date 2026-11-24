@@ -253,5 +253,26 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   check(M2.possibleTriggers([x, y, z], 'x').map(t => t.id).join() === '', 'follow-up: no loops (x can\'t follow what follows it)');
   check(M2.possibleTriggers([x, y, z], 'z').map(t => t.id).join() === 'x,y', 'follow-up: can follow anything else');
 }
+// Bonus tasks: optional, never on a day's list, checked off up to a limit (several times a day), extra focus points.
+{
+  const M2 = await import('../public/js/model.js');
+  const rec = { frequency: 'none', interval: 1, weekdays: [], end: { never: {} } };
+  const day = new Date(2026, 10, 23), later = new Date(2026, 10, 30);
+  const once = { id: 'b1', kind: 'bonus', title: 'Clean desk', startDate: new Date(2026, 10, 20).toISOString(), recurrence: rec, completions: {} };
+  check(!M2.occurs(once, day) && M2.bonusListed(once, day) && !M2.makeOccurrence(once, new Date(2026, 10, 21)).overdue, 'bonus: not on day lists, listed, never overdue');
+  check(!M2.bonusListed(once, new Date(2026, 10, 19)), 'bonus: not before its start date');
+  const onceDone = { ...once, completions: { '2026-11-23': 'x' } };
+  check(M2.bonusUsedUp(onceDone) && M2.bonusListed(onceDone, day) && M2.makeOccurrence(onceDone, day).done && !M2.bonusListed(onceDone, later), 'bonus: once, shown ticked that day, then gone');
+  const three = { ...once, id: 'b3', bonusLimit: 3, completions: { '2026-11-23': 'x', '2026-11-23#2': 'x' } };
+  check(M2.nextBonusKey(three, day) === '2026-11-23#3' && M2.bonusKeysOn(three, day).join() === '2026-11-23,2026-11-23#2', 'bonus: second and third the same day get their own keys');
+  check(M2.bonusLeft(three) === 1 && M2.bonusSummary(three) === '2 of 3 done' && !M2.makeOccurrence(three, day).done, 'bonus: counts toward its limit');
+  const many = { ...once, id: 'bn', bonusLimit: 0, completions: Object.fromEntries([...Array(12)].map((_, i) => [`2026-11-${10 + i}`, 'x'])) };
+  check(M2.bonusLeft(many) == null && M2.bonusListed(many, later) && M2.bonusSummary(many) === 'Done 12 times · no limit', 'bonus: no limit');
+  check(M2.parseKey('2026-11-23#2').getDate() === 23 && M2.makeOccurrence(three, day, '2026-11-23#2').done, 'bonus: keys with #n read as their day');
+  const habit = { id: 'h', kind: 'habit', title: 'Read', startDate: day.toISOString(), recurrence: { ...rec, frequency: 'daily' }, completions: { '2026-11-22': 'x' } };
+  check(!M2.bonusUsedUp(habit), 'bonus: "used up" never applies to other tasks');
+  check(M2.focusPoints({ finished: 2, picked: 2, focusPercent: 95, bonus: 2 }) === 95 && M2.focusPoints({ finished: 0, picked: 0, focusPercent: 50, bonus: 1 }) === 15,
+    'bonus: 15 points each, multiplied, not part of clearing the list');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

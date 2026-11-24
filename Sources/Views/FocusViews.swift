@@ -18,7 +18,7 @@ struct FocusView: View {
         let points = sessions.reduce(0) { $0 + $1.points }
         let lv = Focus.level(points: points)
         VStack(spacing: 0) {
-            ScreenHeader(title: "Focus", subtitle: modeRaw == "work" || focus.isWorking
+            ScreenHeader(title: "Focus", subtitle: (modeRaw == "work" && !focus.running) || focus.isWorking
                          ? "Work on one thing: pick it, and it stays up front with distractions blocked until you complete it."
                          : "Race the clock: set a time, then see how much of your list you can finish before it runs out.") { EmptyView() }
             ScrollView {
@@ -76,6 +76,8 @@ struct FocusView: View {
                 VStack(spacing: 2) {
                     Text(focus.clock).font(.system(size: 44, weight: .bold).monospacedDigit()).foregroundStyle(final ? Color.orange : .primary)
                     Text("\(focus.finished.count) of \(occs.count) done").font(.app(.caption)).foregroundStyle(.secondary)
+                    let extra = focus.bonusTicks.count + focus.bonusCredited.count
+                    if extra > 0 { Label("\(extra) bonus", systemImage: "star.fill").font(.app(.caption)).foregroundStyle(.yellow) }
                     if focus.distractingSeconds + focus.awaySeconds > 0 {
                         Text("\(durationString(seconds: focus.distractingSeconds)) distracted").font(.app(.caption2)).foregroundStyle(.secondary)
                     }
@@ -85,6 +87,7 @@ struct FocusView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Tick each one as you finish it. You'll write the reflections when time's up, so the clock is only for doing. Switching to a distracting app counts against your focus.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
+                if !occs.isEmpty {
                 Card {
                     VStack(spacing: 0) {
                         ForEach(occs) { o in
@@ -99,6 +102,8 @@ struct FocusView: View {
                         }
                     }
                 }
+                }
+                bonusCard
                 HStack {
                     Button { focus.addFiveMinutes() } label: { Label("5 minutes", systemImage: "plus") }
                     Spacer()
@@ -109,6 +114,26 @@ struct FocusView: View {
     }
 
     private var openItems: [Occurrence] { store.todayChecklist().filter { !$0.isResolved } }
+
+    // MARK: Bonus tasks
+
+    /// While the clock runs: the bonus tasks, to tick off as you do them (each is +15 points).
+    @ViewBuilder private var bonusCard: some View {
+        let list = store.bonusTasks().filter { !$0.isDone || focus.bonusDone($0.task.id) > 0 }
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    SectionTitle(text: "Bonus", symbol: "star")
+                    Text("optional · +\(Bonus.points) points each, times your focus").font(.app(.caption)).foregroundStyle(.secondary)
+                }
+                Card {
+                    VStack(spacing: 0) {
+                        ForEach(list) { o in BonusTickRow(occ: o) }
+                    }
+                }
+            }
+        }
+    }
 
     // MARK: Work mode
 
@@ -140,6 +165,17 @@ struct FocusView: View {
                             ForEach(choices) { o in WorkPickRow(occ: o) { focus.startWork(o) } }
                         }
                     }
+                    let bonus = store.openBonusTasks()
+                    if !bonus.isEmpty {
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(text: "Bonus", symbol: "star", count: bonus.count)
+                            Text("optional · +\(Bonus.points) points when you finish one in a session").font(.app(.caption)).foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 4)
+                        VStack(spacing: 0) {
+                            ForEach(bonus) { o in WorkPickRow(occ: o) { focus.startWork(o) } }
+                        }
+                    }
                 }
             }
         }
@@ -169,6 +205,10 @@ struct FocusView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 HStack(spacing: 14) {
+                    if t.isBonus { Label("Bonus · +\(Bonus.points) points", systemImage: "star.fill").foregroundStyle(.yellow) }
+                    if focus.bonusCredited.count > 0 {
+                        Label("\(focus.bonusCredited.count) bonus done on the side", systemImage: "star")
+                    }
                     if let p = t.priorityLevel { Label("\(p.title) priority", systemImage: p.symbol).foregroundStyle(p.color) }
                     if let h = t.hardnessLevel {
                         HStack(spacing: 5) { HardnessMeter(level: h, height: 11); Text(Hardness.title(h)) }
@@ -214,10 +254,16 @@ struct FocusView: View {
                         .keyboardShortcut(.return, modifiers: .command)
                         .help("Check it off (⌘↩): you'll write the reflection, with the time already filled in")
                     let others = workChoices.filter { $0.id != o.id }
+                    let otherBonus = store.openBonusTasks().filter { $0.task.id != t.id }
                     Menu {
                         ForEach(others) { x in Button(x.task.title) { focus.startWork(x) } }
+                        if !otherBonus.isEmpty {
+                            Section("Bonus") {
+                                ForEach(otherBonus) { x in Button(x.task.title) { focus.startWork(x) } }
+                            }
+                        }
                     } label: { Label("Switch task", systemImage: "arrow.left.arrow.right") }
-                    .fixedSize().controlSize(.large).disabled(others.isEmpty)
+                    .fixedSize().controlSize(.large).disabled(others.isEmpty && otherBonus.isEmpty)
                     Toggle("Block distractions", isOn: $focus.workBlocks).toggleStyle(.checkbox)
                     Spacer()
                     Button("Stop", role: .destructive) { focus.end(quiet: true) }.controlSize(.large)
@@ -235,6 +281,7 @@ struct FocusView: View {
     private var setup: some View {
         let open = openItems
         let selected = picks ?? Set(open.map(\.id))
+        let bonus = store.openBonusTasks()
         return VStack(alignment: .leading, spacing: 14) {
             if let r = focus.result { result(r) }
             Card {
@@ -243,7 +290,7 @@ struct FocusView: View {
                     FocusLengthPicker(minutes: $minutes)
                     SectionTitle(text: "What will you get through?", symbol: "checklist", count: selected.count)
                     if open.isEmpty {
-                        Text("Nothing open on today's list. Add a task first.").foregroundStyle(.secondary)
+                        Text(bonus.isEmpty ? "Nothing open on today's list. Add a task first." : "Nothing open on today's list, but there are bonus tasks.").foregroundStyle(.secondary)
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), alignment: .leading)], alignment: .leading, spacing: 6) {
                             ForEach(open) { o in
@@ -261,8 +308,13 @@ struct FocusView: View {
                             }
                         }
                     }
+                    if !bonus.isEmpty {
+                        Label("Bonus: \(bonus.map(\.task.title).joined(separator: ", ")). They're listed while the clock runs: tick off any you do for +\(Bonus.points) points each.",
+                              systemImage: "star")
+                            .font(.app(.caption)).foregroundStyle(.secondary).lineLimit(3)
+                    }
                     HStack {
-                        Text("Score: 10 points per task finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.")
+                        Text("Score: 10 points per task finished in time, \(Bonus.points) per bonus task, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.")
                             .font(.app(.caption)).foregroundStyle(.secondary)
                         Spacer()
                         Button {
@@ -271,7 +323,7 @@ struct FocusView: View {
                             picks = nil
                         } label: { Label("Start \(Focus.label(minutes)) focus", systemImage: "scope") }
                         .buttonStyle(.borderedProminent).tint(Theme.solid)
-                        .disabled(selected.isEmpty)
+                        .disabled(selected.isEmpty && bonus.isEmpty)
                     }
                 }
             }
@@ -279,7 +331,7 @@ struct FocusView: View {
     }
 
     private func result(_ r: FocusSession) -> some View {
-        let unreflected = r.finishedIds.compactMap(focus.occurrence).filter { !$0.isResolved }
+        let unreflected = (r.finishedIds + (r.bonusIds ?? [])).compactMap(focus.occurrence).filter { !$0.isResolved && !$0.task.bonusUsedUp }
         return HStack(alignment: .top, spacing: 16) {
             Text("\(r.finished)").font(.system(size: 44, weight: .heavy).monospacedDigit()).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 4) {
@@ -287,6 +339,10 @@ struct FocusView: View {
                               : "Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.app(.headline))
                 Text("\(r.focusPercent)% focused (\(durationString(seconds: r.distractingSeconds + r.awaySeconds)) away or distracted) · ×\(String(format: "%g", Focus.multiplier(r.focusPercent))) · +\(r.points) points")
                     .font(.app(.caption)).foregroundStyle(.secondary)
+                if r.bonusCount > 0 {
+                    Label("Bonus: \((r.bonusTitles ?? []).joined(separator: ", ")) (+\(Bonus.points) each)", systemImage: "star.fill")
+                        .font(.app(.caption)).foregroundStyle(.secondary).lineLimit(2)
+                }
                 if !unreflected.isEmpty {
                     Text("Write a reflection for each to check it off:").font(.app(.caption)).padding(.top, 6)
                     ForEach(unreflected) { o in
@@ -296,7 +352,7 @@ struct FocusView: View {
                             Button("Reflect & check off") { model.beginReflection(o) }.controlSize(.small).buttonStyle(.borderedProminent)
                         }
                     }
-                } else if r.finished > 0 {
+                } else if r.finished + r.bonusCount > 0 {
                     Label("All reflected and checked off.", systemImage: "checkmark").font(.app(.caption)).foregroundStyle(.green)
                 }
             }
@@ -321,8 +377,9 @@ struct FocusView: View {
                             }
                             .frame(width: 64, alignment: .leading)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(s.isWork ? "\(s.finished > 0 ? "Finished" : "Worked on") “\(s.title ?? "a task")” for \(Focus.label(max(1, s.actualMinutes)))"
-                                              : "\(s.finished) of \(s.picked) done in \(s.actualMinutes) min").lineLimit(1)
+                                Text((s.isWork ? "\(s.finished > 0 ? "Finished" : "Worked on") “\(s.title ?? "a task")” for \(Focus.label(max(1, s.actualMinutes)))"
+                                              : "\(s.finished) of \(s.picked) done in \(s.actualMinutes) min")
+                                     + (s.bonusCount > 0 ? " · \(s.bonusCount) bonus" : "")).lineLimit(1)
                                 Text("\(s.focusPercent)% focused\(s.distractingSeconds > 0 ? " · \(durationString(seconds: s.distractingSeconds)) in distracting apps" : "") · \(s.device == "mac" ? "Mac" : "Web")")
                                     .font(.app(.caption)).foregroundStyle(.secondary)
                             }
@@ -596,6 +653,7 @@ struct WorkPickRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(t.title).lineLimit(1)
                     HStack(spacing: 8) {
+                        if t.isBonus { Label("+\(Bonus.points) · \(t.bonusSummary)", systemImage: "star.fill").foregroundStyle(.yellow) }
                         if let p = t.priorityLevel { Label(p.title, systemImage: p.symbol).foregroundStyle(p.color) }
                         if let h = t.hardnessLevel { HardnessMeter(level: h, height: 9) }
                         if let m = t.typicalMinutes { Label("usually \(TaskStats.format(m))", systemImage: "stopwatch") }
@@ -615,5 +673,41 @@ struct WorkPickRow: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .help("Start working on “\(t.title)” now")
+    }
+}
+
+/// A bonus task during a sprint: tick it each time you do it (up to its limit); the reflection comes at the end.
+struct BonusTickRow: View {
+    @EnvironmentObject private var focus: FocusEngine
+    let occ: Occurrence
+    var body: some View {
+        let t = occ.task
+        let n = focus.bonusDone(t.id)
+        let ticked = focus.bonusTicks.filter { $0 == t.id }.count
+        let can = focus.canTickBonus(t)
+        HStack(spacing: 10) {
+            Button { focus.tickBonus(t) } label: {
+                Image(systemName: n > 0 ? "star.fill" : "star").font(.system(size: 17)).foregroundStyle(n > 0 ? Color.yellow : .secondary)
+            }
+            .buttonStyle(.plain).disabled(!can)
+            .help(can ? (n > 0 ? "Did it again" : "Did it: +\(Bonus.points) points") : "That's its limit")
+            VStack(alignment: .leading, spacing: 1) {
+                Text(t.title).foregroundStyle(n > 0 && !can ? .secondary : .primary)
+                Text(t.bonusLeft.map { $0 == 0 ? "used up" : "\($0) left" } ?? "no limit").font(.app(.caption)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if n > 0 {
+                Text("×\(n)  +\(n * Bonus.points)").font(.app(.callout).monospacedDigit().weight(.semibold)).foregroundStyle(.yellow)
+            }
+            if ticked > 0 {
+                Button { focus.untickBonus(t.id) } label: { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless).help("Take one back")
+            }
+            if can && n > 0 {
+                Button { focus.tickBonus(t) } label: { Image(systemName: "plus.circle") }
+                    .buttonStyle(.borderless).help("Did it again")
+            }
+        }
+        .padding(.vertical, 6)
     }
 }

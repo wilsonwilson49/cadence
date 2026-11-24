@@ -227,6 +227,8 @@ struct PlanTask: Codable, Identifiable, Hashable {
     /// When it was set off (nil = still waiting), and by which check-off ("taskID|key"), so unchecking takes it back.
     var armedAt: Date?
     var armedBy: String?
+    /// Bonus tasks (kind "bonus"): how many times it can be checked off in all. nil = once, 0 = no limit.
+    var bonusLimit: Int?
     /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
     var steps: [HabitStep]?
     /// Occurrence key → the steps checked off that time.
@@ -294,9 +296,16 @@ struct PlanTask: Codable, Identifiable, Hashable {
 struct Occurrence: Identifiable, Hashable {
     let task: PlanTask
     let day: Date
+    /// A bonus task's particular check-off ("yyyy-MM-dd#2"), e.g. one ticked during a focus session.
+    var fixedKey: String? = nil
 
     /// The check-off key. Before a new repeat's time, today's item is still the previous one (see heldOver).
-    var key: String { task.heldOver(on: day)?.key ?? DateKey.string(day) }
+    /// A bonus task's is its next free check-off that day (or its last one, once it's used up).
+    var key: String {
+        if let fixedKey { return fixedKey }
+        if task.isBonus { return task.bonusKey(on: day) }
+        return task.heldOver(on: day)?.key ?? DateKey.string(day)
+    }
     var id: String { "\(task.id.uuidString)|\(key)" }
     var start: Date? { task.timeMinutes.map { dayAt(day, minutes: $0) } }
     var end: Date? { start?.adding(minutes: max(5, task.durationMinutes)) }

@@ -515,7 +515,7 @@ extension Store {
     /// One-off tasks dated after today (the next `days` days): Today's "Upcoming" section, not counted in the ring.
     func upcomingOneOffs(days: Int = 30, today: Date = Date()) -> [Occurrence] {
         let t = today.startOfDay, end = t.adding(days: days + 1)
-        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.recurrence.isRepeating && !$0.isLongTerm && !$0.isCycle
+        return tasks.filter { $0.archived != true && !$0.isEvent && !$0.isBonus && !$0.isWaiting && !$0.recurrence.isRepeating && !$0.isLongTerm && !$0.isCycle
                 && $0.startDate.startOfDay > t && $0.startDate < end && !$0.hasHistory }
             .map { Occurrence(task: $0, day: $0.startDate.startOfDay) }
             .sorted { ($0.start ?? $0.day) < ($1.start ?? $1.day) }

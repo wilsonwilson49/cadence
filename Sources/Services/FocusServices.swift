@@ -131,6 +131,11 @@ final class FocusEngine: ObservableObject {
     @Published private(set) var now = Date()
     @Published var result: FocusSession?
     private var sessionID = UUID()
+    /// Bonus tasks ticked off on the Focus screen during this session (a task can appear more than once if it
+    /// can be done more than once). Their reflections come when the session ends, like the list's.
+    @Published private(set) var bonusTicks: [UUID] = []
+    /// Bonus tasks checked off somewhere else (Today, the menu bar) while the session ran: "taskID|key".
+    @Published private(set) var bonusCredited: [String] = []
 
     enum Mode: String { case sprint, work }
     /// Sprint: race the clock through a list. Work: one task, a clock counting up, until you complete it.
@@ -185,6 +190,7 @@ final class FocusEngine: ObservableObject {
         self.mode = mode
         if mode == .sprint { workID = nil }
         self.minutes = minutes; self.picked = picked; finished = []
+        bonusTicks = []; bonusCredited = []
         awaySeconds = 0; distractingSeconds = 0; distractingStreak = 0
         startedAt = Date(); endsAt = startedAt.addingTimeInterval(Double(minutes * 60)); now = startedAt
         sessionID = UUID(); result = nil; running = true
@@ -200,6 +206,47 @@ final class FocusEngine: ObservableObject {
     }
 
     func addFiveMinutes() { endsAt = endsAt.addingTimeInterval(300); minutes += 5 }
+
+    // MARK: Bonus tasks
+
+    /// How many times this bonus task was done in this session so far.
+    func bonusDone(_ id: UUID) -> Int {
+        bonusTicks.filter { $0 == id }.count + bonusCredited.filter { $0.hasPrefix(id.uuidString + "|") }.count
+    }
+
+    /// Whether it can be ticked (again): not past its limit, counting this session's ticks.
+    func canTickBonus(_ t: PlanTask) -> Bool {
+        guard running, t.isBonus else { return false }
+        guard let left = model.store.task(t.id)?.bonusLeft else { return true }
+        return bonusTicks.filter { $0 == t.id }.count < left
+    }
+
+    func tickBonus(_ t: PlanTask) { if canTickBonus(t) { bonusTicks.append(t.id) } }
+
+    func untickBonus(_ id: UUID) { if let i = bonusTicks.lastIndex(of: id) { bonusTicks.remove(at: i) } }
+
+    /// A check-off happened (Store.onComplete): a bonus task done while a session runs counts for the session.
+    func noteCompleted(_ t: PlanTask, key: String) {
+        let id = "\(t.id.uuidString)|\(key)"
+        guard running, t.isBonus, !bonusCredited.contains(id), !finished.contains(id) else { return }
+        bonusCredited.append(id)
+    }
+
+    /// The ticked bonus tasks as check-offs to reflect on: each gets its own key ("…#2" for a second one today),
+    /// and none goes past its task's limit.
+    private func tickedBonusOccurrences() -> [Occurrence] {
+        let today = Date().startOfDay
+        var sim: [UUID: PlanTask] = [:]
+        var out: [Occurrence] = []
+        for id in bonusTicks {
+            guard var t = sim[id] ?? model.store.task(id), t.isBonus, !t.bonusUsedUp else { continue }
+            let key = t.nextBonusKey(on: today)
+            out.append(Occurrence(task: model.store.task(id) ?? t, day: today, fixedKey: key))
+            t.completions[key] = Date()   // only in this copy, to work out the next key
+            sim[id] = t
+        }
+        return out
+    }
 
     private func tick() {
         now = Date()
@@ -231,36 +278,47 @@ final class FocusEngine: ObservableObject {
         let elapsed = max(1, Int(end.timeIntervalSince(startedAt)))
         let lost = min(elapsed, awaySeconds + distractingSeconds)
         let percent = Int((100 * Double(elapsed - lost) / Double(elapsed)).rounded())
+        // Bonus tasks don't count toward clearing the list; each one finished is worth bonus points instead.
+        let isBonus: (String) -> Bool = { [self] in occurrence($0)?.task.isBonus == true }
+        let ticked = tickedBonusOccurrences()
+        let extras = ticked.map(\.id) + bonusCredited
+        let regularDone = finished.filter { !isBonus($0) }.count
         var s = FocusSession(id: sessionID, startedAt: startedAt, endedAt: end, plannedMinutes: minutes,
                              actualMinutes: Int((Double(elapsed) / 60).rounded()), picked: picked.count, finished: finished.count,
-                             points: Focus.points(finished: finished.count, picked: picked.count, focusPercent: percent))
+                             points: Focus.points(finished: regularDone, picked: picked.filter { !isBonus($0) }.count, focusPercent: percent,
+                                                  bonus: extras.count + finished.filter(isBonus).count))
         s.finishedIds = finished
         s.finishedTitles = finished.compactMap { occurrence($0)?.task.title }
+        if !extras.isEmpty {
+            s.bonus = extras.count; s.bonusIds = extras
+            s.bonusTitles = extras.compactMap { occurrence($0)?.task.title }
+        }
+        bonusTicks = []; bonusCredited = []
         s.awaySeconds = awaySeconds; s.distractingSeconds = distractingSeconds; s.focusPercent = percent
         if mode == .work {
             s.mode = "work"; s.occurrenceID = workID; s.title = workOccurrence?.task.title
             workID = nil
         }
         // Under a minute of work (picked by mistake, switched straight away) isn't worth a record.
-        if mode == .work && elapsed < 60 && finished.isEmpty { mode = .sprint; return }
+        if mode == .work && elapsed < 60 && finished.isEmpty && extras.isEmpty { mode = .sprint; return }
         model.store.saveFocusSession(s)
         result = s
         if quiet { return }
         // Time's up: the reflections for what you finished come up right away, over everything, until they're written.
-        let done = s.finishedIds.compactMap(occurrence)
+        let done = s.finishedIds.compactMap(occurrence) + ticked
         model.walls.reflect(on: done)
-        model.notifier.deliver(AlertContent(kind: .nudge, title: "Time! \(s.finished) done",
+        model.notifier.deliver(AlertContent(kind: .nudge, title: "Time! \(s.finished) done\(s.bonusCount > 0 ? " + \(s.bonusCount) bonus" : "")",
                                             body: "\(percent)% focused · +\(s.points) points. Write your reflections to check them off.",
                                             symbol: "scope", tint: .pink), channels: model.store.settings.defaultChannels)
         model.screen = .focus
         model.windows.showMain()
     }
 
-    /// "taskID|yyyy-MM-dd" → the occurrence.
+    /// "taskID|yyyy-MM-dd" → the occurrence. A bonus task's keeps its particular check-off ("…#2").
     func occurrence(_ id: String) -> Occurrence? {
         let parts = id.split(separator: "|").map(String.init)
         guard parts.count == 2, let uuid = UUID(uuidString: parts[0]), let t = model.store.task(uuid),
               let day = DateKey.date(parts[1]) else { return nil }
-        return Occurrence(task: t, day: day)
+        return Occurrence(task: t, day: day, fixedKey: t.isBonus ? parts[1] : nil)
     }
 }

@@ -64,8 +64,19 @@ struct TaskEditor: View {
             HStack {
                 Text("\(isNew ? "New" : "Edit") \(kindName)").font(.app(.title3).bold())
                 Spacer()
-                Picker("", selection: Binding(get: { task.isEvent ? "event" : task.isHabit ? "habit" : "task" }, set: { k in
+                Picker("", selection: Binding(get: { task.isEvent ? "event" : task.isBonus ? "bonus" : task.isHabit ? "habit" : "task" }, set: { k in
+                    let wasBonus = task.isBonus
                     task.kind = k
+                    if k == "bonus" {
+                        // Optional extras: no date to miss, no schedule, no reminders.
+                        task.recurrence = Recurrence(); endMode = 0; task.mode = nil; task.habit = nil
+                        task.after = nil; task.afterMinutes = nil; task.armedAt = nil; task.armedBy = nil
+                        task.channels = []; task.nag = nil; hasTime = false
+                        if isNew && task.color == .blue { task.color = .yellow }
+                    } else if wasBonus {
+                        task.channels = store.settings.defaultChannels
+                        if isNew && task.color == .yellow { task.color = .blue }
+                    }
                     if k == "event" { task.mode = nil }   // events have no check-off, so no "until done"/long-term
                     if k == "habit" {
                         // Habits repeat; they start out daily and as building something new.
@@ -89,13 +100,15 @@ struct TaskEditor: View {
                     Label("Task", systemImage: "checklist").tag("task")
                     Label("Habit", systemImage: "arrow.triangle.2.circlepath").tag("habit")
                     Label("Event", systemImage: "calendar").tag("event")
+                    Label("Bonus", systemImage: "star").tag("bonus")
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 250)
+                .frame(width: 330)
             }
             .padding([.horizontal, .top], 20)
             Text(task.isEvent ? "Events show on your calendars only: no checkbox, no reflection."
+                 : task.isBonus ? "Bonus tasks are optional extras: listed on Today and in Focus, but never required, never overdue and never reminding you. Each one you finish during a focus session is worth +\(Bonus.points) points."
                  : task.isHabit ? "Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you're becoming."
                  : "Tasks go on your checklist; checking one off asks for a short reflection.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
@@ -103,7 +116,7 @@ struct TaskEditor: View {
                 .padding(.horizontal, 20)
 
             Form {
-                presetSection
+                if !task.isBonus { presetSection }
                 // Text fields are left-aligned throughout: grouped forms right-align them by default, and macOS
                 // doesn't draw a trailing space in a right-aligned field until the next character is typed.
                 Section {
@@ -123,6 +136,7 @@ struct TaskEditor: View {
                     }
                 }
 
+                if task.isBonus { bonusSection } else {
                 Section("When") {
                     if !task.isEvent && !task.isHabit {
                         Picker("Starts", selection: Binding(get: { task.after != nil }, set: { on in
@@ -178,7 +192,10 @@ struct TaskEditor: View {
                     }
                 }
 
-                if task.source == "google" && !isNew {
+                }
+
+                if task.isBonus {
+                } else if task.source == "google" && !isNew {
                     Section("Synced with Google Calendar") {
                         Label("Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.",
                               systemImage: "arrow.triangle.2.circlepath")
@@ -257,6 +274,7 @@ struct TaskEditor: View {
 
                 }
 
+                if !task.isBonus {
                 Section {
                     Toggle(isOn: Binding(get: { !task.channels.isEmpty },
                                          set: { task.channels = $0 ? store.settings.defaultChannels : [] })) {
@@ -293,7 +311,9 @@ struct TaskEditor: View {
                     }
                 }
 
-                if !task.isEvent {
+                }
+
+                if !task.isEvent && !task.isBonus {
                     Section {
                         Picker("Keep after me", selection: Binding(get: { task.nagLevel }, set: { task.nag = $0 == .normal ? nil : $0.rawValue })) {
                             ForEach(NagLevel.allCases) { l in Label(l.title, systemImage: l.symbol).tag(l) }
@@ -331,7 +351,7 @@ struct TaskEditor: View {
 
                 if task.isHabit { stepsSection; habitSection }
 
-                if google.isConnected && google.tasksGranted && isNew && !task.isEvent && !task.isHabit && task.source == nil {
+                if google.isConnected && google.tasksGranted && isNew && !task.isEvent && !task.isHabit && !task.isBonus && task.source == nil {
                     Section("Google Tasks") {
                         Toggle(isOn: $addToGoogleTasks) { Label("Also add to Google Tasks", systemImage: "checklist") }
                     }
@@ -340,7 +360,7 @@ struct TaskEditor: View {
                     Section { Label("Synced with Google Tasks: title, notes, due date and checking it off update Google too.", systemImage: "arrow.triangle.2.circlepath").font(.app(.caption)) }
                 }
 
-                if google.isConnected && task.googleEventID == nil && task.source == nil && !task.isHabit {
+                if google.isConnected && task.googleEventID == nil && task.source == nil && !task.isHabit && !task.isBonus {
                     Section("Google Calendar") {
                         if task.isEvent {
                             Toggle(isOn: $syncGoogle) { Label("Sync with Google Calendar", systemImage: "arrow.triangle.2.circlepath") }
@@ -370,7 +390,7 @@ struct TaskEditor: View {
                 Spacer()
                 if saving { ProgressView().controlSize(.small) }
                 Button("Cancel") { model.editingTask = nil }.keyboardShortcut(.cancelAction)
-                Button(isNew ? (task.isEvent ? "Add Event" : "Add Task") : "Save") { save() }
+                Button(isNew ? (task.isEvent ? "Add Event" : task.isBonus ? "Add Bonus Task" : "Add Task") : "Save") { save() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .disabled(task.title.trimmingCharacters(in: .whitespaces).isEmpty || saving)
@@ -444,7 +464,36 @@ struct TaskEditor: View {
 
     private var isGoogleSynced: Bool { task.source == "google" && task.googleEventID != nil && google.isConnected }
 
-    private var kindName: String { task.isEvent ? "Event" : task.isHabit ? "Habit" : "Task" }
+    private var kindName: String { task.isEvent ? "Event" : task.isBonus ? "Bonus Task" : task.isHabit ? "Habit" : "Task" }
+
+    // MARK: Bonus tasks
+
+    /// When it's on your list from, and how many times it can be checked off.
+    @ViewBuilder private var bonusSection: some View {
+        let limit = task.bonusLimit ?? 1
+        let saved = store.task(task.id)
+        Section {
+            DatePicker("On your list from", selection: $task.startDate, displayedComponents: .date)
+            Picker("Can be checked off", selection: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 })) {
+                ForEach(Array(Set(Bonus.limitChoices + [limit])).sorted { ($0 <= 0 ? Int.max : $0) < ($1 <= 0 ? Int.max : $1) }, id: \.self) { n in
+                    Text(Bonus.limitLabel(n)).tag(n)
+                }
+            }
+            if limit > 0 {
+                Stepper("Or exactly: \(limit) time\(limit == 1 ? "" : "s")", value: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 }), in: 1...999)
+            }
+            if let saved, saved.bonusCount > 0 {
+                LabeledContent("So far") {
+                    Text("\(saved.bonusSummary)\(saved.bonusUsedUp ? ": off your list" : "")").foregroundStyle(.secondary)
+                }
+            }
+        } header: { Text("Bonus") } footer: {
+            Text(limit <= 0 ? "No limit: it stays on your list, and you can check it off as many times as you like (several times a day too)."
+                 : limit == 1 ? "Check it off once and it's done for good. It never shows as overdue or missed if you don't."
+                 : "It stays on your list until you've checked it off \(limit) times (several times a day is fine), then it's done for good.")
+                .font(.app(.caption)).foregroundStyle(.secondary)
+        }
+    }
 
     // MARK: Habits (Atomic Habits)
 
@@ -762,6 +811,13 @@ struct TaskEditor: View {
             if h.style != "break" { h.app = nil; h.limitMinutes = nil }
             t.habit = h
         } else { t.habit = nil }
+        if t.isBonus {
+            t.timeMinutes = nil; t.recurrence = Recurrence(); t.mode = nil; t.dueDate = nil; t.urgent = nil
+            t.cycleGapDays = nil; t.cycleTimes = nil
+            t.after = nil; t.afterMinutes = nil; t.armedAt = nil; t.armedBy = nil
+            t.channels = []; t.nag = nil; t.nagEvery = nil; t.busy = false
+            if let l = t.bonusLimit, l == 1 { t.bonusLimit = nil }
+        } else { t.bonusLimit = nil }
 
         // A Google Tasks item: save here, then push the title/notes/due date to Google.
         if !isNew, t.source == "gtasks", let gid = t.googleTaskID {

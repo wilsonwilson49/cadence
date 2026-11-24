@@ -198,8 +198,14 @@ struct ChecklistRow: View {
             CheckButton(done: occ.isDone, color: occ.task.color.color) {
                 if let onToggle { onToggle(occ) } else { model.toggle(occ) }
             }
-            MissButton(missed: occ.isMissed, dimmed: occ.isDone) {
-                if let onMiss { onMiss(occ) } else { model.toggleMissed(occ) }
+            if occ.task.isBonus {
+                // Optional: there's nothing to miss, so no X box.
+                Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(.yellow).frame(width: 18)
+                    .help("Bonus task: optional, +\(Bonus.points) points when you finish it during a focus session")
+            } else {
+                MissButton(missed: occ.isMissed, dimmed: occ.isDone) {
+                    if let onMiss { onMiss(occ) } else { model.toggleMissed(occ) }
+                }
             }
             if !compact {
                 RoundedRectangle(cornerRadius: 2).fill(occ.task.color.color).frame(width: 3, height: 30)
@@ -215,7 +221,11 @@ struct ChecklistRow: View {
                         Text(occ.day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
                             .foregroundStyle(occ.isOverdue ? .red : .secondary)
                     }
-                    if let s = occ.start {
+                    if occ.task.isBonus {
+                        let today = occ.task.bonusKeys(on: occ.day).count
+                        Label("Bonus · \(occ.task.bonusSummary)\(today > 0 && !occ.isDone ? " · \(today)× today" : "")", systemImage: "star")
+                        if !compact && !occ.isDone { Text("+\(Bonus.points) in focus").foregroundStyle(.yellow) }
+                    } else if let s = occ.start {
                         Label(timeString(s), systemImage: "clock")
                     } else if !compact {
                         Label("Any time", systemImage: "sun.horizon")
@@ -256,7 +266,7 @@ struct ChecklistRow: View {
                     if occ.isOverdue { Text("Overdue").foregroundStyle(.red).fontWeight(.medium) }
                     if occ.task.source == "calendly" { Label("Calendly", systemImage: "person.2") }
                     if occ.task.source == "google" { Label("Google", systemImage: "calendar") }
-                    if occ.task.isSilent { Image(systemName: "bell.slash").help("No notifications") }
+                    if occ.task.isSilent && !occ.task.isBonus { Image(systemName: "bell.slash").help("No notifications") }
                     if occ.task.isUrgent && occ.isUntilDone && !occ.isResolved {
                         Text("URGENT").font(.system(size: 9, weight: .heavy)).foregroundStyle(.red)
                             .padding(.horizontal, 4).padding(.vertical, 1).background(Capsule().fill(Color.red.opacity(0.14)))
@@ -343,7 +353,11 @@ struct OccurrenceMenu: View {
                 }
             }
         }
-        if occ.isMissed {
+        if occ.task.isBonus {
+            if !occ.isDone, !occ.task.bonusKeys(on: occ.day).isEmpty {
+                Button("Take back the last check-off today") { store.undoBonus(occ.task.id, on: occ.day) }
+            }
+        } else if occ.isMissed {
             Button("Undo “didn't do it”") { store.unmiss(occ) }
         } else if !occ.isDone {
             Button("Didn't do it… (reflect on why)") { model.beginReflection(occ, missed: true) }

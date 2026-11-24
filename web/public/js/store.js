@@ -323,14 +323,28 @@ class Store {
     if (M.countWords(text) < this.settings.minReflectionWords) return false;
     const t = this.tasks.get(occ.task.id);
     if (!t) return false;
+    let key = occ.key;
+    if (M.isBonus(t)) {
+      // A bonus task goes under its next free check-off that day, and stops at its limit.
+      if (M.bonusUsedUp(t)) return false;
+      if (t.completions?.[key]) key = M.nextBonusKey(t, occ.day);
+    }
     const missed = { ...t.missed };
-    delete missed[occ.key];
-    const timed = minutes > 0 ? { timeTaken: { ...t.timeTaken, [occ.key]: Math.round(minutes) } } : {};
-    this.upsertTask({ ...t, completions: { ...t.completions, [occ.key]: M.iso(new Date()) }, missed, ...timed });
-    for (const f of this.tasks.values()) if (f.after === t.id && !f.archived) this.upsertTask(M.armFollowUp(f, t.id, occ.key));
-    this.#addReflection(t, occ, text);
+    delete missed[key];
+    const timed = minutes > 0 ? { timeTaken: { ...t.timeTaken, [key]: Math.round(minutes) } } : {};
+    this.upsertTask({ ...t, completions: { ...t.completions, [key]: M.iso(new Date()) }, missed, ...timed });
+    for (const f of this.tasks.values()) if (f.after === t.id && !f.archived) this.upsertTask(M.armFollowUp(f, t.id, key));
+    this.#addReflection(t, { ...occ, key }, text);
     if (t.source === 'gtasks') this.onGoogleTaskChange?.(t, { status: 'completed' });
+    this.onComplete?.(this.tasks.get(t.id), key);
     return true;
+  }
+
+  /** Takes back the last check-off of a bonus task on `day` (its reflection stays, like unchecking anything). */
+  undoBonus(taskId, day = new Date()) {
+    const t = this.tasks.get(taskId);
+    const keys = t ? M.bonusKeysOn(t, day) : [];
+    if (keys.length) this.uncomplete(M.makeOccurrence(t, day, keys[keys.length - 1]));
   }
 
   /** "Didn't do it": settles the item without checking it off, with a reflection on why. */
@@ -448,16 +462,24 @@ class Store {
   overdue() {
     const today = M.startOfDay(new Date());
     return [...this.tasks.values()]
-      .filter(t => !t.archived && !M.isEvent(t) && !M.isUntilDone(t) && t.recurrence.frequency === 'none' && M.startOfDay(t.startDate) < today && !M.hasHistory(t))
+      .filter(t => !t.archived && !M.isEvent(t) && !M.isBonus(t) && !M.isWaiting(t) && !M.isUntilDone(t) && t.recurrence.frequency === 'none' && M.startOfDay(t.startDate) < today && !M.hasHistory(t))
       .map(t => M.makeOccurrence(t, t.startDate))
       .sort((a, b) => a.day - b.day);
   }
 
   todayChecklist() { return [...this.overdue(), ...this.tasksOn(new Date())]; }
+  /** Bonus tasks to show on `day` (today): highest priority first, then oldest. Not counted anywhere. */
+  bonusTasks(day = new Date()) {
+    return [...this.tasks.values()].filter(t => M.bonusListed(t, day))
+      .sort((a, b) => M.priorityRank(a) - M.priorityRank(b) || String(a.createdAt).localeCompare(String(b.createdAt)))
+      .map(t => M.makeOccurrence(t, day));
+  }
+  /** Bonus tasks that can still be checked off today. */
+  openBonusTasks(day = new Date()) { return this.bonusTasks(day).filter(o => !o.done); }
   /** One-off tasks dated after today (next `days` days): Today's "Upcoming" section, not counted. Same as Store.upcomingOneOffs. */
   upcomingOneOffs(days = 30) {
     const t = M.startOfDay(new Date()), end = M.addDays(t, days + 1);
-    return [...this.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && x.recurrence.frequency === 'none' && x.mode !== 'longTerm' && !M.isCycle(x)
+    return [...this.tasks.values()].filter(x => !x.archived && !M.isEvent(x) && !M.isBonus(x) && !M.isWaiting(x) && x.recurrence.frequency === 'none' && x.mode !== 'longTerm' && !M.isCycle(x)
         && M.startOfDay(new Date(x.startDate)) > t && new Date(x.startDate) < end && !M.hasHistory(x))
       .map(x => M.makeOccurrence(x, new Date(x.startDate))).sort((a, b) => (a.start || a.day) - (b.start || b.day));
   }

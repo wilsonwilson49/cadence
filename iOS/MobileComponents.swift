@@ -21,6 +21,10 @@ struct MobileRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(occ.isDone ? "Mark as not done" : "Check off")
+            if t.isBonus {
+                Image(systemName: "star.fill").font(.system(size: 13)).foregroundStyle(.yellow).frame(width: 20, height: 20)
+                    .accessibilityLabel("Bonus task")
+            } else {
             Button { model.toggleMissed(occ) } label: {
                 RoundedRectangle(cornerRadius: 5)
                     .fill(occ.isMissed ? Color.red : .clear)
@@ -31,6 +35,7 @@ struct MobileRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(occ.isMissed ? "Undo didn't do it" : "Didn't do it")
+            }
             RoundedRectangle(cornerRadius: 2).fill(t.color.color).frame(width: 3, height: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(t.title)
@@ -41,6 +46,10 @@ struct MobileRow: View {
                     if occ.isMissed { Text("Didn't do it").foregroundStyle(.red).fontWeight(.semibold) }
                     if showDate || (occ.isOverdue && !inDayList) {
                         Text(occ.day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())).foregroundStyle(occ.isOverdue ? .red : .secondary)
+                    }
+                    if t.isBonus {
+                        let today = t.bonusKeys(on: occ.day).count
+                        Label("Bonus · \(t.bonusSummary)\(today > 0 && !occ.isDone ? " · \(today)× today" : "")", systemImage: "star").lineLimit(1)
                     }
                     if let s = occ.start { Label(timeString(s), systemImage: "clock") }
                     if occ.isUntilDone && !occ.isResolved { Label(t.carryLabel(on: occ.day), systemImage: "flame").lineLimit(1) }
@@ -295,20 +304,21 @@ struct EditorSheet: View {
         self.isNew = isNew
     }
 
-    private var kind: String { task.isEvent ? "event" : task.isHabit ? "habit" : "task" }
+    private var kind: String { task.isEvent ? "event" : task.isBonus ? "bonus" : task.isHabit ? "habit" : "task" }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Picker("Kind", selection: Binding(get: { kind }, set: setKind)) {
-                        Text("Task").tag("task"); Text("Habit").tag("habit"); Text("Event").tag("event")
+                        Text("Task").tag("task"); Text("Habit").tag("habit"); Text("Event").tag("event"); Text("Bonus").tag("bonus")
                     }
                     .pickerStyle(.segmented)
                     TextField("Title", text: $task.title)
                     TextField("Notes", text: $task.notes, axis: .vertical).lineLimit(1...4)
                 } footer: {
                     Text(task.isEvent ? "Events show on your calendar only: no checkbox, no reflection."
+                         : task.isBonus ? "Optional extras: listed on Today, never required, never overdue, no reminders. Each one finished during a focus session is worth +\(Bonus.points) points."
                          : task.isHabit ? "Habits repeat and are tracked on the Habits tab: streaks, and never missing twice."
                          : "Tasks go on your checklist; checking one off asks for a short reflection.")
                 }
@@ -322,6 +332,26 @@ struct EditorSheet: View {
                         HStack { Text("Hardness"); Spacer(); HardnessPicker(value: $task.hardness, barHeight: 24) }
                     }
                 }
+                if task.isBonus {
+                    let limit = task.bonusLimit ?? 1
+                    Section {
+                        DatePicker("On your list from", selection: $task.startDate, displayedComponents: .date)
+                        Picker("Can be checked off", selection: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 })) {
+                            ForEach(Array(Set(Bonus.limitChoices + [limit])).sorted { ($0 <= 0 ? Int.max : $0) < ($1 <= 0 ? Int.max : $1) }, id: \.self) { n in
+                                Text(Bonus.limitLabel(n)).tag(n)
+                            }
+                        }
+                        if limit > 0 {
+                            Stepper("Exactly \(limit) time\(limit == 1 ? "" : "s")", value: Binding(get: { limit }, set: { task.bonusLimit = $0 == 1 ? nil : $0 }), in: 1...999)
+                        }
+                        if let saved = model.store.task(task.id), saved.bonusCount > 0 {
+                            LabeledContent("So far", value: saved.bonusSummary)
+                        }
+                    } header: { Text("Bonus") } footer: {
+                        Text(limit <= 0 ? "No limit: check it off as often as you like." : limit == 1 ? "Check it off once and it's done for good." : "It stays on your list until you've checked it off \(limit) times.")
+                    }
+                }
+                if !task.isBonus {
                 Section("When") {
                     if !task.isEvent && !task.isHabit {
                         Picker("Starts", selection: Binding(get: { task.after != nil }, set: { on in
@@ -350,6 +380,7 @@ struct EditorSheet: View {
                         }
                     }
                 }
+                }
                 if task.isHabit || task.isEvent {
                     Section("Repeat") {
                         Picker("Repeats", selection: $task.recurrence.frequency) {
@@ -360,7 +391,7 @@ struct EditorSheet: View {
                         }
                     }
                 }
-                if !task.isEvent && !task.isLongTerm && !task.isCycle {
+                if !task.isEvent && !task.isBonus && !task.isLongTerm && !task.isCycle {
                     Section {
                         Toggle(isOn: Binding(get: { task.isUntilDone }, set: { task.mode = $0 ? "untilDone" : nil })) {
                             Label("Keep it on my list until it's done", systemImage: "flame")
@@ -377,6 +408,7 @@ struct EditorSheet: View {
                     }
                 }
                 if task.isHabit { stepsSection; habitSection }
+                if !task.isBonus {
                 Section("Reminders") {
                     Toggle("Notify me", isOn: Binding(get: { !task.channels.isEmpty }, set: { task.channels = $0 ? store.settings.defaultChannels : [] }))
                     if !task.channels.isEmpty {
@@ -387,7 +419,8 @@ struct EditorSheet: View {
                         }
                     }
                 }
-                if !task.isEvent {
+                }
+                if !task.isEvent && !task.isBonus {
                     Section {
                         Picker("Keep after me", selection: Binding(get: { task.nagLevel }, set: { task.nag = $0 == .normal ? nil : $0.rawValue })) {
                             ForEach(NagLevel.allCases) { Text($0.title).tag($0) }
@@ -418,7 +451,7 @@ struct EditorSheet: View {
                     }
                 }
             }
-            .navigationTitle("\(isNew ? "New" : "Edit") \(kind.capitalized)")
+            .navigationTitle("\(isNew ? "New" : "Edit") \(task.isBonus ? "Bonus Task" : kind.capitalized)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -436,7 +469,16 @@ struct EditorSheet: View {
     }
 
     private func setKind(_ k: String) {
+        let wasBonus = task.isBonus
         task.kind = k
+        if k == "bonus" {
+            task.recurrence = Recurrence(); task.mode = nil; task.habit = nil; hasTime = false
+            task.after = nil; task.afterMinutes = nil; task.armedAt = nil; task.armedBy = nil
+            task.channels = []; task.nag = nil; task.busy = false
+            if isNew && task.color == .blue { task.color = .yellow }
+        } else if wasBonus {
+            task.channels = store.settings.defaultChannels
+        }
         if k == "event" { task.mode = nil; if !hasTime { hasTime = true }; task.busy = true }
         if k == "habit" {
             if !task.recurrence.isRepeating { task.recurrence.frequency = .daily }
@@ -562,6 +604,11 @@ struct EditorSheet: View {
             }
             t.habit = h
         } else { t.habit = nil }
+        if t.isBonus {
+            t.timeMinutes = nil; t.recurrence = Recurrence(); t.mode = nil; t.dueDate = nil; t.urgent = nil
+            t.after = nil; t.afterMinutes = nil; t.armedAt = nil; t.armedBy = nil
+            t.channels = []; t.nag = nil; t.nagEvery = nil; t.busy = false
+        } else { t.bonusLimit = nil }
         store.upsert(t)
         dismiss()
     }

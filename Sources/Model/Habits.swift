@@ -169,6 +169,12 @@ struct FocusSession: Codable, Identifiable, Hashable {
     var title: String?
     var occurrenceID: String?
     var isWork: Bool { mode == "work" }
+    /// Bonus tasks finished during the session (each one is extra points), and which check-offs they were
+    /// ("taskID|yyyy-MM-dd#n"). nil = none (and sessions from before bonus tasks).
+    var bonus: Int?
+    var bonusTitles: [String]?
+    var bonusIds: [String]?
+    var bonusCount: Int { bonus ?? 0 }
 
     init(id: UUID = UUID(), startedAt: Date, endedAt: Date, plannedMinutes: Int, actualMinutes: Int, picked: Int, finished: Int,
          points: Int) {
@@ -186,6 +192,7 @@ struct FocusSession: Codable, Identifiable, Hashable {
         focusPercent = c.value(.focusPercent, 100); device = c.value(.device, "web"); points = c.value(.points, 0)
         updatedAt = c.value(.updatedAt, nil)
         mode = c.value(.mode, nil); title = c.value(.title, nil); occurrenceID = c.value(.occurrenceID, nil)
+        bonus = c.value(.bonus, nil); bonusTitles = c.value(.bonusTitles, nil); bonusIds = c.value(.bonusIds, nil)
     }
 }
 
@@ -198,10 +205,11 @@ enum Focus {
     static func normalized(_ lengths: [Int]) -> [Int] { Array(Set(lengths.filter { $0 > 0 }.map(clamp))).sorted().prefix(8).map { $0 } }
     /// "25 min", "1h 30m", "2h".
     static func label(_ m: Int) -> String { m < 60 ? "\(m) min" : m % 60 == 0 ? "\(m / 60)h" : "\(m / 60)h \(m % 60)m" }
-    /// 10 points per task finished in time, ×1.5 at 90% focused (×1.25 at 75%), +20 for clearing the list.
+    /// 10 points per task finished in time and 15 per bonus task, ×1.5 at 90% focused (×1.25 at 75%),
+    /// +20 for clearing the list (bonus tasks aren't part of the list). Same as focusPoints() on the web.
     static func multiplier(_ percent: Int) -> Double { percent >= 90 ? 1.5 : percent >= 75 ? 1.25 : 1 }
-    static func points(finished: Int, picked: Int, focusPercent: Int) -> Int {
-        Int((Double(finished * 10) * multiplier(focusPercent)).rounded()) + (picked > 0 && finished >= picked ? 20 : 0)
+    static func points(finished: Int, picked: Int, focusPercent: Int, bonus: Int = 0) -> Int {
+        Int((Double(finished * 10 + bonus * Bonus.points) * multiplier(focusPercent)).rounded()) + (picked > 0 && finished >= picked ? 20 : 0)
     }
     static func levelStart(_ l: Int) -> Int { 50 * (l - 1) * l }
     static func level(points: Int) -> (level: Int, into: Int, span: Int) {

@@ -44,7 +44,10 @@ struct MenuBarView: View {
         let done = settled.filter(\.isDone).count + projDone.count
         let openCount = open.count + projOpen.count, total = items.count + proj.count
         let laterCount = later.count + projLater.count
-        let entries = grouped ? groupedEntries(open, projOpen, later, projLater) : flatEntries(open, projOpen, later, projLater)
+        // Bonus tasks: optional, not counted, listed last.
+        let bonus = store.openBonusTasks()
+        let entries = (grouped ? groupedEntries(open, projOpen, later, projLater) : flatEntries(open, projOpen, later, projLater))
+            + (bonus.isEmpty ? [] : [Entry.header("Bonus", bonus.count, "optional")] + bonus.map { Entry.occ($0, later: true) })
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -61,7 +64,7 @@ struct MenuBarView: View {
                 ProgressRing(done: done, total: total, size: 26, lineWidth: 3.5, showsLeft: store.settings.ringShowsLeft)
             }
             Divider()
-            if total == 0 && laterCount == 0 {
+            if total == 0 && laterCount == 0 && bonus.isEmpty {
                 Text("Nothing on today's checklist.").font(.app(.callout)).foregroundStyle(.secondary)
                     .frame(height: Self.rowHeight)
             } else {
@@ -231,7 +234,9 @@ private struct MenuRow: View {
                 Text("!").font(.app(.caption).weight(.heavy)).foregroundStyle(.red).help("Urgent")
             }
             Spacer(minLength: 6)
-            if later && hovering {
+            if occ.task.isBonus {
+                Image(systemName: "star").font(.system(size: 10)).foregroundStyle(.yellow).help("Bonus: optional, +\(Bonus.points) points in a focus session")
+            } else if later && hovering {
                 Button("Urgent") { store.setUrgent(occ.task.id, true) }
                     .buttonStyle(.borderless).font(.app(.caption).weight(.semibold)).foregroundStyle(.red)
                     .help("Put it on today's list and in today's progress")

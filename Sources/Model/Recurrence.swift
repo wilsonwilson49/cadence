@@ -26,9 +26,10 @@ enum DateKey {
         return formatter.string(from: date)
     }
 
+    /// Also reads a bonus task's extra check-offs on a day ("yyyy-MM-dd#2").
     static func date(_ key: String) -> Date? {
         formatter.timeZone = .current
-        return formatter.date(from: key)
+        return formatter.date(from: key.split(separator: "#", maxSplits: 1).first.map(String.init) ?? key)
     }
 }
 
@@ -127,6 +128,8 @@ extension PlanTask {
         if archived == true { return false }
         // A follow-up that hasn't been set off yet is on no list.
         if after != nil && armedAt == nil { return false }
+        // Bonus tasks aren't on any day: they have their own list (Store.bonusTasks), so nothing reminds or counts them.
+        if isBonus { return false }
         let d = day.startOfDay
         guard d >= startDate.startOfDay else { return false }
         guard isUntilDone else { return occursByPattern(d) }
