@@ -171,6 +171,8 @@ final class FocusEngine: ObservableObject {
 
     var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(pausedAt ?? now).rounded(.up))) }
     var pauseClock: String { String(format: "%d:%02d", pauseSeconds / 60, pauseSeconds % 60) }
+    /// Work mode: the points the time so far is worth (2 per 5 minutes, times the multiplier), before completing it.
+    var timePointsSoFar: Int { Focus.studyPoints(minutes: elapsedSeconds / 60, focusPercent: focusPercent) }
 
     // MARK: Pause
 
@@ -327,11 +329,15 @@ final class FocusEngine: ObservableObject {
         let isBonus: (String) -> Bool = { [self] in occurrence($0)?.task.isBonus == true }
         let ticked = tickedBonusOccurrences()
         let extras = ticked.map(\.id) + bonusCredited
-        let regularDone = finished.filter { !isBonus($0) }.count
+        let regularDone = finished.filter { !isBonus($0) }.count, regularPicked = picked.filter { !isBonus($0) }.count
+        let bonusDone = extras.count + finished.filter(isBonus).count
+        let actual = Int((Double(elapsed) / 60).rounded())
+        // Work sessions also score the time spent, like study sessions; sprints score what they finish.
         var s = FocusSession(id: sessionID, startedAt: startedAt, endedAt: end, plannedMinutes: minutes,
-                             actualMinutes: Int((Double(elapsed) / 60).rounded()), picked: picked.count, finished: finished.count,
-                             points: Focus.points(finished: regularDone, picked: picked.filter { !isBonus($0) }.count, focusPercent: percent,
-                                                  bonus: extras.count + finished.filter(isBonus).count))
+                             actualMinutes: actual, picked: picked.count, finished: finished.count,
+                             points: mode == .work
+                                 ? Focus.workPoints(minutes: actual, focusPercent: percent, finished: regularDone, picked: regularPicked, bonus: bonusDone)
+                                 : Focus.points(finished: regularDone, picked: regularPicked, focusPercent: percent, bonus: bonusDone))
         s.finishedIds = finished
         s.finishedTitles = finished.compactMap { occurrence($0)?.task.title }
         if !extras.isEmpty {

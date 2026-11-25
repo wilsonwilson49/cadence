@@ -173,6 +173,8 @@ struct FocusView: View {
                     SectionTitle(text: "What are you working on?", symbol: "scope")
                     Text("Click one and it starts straight away: it goes up front as your headline, the clock runs, and distracting apps and websites (Settings › Tough love) are blocked until you complete it or stop.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
+                    Text("Score: 2 points for every 5 minutes you work (pauses don't count), plus 10 for completing it, all ×1.5 if you stay 90% focused (×1.25 at 75%), and +20 when you complete it.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
                     HStack {
                         TextField("Something else? Type it and press Return", text: $newWork).onSubmit(startNewWork)
                         Button("Start", action: startNewWork).disabled(newWork.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -254,6 +256,9 @@ struct FocusView: View {
                             Text("\(focus.focusPercent)% focused" + (focus.distractingSeconds + focus.awaySeconds > 0
                                  ? " · \(durationString(seconds: focus.distractingSeconds + focus.awaySeconds)) away or distracted" : ""))
                                 .font(.app(.caption)).foregroundStyle(.secondary)
+                            Text("+\(focus.timePointsSoFar) points for time so far")
+                                .font(.app(.caption).monospacedDigit()).foregroundStyle(.green)
+                                .help("2 points for every 5 minutes, times your focus multiplier. Completing it adds more.")
                         }
                     }
                     if let target {

@@ -308,5 +308,11 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   check(b.length === 3 && b.map(M2.blockMinutes).join() === '20,25,20' && b[1].id === 'f-p-1', 'pause: gaps on the calendar, 65 of 90 minutes');
   check(M2.focusSegments(0, 100, [{ start: 0, end: 30 }, { start: 90, end: 120 }]).map(x => x.join('-')).join() === '30-90', 'pause: breaks at the edges are trimmed');
 }
+// Work sessions count time like study sessions, on top of completing the task.
+{
+  const M2 = await import('../public/js/model.js');
+  check(M2.workPoints({ minutes: 47, focusPercent: 95, finished: 1, picked: 1 }) === 35 + 27 && M2.workPoints({ minutes: 30, focusPercent: 60, finished: 0, picked: 1 }) === 12
+    && M2.workPoints({ minutes: 4, focusPercent: 100, finished: 0, picked: 1 }) === 0, 'work: 2 points per 5 minutes × multiplier, plus completing it');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

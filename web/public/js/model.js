@@ -1157,6 +1157,9 @@ export function runLog(r, now = Date.now()) {
 }
 /** 2 points per 5 minutes studied, times the focus multiplier. Same as Focus.studyPoints on the Mac. */
 export const studyPoints = (minutes, percent) => Math.round(Math.floor(minutes / 5) * 2 * focusMultiplier(percent));
+/** Focus › Work counts time the way study does, on top of the points for what it finished. Same as Focus.workPoints. */
+export const workPoints = ({ minutes, focusPercent, finished, picked, bonus = 0 }) =>
+  focusPoints({ finished, picked, focusPercent, bonus }) + studyPoints(minutes, focusPercent);
 export const fmtStudyClock = ms => {
   const s = Math.round(Math.abs(ms) / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
   return `${ms < 0 ? '+' : ''}${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${x}`;

@@ -493,6 +493,12 @@ extension Focus {
     static func studyPoints(minutes: Int, focusPercent: Int) -> Int {
         Int((Double(minutes / 5 * 2) * multiplier(focusPercent)).rounded())
     }
+
+    /// Focus › Work counts time the way study does (2 points per 5 minutes worked, times the multiplier), on top of
+    /// the points for what it finished (10 for completing the task, +20; 15 per bonus task). Same as workPoints() on the web.
+    static func workPoints(minutes: Int, focusPercent: Int, finished: Int, picked: Int, bonus: Int = 0) -> Int {
+        points(finished: finished, picked: picked, focusPercent: focusPercent, bonus: bonus) + studyPoints(minutes: minutes, focusPercent: focusPercent)
+    }
 }
 
 extension Store {

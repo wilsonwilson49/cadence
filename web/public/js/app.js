@@ -642,6 +642,11 @@ function togglePause() {
   }
   saveFocus(); render();
 }
+/** Work mode: the points the time so far is worth (2 per 5 minutes, times the multiplier), before completing it. */
+function workTimePoints() {
+  const e = Math.max(1, focusElapsed()), pct = Math.round(100 * (e - Math.min(e, awayNow())) / e);
+  return M.studyPoints(Math.floor(focusElapsed() / 60_000), pct);
+}
 /** Work mode's clock, counting up: "12:34" or "1:02:03". */
 const workClock = () => {
   const s = Math.max(0, Math.floor(focusElapsed() / 1000));
@@ -714,8 +719,9 @@ function endFocus({ quiet = false } = {}) {
     id: focus.id, startedAt: M.iso(new Date(focus.startedAt)), endedAt: M.iso(new Date(end)), plannedMinutes: focus.minutes,
     actualMinutes: Math.round(elapsed / 60_000), picked, finished, finishedTitles: focus.finished.map(id => findOcc(id)?.task.title).filter(Boolean),
     finishedIds: focus.finished, awaySeconds: Math.round(away / 1000), focusPercent, device: 'web',
-    points: M.focusPoints({ finished: focus.finished.filter(id => !isB(id)).length, picked: focus.picked.filter(id => !isB(id)).length, focusPercent,
-      bonus: extras.length + focus.finished.filter(isB).length }),
+    // Work sessions also score the time spent, like study sessions; sprints score what they finish.
+    points: (focus.mode === 'work' ? M.workPoints : M.focusPoints)({ minutes: Math.round(elapsed / 60_000), finished: focus.finished.filter(id => !isB(id)).length,
+      picked: focus.picked.filter(id => !isB(id)).length, focusPercent, bonus: extras.length + focus.finished.filter(isB).length }),
     ...(extras.length ? { bonus: extras.length, bonusIds: extras, bonusTitles: extras.map(id => findOcc(id)?.task.title).filter(Boolean) } : {}),
     ...(focus.mode === 'work' ? { mode: 'work', title: focus.title, occurrenceID: focus.workId } : {}),
     ...(focus.pauses?.length ? { pauses: focus.pauses, pausedSeconds: Math.round((focus.pausedMs || 0) / 1000) } : {}),
@@ -751,6 +757,7 @@ function focusTick() {
       const t = workClock();
       for (const el of document.querySelectorAll('[data-focus-clock]')) el.textContent = t;
       for (const el of document.querySelectorAll('[data-focus-away]')) el.textContent = M.fmtDuration(awayNow() / 1000);
+      for (const el of document.querySelectorAll('[data-work-points]')) el.textContent = workTimePoints();
       for (const el of document.querySelectorAll('[data-work-bar]')) el.style.width = `${Math.min(100, focusElapsed() / (Number(el.dataset.target) * 600))}%`;
       const badge = document.querySelector('.nav-item[href="/app/focus"] .badge');
       if (badge) badge.textContent = t;
@@ -858,6 +865,7 @@ function workSetup(open, bonus = []) {
   return `<div class="card pad stack" style="gap:12px">
     <div class="section-title" style="margin:0">${ic('target')}What are you working on?</div>
     <div class="small muted">Click one and it starts straight away: it goes up front as your headline and the clock runs until you complete it. Time in other tabs and apps counts as away.</div>
+    <div class="small muted">Score: 2 points for every 5 minutes you work (pauses don’t count), plus 10 for completing it, all ×1.5 if you stay 90% focused (×1.25 at 75%), and +20 when you complete it.</div>
     <form class="row" data-form="work-new"><input class="input grow" name="title" placeholder="Something else? Type it and press Enter" autocomplete="off"><button class="btn">Start</button></form>
     ${list.length ? `<div class="work-pick">${list.map(o => {
       const t = o.task, pr = M.priorityOf(t), hd = M.hardnessOf(t), typ = M.typicalMinutes(t);
@@ -913,7 +921,8 @@ function workingView() {
         <div class="row" style="gap:28px;align-items:center;flex-wrap:wrap">
           <div><div class="work-clock ${focus.pausedAt ? 'paused' : ''}" data-focus-clock>${workClock()}</div>${focus.pausedAt
             ? `<div class="small paused-tag">${ic('pause')} Paused · on a break for <span data-pause-clock>${pauseClock()}</span></div>`
-            : `<div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div>`}</div>
+            : `<div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div>`}
+            <div class="small green mono" title="2 points for every 5 minutes, times your focus multiplier. Completing it adds more.">+<span data-work-points>${workTimePoints()}</span> points for time so far</div></div>
           ${target ? `<div class="grow" style="max-width:320px"><div class="progress"><div data-work-bar data-target="${target}" style="width:${Math.min(100, (elapsedMin / target) * 100)}%"></div></div>
             <div class="small muted" style="margin-top:4px">${elapsedMin > target ? `Past the ${M.fmtMinutes(target)} it usually takes` : `It usually takes ${M.fmtMinutes(target)}`}</div></div>` : ''}
         </div>
