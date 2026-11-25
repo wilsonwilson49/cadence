@@ -191,6 +191,9 @@ main { overflow: auto; min-width: 0; }
 .missbtn.on { background: var(--red); border-color: var(--red); color: #fff; }
 .crow.done .missbtn { opacity: .35; }
 /* Bonus tasks: a star where the "didn't do it" box goes (there's nothing to miss), and their extra points. */
+/* A paused focus session: the clock dims, and "Paused" shows how long the break has been. */
+.fc-time.paused, .work-clock.paused { opacity: .45; }
+.paused-tag { color: var(--orange); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
 .bonus-star { flex: none; width: 19px; height: 19px; margin-left: -4px; display: inline-flex; align-items: center; justify-content: center; color: var(--orange); font-size: 15px; }
 .bonus-pts { color: var(--orange); font-weight: 600; }
 .checkbtn.bonus-btn { color: var(--faint); }

@@ -298,5 +298,15 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   const all = { ...cyc, cycleTimes: 1 };
   check(M2.bonusFinished(all, D(10, 9)) && !M2.bonusListed(all, D(10, 20)), 'bonus cycle: done for good after its last round');
 }
+// Pausing a focus session: the breaks are gaps on the calendar and left out of the minutes.
+{
+  const M2 = await import('../public/js/model.js');
+  const at = (h, m = 0) => new Date(2026, 10, 24, h, m).toISOString();
+  const s = { id: 'p', mode: 'work', title: 'Essay', startedAt: at(9), endedAt: at(10, 30), finished: 1, picked: 1,
+    pauses: [{ start: at(9, 20), end: at(9, 35) }, { start: at(10), end: at(10, 10) }] };
+  const b = M2.focusBlocks([s], [], new Date(2026, 10, 24));
+  check(b.length === 3 && b.map(M2.blockMinutes).join() === '20,25,20' && b[1].id === 'f-p-1', 'pause: gaps on the calendar, 65 of 90 minutes');
+  check(M2.focusSegments(0, 100, [{ start: 0, end: 30 }, { start: 90, end: 120 }]).map(x => x.join('-')).join() === '30-90', 'pause: breaks at the edges are trimmed');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

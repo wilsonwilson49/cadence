@@ -204,9 +204,12 @@ struct WeekView: View {
             // The session running now, refreshed every half minute.
             TimelineView(.periodic(from: .now, by: 30)) { _ in
                 if model.focus.running, let i = days.firstIndex(where: \.isToday) {
-                    let live = FocusBlock(id: "live", start: model.focus.startedAt, end: Date(), kind: model.focus.isWorking ? .work : .focus,
-                                          title: (model.focus.workOccurrence?.task.title ?? "Focus sprint") + " (now)")
-                    focusMark(live, column: i, colW: colW)
+                    // Pauses are gaps, like on finished sessions.
+                    ForEach(Array(model.focus.liveSegments.enumerated()), id: \.offset) { n, seg in
+                        let live = FocusBlock(id: "live-\(n)", start: seg.start, end: max(seg.end, seg.start.addingTimeInterval(60)), kind: model.focus.isWorking ? .work : .focus,
+                                              title: (model.focus.workOccurrence?.task.title ?? "Focus sprint") + (model.focus.isPaused ? " (paused)" : " (now)"))
+                        focusMark(live, column: i, colW: colW)
+                    }
                 }
             }
         }

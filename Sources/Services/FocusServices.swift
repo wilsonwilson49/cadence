@@ -136,6 +136,16 @@ final class FocusEngine: ObservableObject {
     @Published private(set) var bonusTicks: [UUID] = []
     /// Bonus tasks checked off somewhere else (Today, the menu bar) while the session ran: "taskID|key".
     @Published private(set) var bonusCredited: [String] = []
+    /// Paused (a break): when it began. The clock stops, nothing counts as away or distracted, and blocking lifts.
+    @Published private(set) var pausedAt: Date?
+    private var pausedSeconds = 0
+    private var pauses: [FocusPause] = []
+    private var lastPauseNudge = Date.distantPast
+    var isPaused: Bool { running && pausedAt != nil }
+    /// How long the current break has lasted.
+    var pauseSeconds: Int { pausedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0 }
+    /// The stretches of this session spent focusing so far (for the calendar).
+    var liveSegments: [(start: Date, end: Date)] { FocusPause.segments(from: startedAt, to: pausedAt ?? now, pauses: pauses) }
 
     enum Mode: String { case sprint, work }
     /// Sprint: race the clock through a list. Work: one task, a clock counting up, until you complete it.
@@ -149,7 +159,8 @@ final class FocusEngine: ObservableObject {
 
     var isWorking: Bool { running && mode == .work }
     var workOccurrence: Occurrence? { workID.flatMap(occurrence) }
-    var elapsedSeconds: Int { max(0, Int(now.timeIntervalSince(startedAt))) }
+    /// Time spent so far, not counting pauses.
+    var elapsedSeconds: Int { max(0, Int((pausedAt ?? now).timeIntervalSince(startedAt)) - pausedSeconds) }
     /// Share of the time so far not spent away or in distracting apps.
     var focusPercent: Int {
         let e = max(1, elapsedSeconds)
@@ -158,7 +169,28 @@ final class FocusEngine: ObservableObject {
 
     init(model: AppModel) { self.model = model }
 
-    var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(now).rounded(.up))) }
+    var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(pausedAt ?? now).rounded(.up))) }
+    var pauseClock: String { String(format: "%d:%02d", pauseSeconds / 60, pauseSeconds % 60) }
+
+    // MARK: Pause
+
+    func pause() {
+        guard running, pausedAt == nil else { return }
+        let t = Date()
+        pausedAt = t; now = t; distractingStreak = 0; lastPauseNudge = t
+    }
+
+    /// Back to it: the break is left out of the time, and a sprint gets its paused minutes back.
+    func resume() {
+        guard running, let p = pausedAt else { return }
+        let t = Date(), d = t.timeIntervalSince(p)
+        pausedSeconds += Int(d.rounded())
+        endsAt = endsAt.addingTimeInterval(d)
+        if d >= 1 { pauses.append(FocusPause(start: p, end: t)) }
+        pausedAt = nil; now = t
+    }
+
+    func togglePause() { if isPaused { resume() } else { pause() } }
     var clock: String {
         if mode == .work {
             let s = elapsedSeconds
@@ -191,6 +223,7 @@ final class FocusEngine: ObservableObject {
         if mode == .sprint { workID = nil }
         self.minutes = minutes; self.picked = picked; finished = []
         bonusTicks = []; bonusCredited = []
+        pausedAt = nil; pausedSeconds = 0; pauses = []
         awaySeconds = 0; distractingSeconds = 0; distractingStreak = 0
         startedAt = Date(); endsAt = startedAt.addingTimeInterval(Double(minutes * 60)); now = startedAt
         sessionID = UUID(); result = nil; running = true
@@ -250,6 +283,17 @@ final class FocusEngine: ObservableObject {
 
     private func tick() {
         now = Date()
+        if let p = pausedAt {
+            // On a break: nothing counts. A reminder every 10 minutes, in case it's turned into something else.
+            if now.timeIntervalSince(lastPauseNudge) >= 600 {
+                lastPauseNudge = now
+                let mins = Int(now.timeIntervalSince(p) / 60)
+                model.notifier.deliver(AlertContent(kind: .nudge, title: "Still on a break?",
+                    body: "Paused for \(mins) min\(mode == .work ? " from “\(workOccurrence?.task.title ?? "your task")”" : ""). Resume when you're back.",
+                    symbol: "pause.circle", tint: .pink), channels: [.banner])
+            }
+            return
+        }
         if now >= endsAt { end(); return }
         let engine = model.engine
         if engine.screenLocked || engine.displayAsleep { awaySeconds += 1; return }
@@ -274,8 +318,9 @@ final class FocusEngine: ObservableObject {
         guard running else { return }
         timer?.invalidate(); timer = nil
         running = false
-        let end = min(Date(), endsAt)
-        let elapsed = max(1, Int(end.timeIntervalSince(startedAt)))
+        // Ended while paused: it ended when the break began.
+        let end = min(pausedAt ?? Date(), endsAt)
+        let elapsed = max(1, Int(end.timeIntervalSince(startedAt)) - pausedSeconds)
         let lost = min(elapsed, awaySeconds + distractingSeconds)
         let percent = Int((100 * Double(elapsed - lost) / Double(elapsed)).rounded())
         // Bonus tasks don't count toward clearing the list; each one finished is worth bonus points instead.
@@ -295,6 +340,8 @@ final class FocusEngine: ObservableObject {
         }
         bonusTicks = []; bonusCredited = []
         s.awaySeconds = awaySeconds; s.distractingSeconds = distractingSeconds; s.focusPercent = percent
+        if !pauses.isEmpty { s.pauses = pauses; s.pausedSeconds = pausedSeconds }
+        pausedAt = nil
         if mode == .work {
             s.mode = "work"; s.occurrenceID = workID; s.title = workOccurrence?.task.title
             workID = nil

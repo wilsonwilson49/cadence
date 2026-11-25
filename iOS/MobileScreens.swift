@@ -409,7 +409,8 @@ struct FocusScreen: View {
                 Circle().trim(from: 0, to: frac).stroke(focus.secondsLeft < 300 ? Color.orange : Theme.accent, style: StrokeStyle(lineWidth: 14, lineCap: .round))
                     .rotationEffect(.degrees(-90)).animation(.linear(duration: 1), value: frac)
                 VStack {
-                    Text(focus.clock).font(.system(size: 48, weight: .bold).monospacedDigit())
+                    Text(focus.clock).font(.system(size: 48, weight: .bold).monospacedDigit()).foregroundStyle(focus.isPaused ? Color.secondary : .primary)
+                    if focus.isPaused { Label("Paused", systemImage: "pause.fill").font(.app(.callout).weight(.semibold)).foregroundStyle(.orange) }
                     Text("\(focus.finished.count) of \(occs.count) done").foregroundStyle(.secondary)
                 }
             }
@@ -454,6 +455,9 @@ struct FocusScreen: View {
             } header: { Text("Bonus · +\(Bonus.points) each") } footer: { Text("Optional. Tap one each time you do it.") }
         }
         Section {
+            Button { focus.togglePause() } label: {
+                Label(focus.isPaused ? "Resume" : "Pause", systemImage: focus.isPaused ? "play.fill" : "pause.fill")
+            }
             Button { focus.addFiveMinutes() } label: { Label("Add 5 minutes", systemImage: "plus") }
             Button("End now", role: .destructive) { focus.end() }
         }

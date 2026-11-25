@@ -260,7 +260,7 @@ final class MobileModel: ObservableObject {
             center.add(UNNotificationRequest(identifier: "checkin", content: c,
                                              trigger: UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: 8, minute: 30), repeats: true)))
         }
-        if focus.running {
+        if focus.running && !focus.isPaused {
             let c = UNMutableNotificationContent()
             c.title = "Time! Your focus session is over"
             c.body = "Open Cadence to see your score and write your reflections."
@@ -295,8 +295,26 @@ final class MobileFocus: ObservableObject {
     /// Bonus tasks ticked during the session (reflected on at the end), and ones checked off elsewhere meanwhile.
     @Published private(set) var bonusTicks: [UUID] = []
     @Published private(set) var bonusCredited: [String] = []
+    /// Paused (a break): the clock stops and leaving the app doesn't count as away until you resume.
+    @Published private(set) var pausedAt: Date?
+    private var pausedSeconds = 0
+    private var pauses: [FocusPause] = []
+    var isPaused: Bool { running && pausedAt != nil }
 
     init(store: Store) { self.store = store }
+
+    func togglePause() {
+        guard running else { return }
+        if let p = pausedAt {
+            let t = Date(), d = t.timeIntervalSince(p)
+            pausedSeconds += Int(d.rounded()); endsAt = endsAt.addingTimeInterval(d)
+            if d >= 1 { pauses.append(FocusPause(start: p, end: t)) }
+            pausedAt = nil; now = t
+        } else {
+            pausedAt = Date(); now = pausedAt!
+        }
+        model?.scheduleNotifications()   // no "Time!" notification while paused; on resume it's moved to the new end
+    }
 
     func bonusDone(_ id: UUID) -> Int {
         bonusTicks.filter { $0 == id }.count + bonusCredited.filter { $0.hasPrefix(id.uuidString + "|") }.count
@@ -313,12 +331,13 @@ final class MobileFocus: ObservableObject {
         if running, t.isBonus, !bonusCredited.contains(id) { bonusCredited.append(id) }
     }
 
-    var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(now).rounded(.up))) }
+    var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(pausedAt ?? now).rounded(.up))) }
     var clock: String { String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60) }
 
     func start(minutes: Int, picked: [String]) {
         self.minutes = minutes; self.picked = picked; finished = []; awaySeconds = 0; awaySince = nil
         bonusTicks = []; bonusCredited = []
+        pausedAt = nil; pausedSeconds = 0; pauses = []
         startedAt = Date(); endsAt = startedAt.addingTimeInterval(Double(minutes * 60)); now = startedAt
         id = UUID(); result = nil; running = true
         tickTimer()
@@ -331,7 +350,7 @@ final class MobileFocus: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.now = Date()
-                if self.now >= self.endsAt { self.end() }
+                if self.pausedAt == nil && self.now >= self.endsAt { self.end() }
             }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -345,22 +364,23 @@ final class MobileFocus: ObservableObject {
 
     func addFiveMinutes() { endsAt = endsAt.addingTimeInterval(300); minutes += 5; model?.scheduleNotifications() }
 
-    func wentAway() { if running && awaySince == nil { awaySince = Date() } }
+    func wentAway() { if running && pausedAt == nil && awaySince == nil { awaySince = Date() } }
 
     func cameBack() {
         guard running else { return }
         if let a = awaySince { awaySeconds += Int(min(Date(), endsAt).timeIntervalSince(a)); awaySince = nil }
         now = Date()
-        if now >= endsAt { end() } else { tickTimer() }
+        if pausedAt == nil && now >= endsAt { end() } else { tickTimer() }
     }
 
     func end() {
         guard running else { return }
         timer?.invalidate(); timer = nil
         running = false
-        let end = min(Date(), endsAt)
+        // Ended while paused: it ended when the break began.
+        let end = min(pausedAt ?? Date(), endsAt)
         if let a = awaySince { awaySeconds += Int(max(0, end.timeIntervalSince(a))); awaySince = nil }
-        let elapsed = max(1, Int(end.timeIntervalSince(startedAt)))
+        let elapsed = max(1, Int(end.timeIntervalSince(startedAt)) - pausedSeconds)
         let percent = Int((100 * Double(elapsed - min(elapsed, awaySeconds)) / Double(elapsed)).rounded())
         // Ticked bonus tasks, each with its own check-off key and never past its limit.
         let today = Date().startOfDay
@@ -382,6 +402,8 @@ final class MobileFocus: ObservableObject {
             s.bonusTitles = extras.compactMap { model?.occurrence($0)?.task.title }
         }
         bonusTicks = []; bonusCredited = []
+        if !pauses.isEmpty { s.pauses = pauses; s.pausedSeconds = pausedSeconds }
+        pausedAt = nil
         s.awaySeconds = awaySeconds; s.focusPercent = percent; s.device = "ios"
         store.saveFocusSession(s)
         result = s

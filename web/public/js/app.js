@@ -146,7 +146,7 @@ function sidebar() {
     if (section && folded.has(section) && ui.route !== id) return head;
     const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
       : id === 'habits' ? (store.countedToday(store.tasksOn(new Date())).filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task) && !o.resolved).length || '')
-      : id === 'focus' && focus.running ? fmtClock(focusLeft()) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
+      : id === 'focus' && focus.running ? (focus.pausedAt ? 'Paused' : fmtClock(focusLeft())) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
       : id === 'flashcards' ? (store.dueCardCount || '') : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
     return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
   }).join('');
@@ -621,11 +621,30 @@ const FOCUS_KEY = 'cadence:focus';
 const focus = (() => { try { return JSON.parse(localStorage.getItem(FOCUS_KEY) || 'null') || { running: false }; } catch { return { running: false }; } })();
 const saveFocus = () => { try { localStorage.setItem(FOCUS_KEY, JSON.stringify(focus)); } catch { /* storage blocked */ } };
 const fmtClock = ms => { const s = Math.ceil(ms / 1000), m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
-const focusLeft = () => Math.max(0, (focus.endsAt || 0) - Date.now());
+// Pause: the clock stops (a sprint gets the time back on resume), and nothing counts as away until you resume.
+const focusNow = () => focus.pausedAt || Date.now();
+const focusLeft = () => Math.max(0, (focus.endsAt || 0) - focusNow());
 const awayNow = () => (focus.awayMs || 0) + (focus.awaySince ? Date.now() - focus.awaySince : 0);
+/** Time spent so far in this session, not counting pauses (ms). */
+const focusElapsed = () => Math.max(0, focusNow() - focus.startedAt - (focus.pausedMs || 0));
+const pauseClock = () => fmtClock(focus.pausedAt ? Date.now() - focus.pausedAt : 0);
+function togglePause() {
+  if (!focus.running) return;
+  const now = Date.now();
+  if (focus.pausedAt) {
+    const d = now - focus.pausedAt;
+    focus.pausedMs = (focus.pausedMs || 0) + d; focus.endsAt += d;
+    if (d >= 1000) focus.pauses = [...(focus.pauses || []), { start: M.iso(new Date(focus.pausedAt)), end: M.iso(new Date(now)) }];
+    focus.pausedAt = null; focus.awaySince = document.hasFocus() ? null : now;
+  } else {
+    if (focus.awaySince) { focus.awayMs = (focus.awayMs || 0) + now - focus.awaySince; focus.awaySince = null; }
+    focus.pausedAt = now; focus.pauseNudgedAt = now;
+  }
+  saveFocus(); render();
+}
 /** Work mode's clock, counting up: "12:34" or "1:02:03". */
 const workClock = () => {
-  const s = Math.max(0, Math.floor((Date.now() - focus.startedAt) / 1000));
+  const s = Math.max(0, Math.floor(focusElapsed() / 1000));
   return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
@@ -658,6 +677,7 @@ store.onComplete = (t, key) => {
 
 function startFocus(minutes, picked, work = null) {
   Object.assign(focus, { running: true, id: M.uuid(), startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000, minutes, picked, finished: [], bonusTicks: [], bonusCredited: [],
+    pausedAt: null, pausedMs: 0, pauses: [],
     awayMs: 0, awaySince: document.hasFocus() ? null : Date.now(), mode: work ? 'work' : 'sprint', workId: work?.id ?? null, title: work?.task.title ?? null });
   ui.focusResult = null;
   saveFocus(); render(); focusTick();
@@ -673,7 +693,7 @@ function startWork(o) {
 }
 function completeWork() {
   if (!isWorking()) return;
-  const o = findOcc(focus.workId), minutes = Math.max(1, Math.round((Date.now() - focus.startedAt) / 60_000));
+  const o = findOcc(focus.workId), minutes = Math.max(1, Math.round(focusElapsed() / 60_000));
   focus.finished = [focus.workId];
   endFocus({ quiet: true });
   if (o) reflectQueue([o], minutes);
@@ -682,7 +702,8 @@ function completeWork() {
 /** `quiet`: you ended it yourself, so no "Time!" alert. */
 function endFocus({ quiet = false } = {}) {
   if (!focus.running) return;
-  const end = Math.min(Date.now(), focus.endsAt), elapsed = Math.max(1, end - focus.startedAt);
+  // Ended while paused: it ended when the break began. Pauses aren't part of the time.
+  const end = Math.min(focusNow(), focus.endsAt), elapsed = Math.max(1, end - focus.startedAt - (focus.pausedMs || 0));
   const away = Math.min(elapsed, awayNow());
   const focusPercent = Math.round(100 * (elapsed - away) / elapsed);
   const finished = focus.finished.length, picked = focus.picked.length;
@@ -697,8 +718,9 @@ function endFocus({ quiet = false } = {}) {
       bonus: extras.length + focus.finished.filter(isB).length }),
     ...(extras.length ? { bonus: extras.length, bonusIds: extras, bonusTitles: extras.map(id => findOcc(id)?.task.title).filter(Boolean) } : {}),
     ...(focus.mode === 'work' ? { mode: 'work', title: focus.title, occurrenceID: focus.workId } : {}),
+    ...(focus.pauses?.length ? { pauses: focus.pauses, pausedSeconds: Math.round((focus.pausedMs || 0) / 1000) } : {}),
   }, { skip: focus.mode === 'work' && elapsed < 60_000 && !finished && !extras.length });
-  Object.assign(focus, { running: false, bonusTicks: [], bonusCredited: [] });
+  Object.assign(focus, { running: false, bonusTicks: [], bonusCredited: [], pausedAt: null, pausedMs: 0, pauses: [] });
   saveFocus();
   ui.focusResult = session;
   if (quiet) { render(); return; }
@@ -714,13 +736,22 @@ function focusTick() {
   if (!focus.running) return;
   focusTimer = setInterval(() => {
     if (!focus.running) { clearInterval(focusTimer); return; }
+    if (focus.pausedAt) {
+      // On a break: only the break's own clock moves, plus a reminder every 10 minutes.
+      for (const el of document.querySelectorAll('[data-pause-clock]')) el.textContent = pauseClock();
+      if (Date.now() - (focus.pauseNudgedAt || focus.pausedAt) >= 10 * 60_000) {
+        focus.pauseNudgedAt = Date.now(); saveFocus();
+        reminders.deliver({ kind: 'nudge', title: 'Still on a break?', body: `Paused for ${Math.round((Date.now() - focus.pausedAt) / 60_000)} min. Resume when you’re back.`, tint: '#82a8ef' }, ['banner']);
+      }
+      return;
+    }
     if (focusLeft() <= 0) { clearInterval(focusTimer); endFocus(); return; }
     // Update just the clock pieces, not the whole page.
     if (isWorking()) {
       const t = workClock();
       for (const el of document.querySelectorAll('[data-focus-clock]')) el.textContent = t;
       for (const el of document.querySelectorAll('[data-focus-away]')) el.textContent = M.fmtDuration(awayNow() / 1000);
-      for (const el of document.querySelectorAll('[data-work-bar]')) el.style.width = `${Math.min(100, (Date.now() - focus.startedAt) / (Number(el.dataset.target) * 600))}%`;
+      for (const el of document.querySelectorAll('[data-work-bar]')) el.style.width = `${Math.min(100, focusElapsed() / (Number(el.dataset.target) * 600))}%`;
       const badge = document.querySelector('.nav-item[href="/app/focus"] .badge');
       if (badge) badge.textContent = t;
       return;
@@ -735,7 +766,7 @@ function focusTick() {
   }, 1000);
 }
 // Time in another tab or app counts as time away.
-window.addEventListener('blur', () => { if (focus.running && !focus.awaySince) { focus.awaySince = Date.now(); saveFocus(); } });
+window.addEventListener('blur', () => { if (focus.running && !focus.pausedAt && !focus.awaySince) { focus.awaySince = Date.now(); saveFocus(); } });
 window.addEventListener('focus', () => {
   if (focus.running && focus.awaySince) { focus.awayMs = (focus.awayMs || 0) + Date.now() - focus.awaySince; focus.awaySince = null; saveFocus(); }
 });
@@ -757,7 +788,9 @@ function focusView() {
     body = `<div class="focus-run">
       <div class="focus-clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" class="track"/>
         <circle cx="100" cy="100" r="90" class="bar" data-focus-ring style="stroke-dasharray:${2 * Math.PI * 90};stroke-dashoffset:${2 * Math.PI * 90 * (1 - left / (focus.minutes * 60_000))}"/></svg>
-        <div class="fc-inner"><div class="fc-time" data-focus-clock>${fmtClock(left)}</div><div class="small muted">${focus.finished.length} of ${occs.length} done</div>
+        <div class="fc-inner"><div class="fc-time ${focus.pausedAt ? 'paused' : ''}" data-focus-clock>${fmtClock(left)}</div>
+          ${focus.pausedAt ? `<div class="small paused-tag">${ic('pause')} Paused <span data-pause-clock>${pauseClock()}</span></div>` : ''}
+          <div class="small muted">${focus.finished.length} of ${occs.length} done</div>
           ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length ? `<div class="small bonus-pts">${ic('star-fill')} ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length} bonus</div>` : ''}
           <div class="tiny muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div></div>
       <div class="grow stack" style="gap:10px;min-width:0">
@@ -766,8 +799,9 @@ function focusView() {
           <button class="checkbtn" data-act="focus-done" data-occ="${esc(o.id)}" style="${on ? `color:${color(o.task.color)}` : ''}">${ic(on ? 'checked' : 'circle')}</button>
           <div class="grow"><div class="title ellipsis">${esc(o.task.title)}</div><div class="meta"><span>${M.isHabit(o.task) ? 'Habit' : 'Task'}</span></div></div></div>`; }).join('')}</div>` : ''}
         ${bonusCard()}
-        <div class="row"><button class="btn" data-act="focus-more">${ic('plus')} 5 minutes</button><span class="grow"></span>
+        <div class="row">${pauseBtn()}<button class="btn" data-act="focus-more">${ic('plus')} 5 minutes</button><span class="grow"></span>
           <button class="btn danger" data-act="focus-end">End now</button></div>
+        ${focus.pausedAt ? '<div class="small muted">On a break: the clock is stopped and time in other tabs doesn’t count as away until you resume.</div>' : ''}
       </div></div>`;
   } else {
     const open = store.todayChecklist().filter(o => !o.resolved);
@@ -840,6 +874,9 @@ function workSetup(open, bonus = []) {
         <span class="go">${ic('play')} Work on this</span></button>`).join('')}</div>` : ''}</div>`;
 }
 
+/** Pause / Resume for a running session (sprint or work). */
+const pauseBtn = () => `<button class="btn ${focus.pausedAt ? 'primary' : ''}" data-act="focus-pause" title="${focus.pausedAt ? 'Back to it' : 'Take a break: the clock stops and nothing counts until you resume'}">${ic(focus.pausedAt ? 'play' : 'pause')} ${focus.pausedAt ? 'Resume' : 'Pause'}</button>`;
+
 /** While a sprint runs: the bonus tasks, to tick off each time you do one (up to its limit). */
 function bonusCard() {
   const list = store.bonusTasks().filter(o => !o.done || bonusDone(o.task.id));
@@ -864,7 +901,7 @@ function workingView() {
   const others = store.todayChecklist().filter(x => !x.resolved && !x.event && x.id !== focus.workId);
   const otherBonus = store.openBonusTasks().filter(x => x.task.id !== o?.task.id);
   const credited = (focus.bonusCredited || []).length;
-  const elapsedMin = (Date.now() - focus.startedAt) / 60_000;
+  const elapsedMin = focusElapsed() / 60_000;
   return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Working on one thing until it’s done.</div></div></div>
     <div class="page stack" style="max-width:980px">
       <div class="work-head" style="border-left-color:${color(t.color)}">
@@ -874,12 +911,15 @@ function workingView() {
         ${t.notes ? `<div class="muted notes">${esc(t.notes)}</div>` : ''}
         ${o && M.habitSteps(t).length ? stepList(o, 'work') : ''}
         <div class="row" style="gap:28px;align-items:center;flex-wrap:wrap">
-          <div><div class="work-clock" data-focus-clock>${workClock()}</div><div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div>
+          <div><div class="work-clock ${focus.pausedAt ? 'paused' : ''}" data-focus-clock>${workClock()}</div>${focus.pausedAt
+            ? `<div class="small paused-tag">${ic('pause')} Paused · on a break for <span data-pause-clock>${pauseClock()}</span></div>`
+            : `<div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div>`}</div>
           ${target ? `<div class="grow" style="max-width:320px"><div class="progress"><div data-work-bar data-target="${target}" style="width:${Math.min(100, (elapsedMin / target) * 100)}%"></div></div>
             <div class="small muted" style="margin-top:4px">${elapsedMin > target ? `Past the ${M.fmtMinutes(target)} it usually takes` : `It usually takes ${M.fmtMinutes(target)}`}</div></div>` : ''}
         </div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <button class="btn primary" data-act="work-complete" title="Check it off: you’ll write the reflection, with the time already filled in">${ic('check')} Complete</button>
+          ${pauseBtn()}
           ${others.length || otherBonus.length ? `<select class="input" style="width:auto" data-work-switch aria-label="Switch task"><option value="">Switch task…</option>${others.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}
             ${otherBonus.length ? `<optgroup label="Bonus">${otherBonus.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}</optgroup>` : ''}</select>` : ''}
           <span class="grow"></span>
@@ -1013,8 +1053,11 @@ function weekShowsFocus() {
 const fmtHM = m => (m < 60 ? `${m}m` : m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m / 60}h`);
 function focusMarks(d) {
   const blocks = store.focusBlocks(d);
-  if (M.isToday(d) && focus.running && focus.startedAt < Date.now() - 60_000) {
-    blocks.push({ id: 'live', start: new Date(focus.startedAt), end: new Date(), kind: isWorking() ? 'work' : 'focus', title: `${isWorking() ? focus.title : 'Focus sprint'} (now)` });
+  if (M.isToday(d) && focus.running) {
+    // Pauses are gaps, like on finished sessions.
+    for (const [a, b] of M.focusSegments(focus.startedAt, focusNow(), focus.pauses)) {
+      if (b - a >= 60_000) blocks.push({ id: `live-${a}`, start: new Date(a), end: new Date(b), kind: isWorking() ? 'work' : 'focus', title: `${isWorking() ? focus.title : 'Focus sprint'} (${focus.pausedAt ? 'paused' : 'now'})` });
+    }
   }
   const day0 = M.startOfDay(d);
   return blocks.map(b => {
@@ -3774,6 +3817,7 @@ const actions = {
   'bonus-untick': el => { const a = [...(focus.bonusTicks || [])], i = a.lastIndexOf(el.dataset.task); if (i >= 0) { a.splice(i, 1); focus.bonusTicks = a; saveFocus(); render(); } },
   'work-complete': () => completeWork(),
   'work-stop': () => endFocus({ quiet: true }),
+  'focus-pause': () => togglePause(),
   'week-focus': () => { ui.weekFocus = !weekShowsFocus(); try { localStorage.setItem('cadence:weekFocus', ui.weekFocus ? '1' : '0'); } catch { /* storage blocked */ } render(); },
   'score-rate': el => store.updateSettings({ habitScorecard: store.settings.habitScorecard.map(c => c.id === el.dataset.id ? { ...c, rating: el.dataset.r } : c) }),
   'score-del': el => store.updateSettings({ habitScorecard: store.settings.habitScorecard.filter(c => c.id !== el.dataset.id) }),

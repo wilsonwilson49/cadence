@@ -26,9 +26,12 @@ extension Store {
         // A finished study session is also saved as a focus session (same id, for points): count it once, as study.
         let studyIDs = Set(studyLogs.map(\.id))
         for f in focusSessions where !studyIDs.contains(f.id) && f.finishedTitles.first?.hasPrefix("Study: ") != true {
-            guard let (a, b) = clip(f.startedAt, f.endedAt) else { continue }
             let title = f.isWork ? (f.title ?? "Work") : f.finished > 0 ? "\(f.finished) of \(f.picked) done" : "Focus sprint"
-            out.append(FocusBlock(id: "f-\(f.id)", start: a, end: b, kind: f.isWork ? .work : .focus, title: title))
+            // Pauses are gaps: one block per stretch of actual focus.
+            for (i, seg) in f.segments.enumerated() {
+                guard let (a, b) = clip(seg.start, seg.end) else { continue }
+                out.append(FocusBlock(id: i == 0 ? "f-\(f.id)" : "f-\(f.id)-\(i)", start: a, end: b, kind: f.isWork ? .work : .focus, title: title))
+            }
         }
         for l in studyLogs {
             guard let (a, b) = clip(l.startedAt, l.endedAt) else { continue }

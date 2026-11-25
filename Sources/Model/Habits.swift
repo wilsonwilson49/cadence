@@ -175,6 +175,9 @@ struct FocusSession: Codable, Identifiable, Hashable {
     var bonusTitles: [String]?
     var bonusIds: [String]?
     var bonusCount: Int { bonus ?? 0 }
+    /// Breaks taken with Pause (not counted in actualMinutes, and gaps on the calendar). nil = none.
+    var pausedSeconds: Int?
+    var pauses: [FocusPause]?
 
     init(id: UUID = UUID(), startedAt: Date, endedAt: Date, plannedMinutes: Int, actualMinutes: Int, picked: Int, finished: Int,
          points: Int) {
@@ -193,6 +196,28 @@ struct FocusSession: Codable, Identifiable, Hashable {
         updatedAt = c.value(.updatedAt, nil)
         mode = c.value(.mode, nil); title = c.value(.title, nil); occurrenceID = c.value(.occurrenceID, nil)
         bonus = c.value(.bonus, nil); bonusTitles = c.value(.bonusTitles, nil); bonusIds = c.value(.bonusIds, nil)
+        pausedSeconds = c.value(.pausedSeconds, nil); pauses = c.value(.pauses, nil)
+    }
+
+    /// The stretches actually spent focusing: start to end, minus the pauses.
+    var segments: [(start: Date, end: Date)] { FocusPause.segments(from: startedAt, to: endedAt, pauses: pauses ?? []) }
+}
+
+/// One break in a focus session (Pause … Resume). Same JSON as the web: { start, end }.
+struct FocusPause: Codable, Hashable {
+    var start: Date
+    var end: Date
+
+    /// `from`–`to` with the pauses cut out.
+    static func segments(from: Date, to: Date, pauses: [FocusPause]) -> [(start: Date, end: Date)] {
+        var out: [(start: Date, end: Date)] = []
+        var s = from
+        for p in pauses.sorted(by: { $0.start < $1.start }) where p.end > s && p.start < to {
+            if p.start > s { out.append((s, p.start)) }
+            s = max(s, p.end)
+        }
+        if to > s { out.append((s, to)) }
+        return out
     }
 }
 

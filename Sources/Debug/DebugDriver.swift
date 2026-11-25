@@ -78,6 +78,8 @@ enum DebugDriver {
                     model.store.studyLogs.append(log)
                 }
                 if let o = model.store.todayChecklist().first(where: { !$0.isResolved && !$0.isEvent }) { model.workOn(o) }
+                // -pauseDemo: pauses it a few seconds in (for screenshots of the paused state).
+                if LaunchOptions.has("-pauseDemo") { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { model.focus.pause() } }
             }
         }
         // -bonusDemo [edit|sprint|work]: adds bonus tasks (once; every day up to twice, done once today; back two weeks

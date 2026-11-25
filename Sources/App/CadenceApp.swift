@@ -96,7 +96,10 @@ private struct MenuBarLabel: View {
     @ObservedObject var focus: FocusEngine
     @ObservedObject var study: StudyEngine
     var body: some View {
-        if focus.isWorking, let o = focus.workOccurrence {
+        if focus.isPaused {
+            Image(systemName: "pause.circle")
+            Text("Paused \(focus.pauseClock)").monospacedDigit()
+        } else if focus.isWorking, let o = focus.workOccurrence {
             // Work mode: what you're on, right in the menu bar.
             Image(systemName: "scope")
             Text("\(o.task.title.count > 24 ? String(o.task.title.prefix(23)) + "…" : o.task.title) \(focus.clock)").monospacedDigit()

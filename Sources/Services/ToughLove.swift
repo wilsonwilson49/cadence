@@ -70,9 +70,9 @@ final class NagEngine: ObservableObject {
         let s = model.store.settings
         if let st = strictItem ?? model.store.nagging().first(where: { $0.task.nagLevel == .strict }) {
             blocker.reason = "until you finish “\(st.task.title)”"
-        } else if model.focus.isWorking, model.focus.workBlocks, let o = model.focus.workOccurrence {
+        } else if model.focus.isWorking, model.focus.workBlocks, !model.focus.isPaused, let o = model.focus.workOccurrence {
             blocker.reason = "while you work on “\(o.task.title)”"
-        } else if s.blockDuringFocus && model.focus.running {
+        } else if s.blockDuringFocus && model.focus.running && !model.focus.isPaused {
             blocker.reason = "during your focus session"
         } else if s.blockDuringFocus, let r = model.study.run, !r.paused {
             blocker.reason = "during your study session"

@@ -682,17 +682,31 @@ export function focusBlocks(sessions, studyLogs, day) {
   const studyIds = new Set(studyLogs.map(l => l.id)), out = [];
   for (const f of sessions) {
     if (studyIds.has(f.id) || String(f.finishedTitles?.[0] || '').startsWith('Study: ')) continue;
-    const c = clip(f.startedAt, f.endedAt);
-    if (!c) continue;
-    const work = f.mode === 'work';
-    out.push({ id: `f-${f.id}`, start: new Date(c[0]), end: new Date(c[1]), kind: work ? 'work' : 'focus',
-      title: work ? f.title || 'Work' : f.finished ? `${f.finished} of ${f.picked} done` : 'Focus sprint' });
+    const work = f.mode === 'work', title = work ? f.title || 'Work' : f.finished ? `${f.finished} of ${f.picked} done` : 'Focus sprint';
+    // Pauses are gaps: one block per stretch of actual focus.
+    focusSegments(f.startedAt, f.endedAt, f.pauses).forEach(([a, b], i) => {
+      const c = clip(a, b);
+      if (c) out.push({ id: i ? `f-${f.id}-${i}` : `f-${f.id}`, start: new Date(c[0]), end: new Date(c[1]), kind: work ? 'work' : 'focus', title });
+    });
   }
   for (const l of studyLogs) {
     const c = clip(l.startedAt, l.endedAt);
     if (c) out.push({ id: `s-${l.id}`, start: new Date(c[0]), end: new Date(c[1]), kind: 'study', title: l.title || 'Study' });
   }
   return out.sort((a, b) => a.start - b.start);
+}
+/** `from`–`to` (ms or dates) with the pauses ([{ start, end }]) cut out: [[startMs, endMs], …]. Same as FocusPause.segments. */
+export function focusSegments(from, to, pauses = []) {
+  const out = [], end = +new Date(to);
+  let s = +new Date(from);
+  for (const p of [...(pauses || [])].sort((a, b) => new Date(a.start) - new Date(b.start))) {
+    const ps = +new Date(p.start), pe = +new Date(p.end);
+    if (pe <= s || ps >= end) continue;
+    if (ps > s) out.push([s, ps]);
+    s = Math.max(s, pe);
+  }
+  if (end > s) out.push([s, end]);
+  return out;
 }
 export const blockMinutes = b => Math.max(1, Math.round((b.end - b.start) / 60_000));
 export const FOCUS_KINDS = { work: 'Work', focus: 'Focus sprint', study: 'Study' };

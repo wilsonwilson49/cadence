@@ -74,7 +74,11 @@ struct FocusView: View {
                 Circle().trim(from: 0, to: frac).stroke(final ? Color.orange : Theme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90)).animation(.linear(duration: 1), value: frac)
                 VStack(spacing: 2) {
-                    Text(focus.clock).font(.system(size: 44, weight: .bold).monospacedDigit()).foregroundStyle(final ? Color.orange : .primary)
+                    Text(focus.clock).font(.system(size: 44, weight: .bold).monospacedDigit())
+                        .foregroundStyle(focus.isPaused ? Color.secondary : final ? Color.orange : .primary)
+                    if focus.isPaused {
+                        Label("Paused \(focus.pauseClock)", systemImage: "pause.fill").font(.app(.caption).weight(.semibold)).foregroundStyle(.orange)
+                    }
                     Text("\(focus.finished.count) of \(occs.count) done").font(.app(.caption)).foregroundStyle(.secondary)
                     let extra = focus.bonusTicks.count + focus.bonusCredited.count
                     if extra > 0 { Label("\(extra) bonus", systemImage: "star.fill").font(.app(.caption)).foregroundStyle(.yellow) }
@@ -105,15 +109,31 @@ struct FocusView: View {
                 }
                 bonusCard
                 HStack {
+                    pauseButton
                     Button { focus.addFiveMinutes() } label: { Label("5 minutes", systemImage: "plus") }
                     Spacer()
                     Button("End now", role: .destructive) { focus.end() }
+                }
+                if focus.isPaused {
+                    Text("On a break: the clock is stopped, nothing counts as distracted, and blocking is lifted until you resume.")
+                        .font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
         }
     }
 
     private var openItems: [Occurrence] { store.todayChecklist().filter { !$0.isResolved } }
+
+    /// Pause / Resume (⇧⌘P): a break that doesn't count, for sprints and work.
+    private var pauseButton: some View {
+        Button { focus.togglePause() } label: {
+            Label(focus.isPaused ? "Resume" : "Pause", systemImage: focus.isPaused ? "play.fill" : "pause.fill")
+        }
+        .keyboardShortcut("p", modifiers: [.command, .shift])
+        .tint(focus.isPaused ? .green : nil)
+        .buttonStyle(.bordered)
+        .help(focus.isPaused ? "Back to it (⇧⌘P)" : "Take a break (⇧⌘P): the clock stops and nothing counts until you resume")
+    }
 
     // MARK: Bonus tasks
 
@@ -226,9 +246,15 @@ struct FocusView: View {
                 HStack(alignment: .center, spacing: 28) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(focus.clock).font(.system(size: 54, weight: .bold).monospacedDigit())
-                        Text("\(focus.focusPercent)% focused" + (focus.distractingSeconds + focus.awaySeconds > 0
-                             ? " · \(durationString(seconds: focus.distractingSeconds + focus.awaySeconds)) away or distracted" : ""))
-                            .font(.app(.caption)).foregroundStyle(.secondary)
+                            .foregroundStyle(focus.isPaused ? Color.secondary : .primary)
+                        if focus.isPaused {
+                            Label("Paused · on a break for \(focus.pauseClock)", systemImage: "pause.fill")
+                                .font(.app(.callout).weight(.semibold)).foregroundStyle(.orange)
+                        } else {
+                            Text("\(focus.focusPercent)% focused" + (focus.distractingSeconds + focus.awaySeconds > 0
+                                 ? " · \(durationString(seconds: focus.distractingSeconds + focus.awaySeconds)) away or distracted" : ""))
+                                .font(.app(.caption)).foregroundStyle(.secondary)
+                        }
                     }
                     if let target {
                         VStack(alignment: .leading, spacing: 4) {
@@ -243,6 +269,7 @@ struct FocusView: View {
                 }
 
                 Label(model.nag.blocker.isOn ? "Distracting apps and websites are blocked \(model.nag.blocker.reason ?? "")."
+                      : focus.isPaused ? "Blocking is lifted while you're paused."
                       : focus.workBlocks ? "Add distracting apps and websites in Settings › Tough love to have them blocked."
                       : "Blocking is off for this session.",
                       systemImage: model.nag.blocker.isOn ? "lock.fill" : "lock.open")
@@ -253,6 +280,7 @@ struct FocusView: View {
                         .buttonStyle(.borderedProminent).controlSize(.large).tint(.green)
                         .keyboardShortcut(.return, modifiers: .command)
                         .help("Check it off (⌘↩): you'll write the reflection, with the time already filled in")
+                    pauseButton.controlSize(.large)
                     let others = workChoices.filter { $0.id != o.id }
                     let otherBonus = store.openBonusTasks().filter { $0.task.id != t.id }
                     Menu {
