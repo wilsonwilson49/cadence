@@ -27,17 +27,31 @@ extension PlanTask {
     /// Every recorded time, shortest first.
     var takenTimes: [Int] { (timeTaken ?? [:]).values.filter { $0 > 0 }.sorted() }
 
-    /// The length 60% of your recorded times came in under: a realistic "how long this takes" that one bad day
-    /// doesn't throw off. nil until it has been timed once.
-    var typicalMinutes: Int? { TaskStats.percentile(takenTimes, 0.6) }
+    /// Every recorded time, latest first: by when it was checked off (or, without that, its day).
+    var takenHistory: [Int] {
+        let done = completions
+        return (timeTaken ?? [:]).filter { $0.value > 0 }
+            .map { (key: $0.key, minutes: $0.value, at: done[$0.key] ?? DateKey.date($0.key) ?? .distantPast) }
+            .sorted { $0.at != $1.at ? $0.at > $1.at : Self.bonusKeyOrder($1.key, $0.key) }
+            .map(\.minutes)
+    }
+
+    /// How long it takes: the average of your recorded times, weighted toward the latest like momentum (the
+    /// latest counts 1, the one before 0.95, then 0.95², …), so it follows you as you get faster or slower.
+    /// nil until it has been timed once.
+    var typicalMinutes: Int? { TaskStats.weightedAverage(takenHistory) }
 }
 
 enum TaskStats {
-    /// Nearest-rank percentile of sorted values.
-    static func percentile(_ sorted: [Int], _ p: Double) -> Int? {
-        guard !sorted.isEmpty else { return nil }
-        let rank = Int((p * Double(sorted.count)).rounded(.up))
-        return sorted[min(sorted.count, max(1, rank)) - 1]
+    /// How much each older time counts compared with the one after it.
+    static let decay = 0.95
+
+    /// Σ decayⁱ·xᵢ / Σ decayⁱ over values latest first (i = 0 for the latest), rounded to a whole minute.
+    static func weightedAverage(_ latestFirst: [Int], decay: Double = decay) -> Int? {
+        guard !latestFirst.isEmpty else { return nil }
+        var sum = 0.0, weights = 0.0, w = 1.0
+        for x in latestFirst { sum += w * Double(x); weights += w; w *= decay }
+        return Int((sum / weights).rounded())
     }
 
     /// "45", "45m", "1:30", "1h 30m", "1.5h", "90 min" → minutes. nil if it isn't a length.

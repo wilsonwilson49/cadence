@@ -208,18 +208,18 @@ const PRIO_LABEL = Object.fromEntries(M.PRIORITIES);
 const hardColor = n => (n <= 2 ? 'var(--green)' : n === 3 ? '#d6b43c' : n === 4 ? 'var(--orange)' : 'var(--red)');
 /** Five bars rising like a signal meter, filled up to the hardness. */
 const hardMeter = n => `<span class="hmeter" style="--hc:${hardColor(n)}" aria-label="Hardness ${n} of 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}" style="height:${40 + 15 * (i - 1)}%"></i>`).join('')}</span>`;
-/** "Usually about 40 min: 60% of the 7 times you timed took that long or less." */
+/** "Usually about 40 min: the average of the 7 times you timed, weighted toward the latest (1, 0.95, 0.90, …)." */
 function typicalText(t) {
   const times = M.takenTimes(t), p = M.typicalMinutes(t);
   if (!p) return '';
-  return times.length === 1 ? `It took ${M.fmtMinutes(p)} the one time you timed it.` : `Usually about ${M.fmtMinutes(p)}: 60% of the ${times.length} times you timed took that long or less.`;
+  return times.length === 1 ? `It took ${M.fmtMinutes(p)} the one time you timed it.` : `Usually about ${M.fmtMinutes(p)}: the average of the ${times.length} times you timed, weighted toward the latest (1, 0.95, 0.90, …).`;
 }
-/** Every recorded time as a tick from 0 to the longest; filled up to the 60% mark. */
-function timeSpread(times) {
-  const typ = M.percentile(times, 0.6), longest = times[times.length - 1], pct = n => Math.min(100, (n / Math.max(1, longest)) * 100);
-  return `<div class="spread" role="img" aria-label="60% of ${times.length} times took ${M.fmtMinutes(typ)} or less; the longest took ${M.fmtMinutes(longest)}">
+/** Every recorded time as a tick from 0 to the longest; filled up to the (weighted) average. */
+function timeSpread(t) {
+  const times = M.takenTimes(t), typ = M.typicalMinutes(t), longest = times[times.length - 1], pct = n => Math.min(100, (n / Math.max(1, longest)) * 100);
+  return `<div class="spread" role="img" aria-label="Weighted average of ${times.length} times: ${M.fmtMinutes(typ)}; the longest took ${M.fmtMinutes(longest)}">
     <div class="spread-track"><div class="spread-fill" style="width:${pct(typ)}%"></div>${times.map(n => `<i class="${n <= typ ? 'in' : ''}" style="left:${pct(n)}%"></i>`).join('')}<b style="left:${pct(typ)}%"></b></div>
-    <div class="spread-labels"><span>0</span><span><b>60% ≤ ${M.fmtMinutes(typ)}</b></span><span>longest ${M.fmtMinutes(longest)}</span></div></div>`;
+    <div class="spread-labels"><span>0</span><span><b>average ${M.fmtMinutes(typ)}</b></span><span>longest ${M.fmtMinutes(longest)}</span></div></div>`;
 }
 const takenChoices = t => [...new Set([15, 30, 45, 60, 90, ...(t.timeMinutes != null ? [t.durationMinutes] : []), ...(M.typicalMinutes(t) ? [M.typicalMinutes(t)] : [])])].sort((a, b) => a - b);
 /** "After another task": which one, how long after, and where it stands. */
@@ -248,7 +248,7 @@ function timeTakenFieldset(m) {
   const typ = M.typicalMinutes(d);
   return `<div class="fieldset"><div class="legend">Time it took</div>${!entries.length
     ? '<div class="small muted">Not timed yet. When you check it off, you can write down how long it took, and this shows how long it usually takes.</div>'
-    : `${timeSpread(M.takenTimes(d))}<div class="small muted">${esc(typicalText(d))}</div>
+    : `${timeSpread(d)}<div class="small muted">${esc(typicalText(d))}</div>
       ${typ !== d.durationMinutes ? `<div><button type="button" class="btn sm" data-act="edit-use-typical" title="Sets its length to how long it usually takes">Plan ${M.fmtMinutes(typ)} for it</button></div>` : ''}
       <table class="times">${entries.slice(0, m.allTimes ? entries.length : 6).map(([k, v]) => `<tr><td>${M.fmtDay(M.parseKey(k), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</td>
         <td class="num">${M.fmtMinutes(v)}</td><td><button type="button" class="btn sm ghost" data-act="edit-time-del" data-k="${k}" title="Remove this time" aria-label="Remove this time">${ic('x')}</button></td></tr>`).join('')}</table>

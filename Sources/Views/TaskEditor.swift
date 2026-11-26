@@ -621,7 +621,7 @@ struct TaskEditor: View {
         }
     }
 
-    /// How long it really took each time it was checked off, and how long it usually takes (the 60% mark).
+    /// How long it really took each time it was checked off, and how long it usually takes (a weighted average).
     @ViewBuilder private var timeTakenSection: some View {
         let entries = (task.timeTaken ?? [:]).sorted { $0.key > $1.key }
         Section {
@@ -629,7 +629,7 @@ struct TaskEditor: View {
                 Text("Not timed yet. When you check it off, you can write down how long it took, and this shows how long it usually takes.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
             } else {
-                TimeSpread(times: task.takenTimes).padding(.vertical, 2)
+                TimeSpread(task: task).padding(.vertical, 2)
                 if let line = TaskStatsText.typical(task) { Text(line).font(.app(.caption)).foregroundStyle(.secondary) }
                 if let typical = task.typicalMinutes, typical != task.durationMinutes {
                     Button("Plan \(TaskStats.format(typical)) for it") { task.durationMinutes = typical }

@@ -216,8 +216,17 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   const M2 = await import('../public/js/model.js');
   const parse = ['45', '45m', '1:30', '1h 30m', '1.5h', '90 min', '2 hours', '', 'soon', '0', '1:75'].map(M2.parseMinutes);
   check(JSON.stringify(parse) === JSON.stringify([45, 45, 90, 90, 90, 90, 120, null, null, null, null]), 'time taken: parsing lengths');
-  check(M2.percentile([10], 0.6) === 10 && M2.percentile([10, 20], 0.6) === 20 && M2.percentile([10, 20, 30, 40, 50], 0.6) === 30 && M2.percentile([], 0.6) === null, 'time taken: 60% mark');
-  check(M2.typicalMinutes({ timeTaken: { a: 50, b: 20, c: 30, d: 0, e: 40, f: 200 } }) === 40, 'time taken: typical ignores zeros, resists one long day');
+  check(M2.weightedAverage([10]) === 10 && M2.weightedAverage([20, 10]) === 15 && M2.weightedAverage([]) === null
+    && M2.weightedAverage([10, 100, 100]) === 68 && M2.weightedAverage([100, 100, 10]) === 72, 'time taken: weights 1, 0.95, 0.95², … from the latest');
+  // Latest by check-off time, then by day; zeros ignored.
+  const tt = { timeTaken: { '2026-11-01': 100, '2026-11-02': 100, '2026-11-03': 10, '2026-11-04': 0 } };
+  check(M2.takenHistory(tt).join() === '10,100,100' && M2.typicalMinutes(tt) === 68, 'time taken: latest day first, zeros ignored');
+  const late = { ...tt, completions: { '2026-11-01': '2026-11-20T10:00:00Z' } };   // checked off long after its day
+  check(M2.takenHistory(late).join() === '100,10,100', 'time taken: ordered by when it was checked off');
+  const same = { timeTaken: { '2026-11-03': 30, '2026-11-03#2': 60 } };
+  check(M2.takenHistory(same).join() === '60,30', 'time taken: a second check-off the same day is later');
+  const many = { timeTaken: Object.fromEntries(Array.from({ length: 40 }, (_, i) => [M2.dateKey(M2.addDays(new Date(2026, 0, 1), i)), i < 30 ? 60 : 30])) };
+  check(M2.typicalMinutes(many) === 46, 'time taken: follows a recent change (10 times at 30 after 30 at 60: 46, where the old 60% mark said 60)');
   check(M2.fmtMinutes(45) === '45 min' && M2.fmtMinutes(90) === '1 hr 30 min' && M2.fmtMinutes(120) === '2 hr', 'time taken: formatting');
   check(M2.priorityOf({ priority: 'high' }) === 'high' && M2.priorityOf({ priority: 'urgent' }) === null && M2.hardnessOf({ hardness: 9 }) === 5 && M2.hardnessOf({}) === null, 'priority and hardness: values');
   const occ = (title, priority, timeMinutes, createdAt) => ({ task: { title, priority, timeMinutes, createdAt } });

@@ -656,13 +656,25 @@ export const HARDNESS = ['Easy', 'Fairly easy', 'Medium', 'Hard', 'Very hard'];
 export const hardnessOf = t => { const n = Math.round(Number(t?.hardness)); return n >= 1 ? Math.min(5, n) : null; };
 /** Every recorded time (minutes), shortest first. */
 export const takenTimes = t => Object.values(t?.timeTaken || {}).map(Number).filter(n => n > 0).sort((a, b) => a - b);
-/** Nearest-rank percentile of sorted numbers. */
-export function percentile(sorted, p) {
-  if (!sorted.length) return null;
-  return sorted[Math.min(sorted.length, Math.max(1, Math.ceil(p * sorted.length))) - 1];
+/** Every recorded time, latest first: by when it was checked off (or, without that, its day). */
+export function takenHistory(t) {
+  const at = k => Date.parse(t.completions?.[k]) || +parseKey(k) || 0;
+  const n = k => Number(String(k).split('#')[1]) || 1;   // a bonus task's second check-off that day: "…#2"
+  return Object.entries(t?.timeTaken || {}).map(([k, v]) => [k, Number(v)]).filter(([, v]) => v > 0)
+    .sort(([a], [b]) => at(b) - at(a) || n(b) - n(a)).map(([, v]) => v);
 }
-/** The length 60% of your recorded times came in under; null until it has been timed once. */
-export const typicalMinutes = t => percentile(takenTimes(t), 0.6);
+/** How much each older time counts compared with the one after it. */
+export const TIME_DECAY = 0.95;
+/** Σ decayⁱ·xᵢ / Σ decayⁱ over values latest first (i = 0 for the latest), rounded to a whole minute. */
+export function weightedAverage(latestFirst, decay = TIME_DECAY) {
+  if (!latestFirst.length) return null;
+  let sum = 0, weights = 0, w = 1;
+  for (const x of latestFirst) { sum += w * x; weights += w; w *= decay; }
+  return Math.round(sum / weights);
+}
+/** How long it takes: the average of your recorded times, weighted toward the latest like momentum (the latest
+ * counts 1, the one before 0.95, then 0.95², …). null until it has been timed once. */
+export const typicalMinutes = t => weightedAverage(takenHistory(t));
 /** "45", "45m", "1:30", "1h 30m", "1.5h", "90 min" → minutes; null if it isn't a length. */
 export function parseMinutes(text) {
   const s = String(text ?? '').trim().toLowerCase();

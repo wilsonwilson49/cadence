@@ -52,21 +52,23 @@ struct HardnessPicker: View {
 }
 
 enum TaskStatsText {
-    /// "Usually about 40 min: 60% of the 7 times you timed took that long or less." / "It took 40 min the one time you timed it."
+    /// "Usually about 40 min: the average of the 7 times you timed, weighted toward the latest (1, 0.95, 0.90, …)."
+    /// / "It took 40 min the one time you timed it."
     static func typical(_ task: PlanTask) -> String? {
         let times = task.takenTimes
         guard let p = task.typicalMinutes else { return nil }
         if times.count == 1 { return "It took \(TaskStats.format(p)) the one time you timed it." }
-        return "Usually about \(TaskStats.format(p)): 60% of the \(times.count) times you timed took that long or less."
+        return "Usually about \(TaskStats.format(p)): the average of the \(times.count) times you timed, weighted toward the latest (1, 0.95, 0.90, …)."
     }
 }
 
-/// Every recorded time as a tick on a line from 0 to the longest, with the part up to the 60% mark filled in,
-/// so you can see how long it usually takes and how much it varies.
+/// Every recorded time as a tick on a line from 0 to the longest, filled up to the (weighted) average, so you can
+/// see how long it usually takes and how much it varies.
 struct TimeSpread: View {
-    let times: [Int]
+    let task: PlanTask
     var body: some View {
-        if let typical = TaskStats.percentile(times, 0.6), let longest = times.last {
+        let times = task.takenTimes
+        if let typical = task.typicalMinutes, let longest = times.last {
             let top = Double(max(longest, 1))
             VStack(alignment: .leading, spacing: 3) {
                 GeometryReader { g in
@@ -88,14 +90,14 @@ struct TimeSpread: View {
                 HStack {
                     Text("0")
                     Spacer()
-                    Text("60% ≤ \(TaskStats.format(typical))").fontWeight(.semibold)
+                    Text("average \(TaskStats.format(typical))").fontWeight(.semibold)
                     Spacer()
                     Text("longest \(TaskStats.format(longest))")
                 }
                 .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
             }
             .accessibilityElement()
-            .accessibilityLabel("60% of \(times.count) times took \(TaskStats.format(typical)) or less; the longest took \(TaskStats.format(longest))")
+            .accessibilityLabel("Weighted average of \(times.count) times: \(TaskStats.format(typical)); the longest took \(TaskStats.format(longest))")
         }
     }
 }
