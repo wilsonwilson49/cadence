@@ -113,6 +113,9 @@ final class ScreenTimeTracker: ObservableObject {
 
 /// Time-pressure focus sessions: pick what you'll get through, race the clock, score points.
 /// Time in a distracting app (or with the Mac locked) counts against your focus percentage.
+/// Leaving the computer pauses it: 5 minutes with no input, or the Mac going to sleep, and the session is paused
+/// from your last input; it picks up again when you're back (after more than an hour away it waits for you to
+/// resume). Not for tasks done away from the computer (`offComputer`): those keep running.
 @MainActor
 final class FocusEngine: ObservableObject {
     private unowned let model: AppModel
@@ -142,6 +145,32 @@ final class FocusEngine: ObservableObject {
     private var pauses: [FocusPause] = []
     private var lastPauseNudge = Date.distantPast
     var isPaused: Bool { running && pausedAt != nil }
+    /// Why the current pause began: nil = you paused it; "away" (no input for 5 minutes) or "sleep" (the Mac slept).
+    @Published private(set) var pauseReason: String?
+    /// An automatic pause that ends by itself when you're back (cleared after more than an hour away).
+    private var autoResume = false
+    /// Seconds counted as away since your last input: an automatic pause starts back then, so they come off again.
+    private var awaySinceInput = 0
+    private var lastTickAt = Date()
+    private var sleepObservers: [NSObjectProtocol] = []
+    /// Between "going to sleep" and waking up: the app can still run a few seconds before the Mac sleeps, and
+    /// that isn't you coming back.
+    private var sleeping = false
+    /// When it last picked up again by itself: a Pause click right after was meant for the Resume button it replaced.
+    private var autoResumedAt = Date.distantPast
+    /// No input for this long (seconds) and the session pauses itself, from your last input. (-awayAfter <s> for tests.)
+    static let awayAfter: Double = LaunchOptions.value("-awayAfter").flatMap(Double.init) ?? 300
+    /// Away longer than this and it stays paused when you're back, for you to resume or end.
+    static let autoResumeLimit: Double = LaunchOptions.value("-autoResumeLimit").flatMap(Double.init) ?? 3600
+    /// Seconds since the last input (a scripted test run stands in its own).
+    static var idleOverride: (() -> Double)?
+    private static var idle: Double { idleOverride?() ?? ScreenTimeTracker.idleSeconds }
+    var isAutoPaused: Bool { isPaused && pauseReason != nil }
+    /// Paused time so far in this session (finished breaks).
+    var totalPausedSeconds: Int { pausedSeconds }
+    /// Off the computer: a task in it is marked so. Leaving or sleeping doesn't pause it, and a locked screen or
+    /// sleeping display isn't time away.
+    var isOffComputer: Bool { picked.contains { occurrence($0)?.task.offComputer == true } }
     /// How long the current break has lasted.
     var pauseSeconds: Int { pausedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0 }
     /// The stretches of this session spent focusing so far (for the calendar).
@@ -167,19 +196,43 @@ final class FocusEngine: ObservableObject {
         return Int((100 * Double(e - min(e, awaySeconds + distractingSeconds)) / Double(e)).rounded())
     }
 
-    init(model: AppModel) { self.model = model }
+    init(model: AppModel) {
+        self.model = model
+        let nc = NSWorkspace.shared.notificationCenter
+        sleepObservers = [
+            nc.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.willSleep() }
+            },
+            nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sleeping = false }
+            },
+        ]
+    }
 
     var secondsLeft: Int { max(0, Int(endsAt.timeIntervalSince(pausedAt ?? now).rounded(.up))) }
-    var pauseClock: String { String(format: "%d:%02d", pauseSeconds / 60, pauseSeconds % 60) }
+    var pauseClock: String {
+        let s = pauseSeconds
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
+    }
     /// Work mode: the points the time so far is worth (2 per 5 minutes, times the multiplier), before completing it.
     var timePointsSoFar: Int { Focus.studyPoints(minutes: elapsedSeconds / 60, focusPercent: focusPercent) }
 
     // MARK: Pause
 
-    func pause() {
+    func pause() { pause(at: Date(), reason: nil) }
+
+    /// `at` can be in the past (an automatic pause starts at your last input), but not before the session started
+    /// or the last break ended.
+    private func pause(at time: Date, reason: String?) {
         guard running, pausedAt == nil else { return }
-        let t = Date()
-        pausedAt = t; now = t; distractingStreak = 0; lastPauseNudge = t
+        let t = Date(), from = max(pauses.last?.end ?? startedAt, min(time, t))
+        if reason != nil {
+            // The seconds counted as away since then are part of the pause now.
+            awaySeconds -= min(awaySeconds, awaySinceInput)
+        }
+        awaySinceInput = 0
+        pausedAt = from; now = t; distractingStreak = 0; lastPauseNudge = t
+        pauseReason = reason; autoResume = reason != nil
     }
 
     /// Back to it: the break is left out of the time, and a sprint gets its paused minutes back.
@@ -188,11 +241,41 @@ final class FocusEngine: ObservableObject {
         let t = Date(), d = t.timeIntervalSince(p)
         pausedSeconds += Int(d.rounded())
         endsAt = endsAt.addingTimeInterval(d)
-        if d >= 1 { pauses.append(FocusPause(start: p, end: t)) }
-        pausedAt = nil; now = t
+        if d >= 1 { pauses.append(FocusPause(start: p, end: t, reason: pauseReason)) }
+        pausedAt = nil; now = t; pauseReason = nil; autoResume = false; awaySinceInput = 0
     }
 
-    func togglePause() { if isPaused { resume() } else { pause() } }
+    /// The Mac is going to sleep: paused from your last input (moments ago if you closed the lid).
+    private func willSleep() {
+        sleeping = true
+        guard running, pausedAt == nil, !isOffComputer else { return }
+        pause(at: Date().addingTimeInterval(-min(Self.idle, Self.awayAfter)), reason: "sleep")
+    }
+
+    /// While paused by itself: back at the computer (input, unlocked, display on) picks it up again, unless you were
+    /// gone more than an hour; then it waits for you.
+    private func checkBack() {
+        let engine = model.engine
+        guard autoResume, !sleeping, let p = pausedAt, Self.idle < 2, !engine.screenLocked, !engine.displayAsleep else { return }
+        let away = Int(now.timeIntervalSince(p))
+        let gone = away < 60 ? "less than a minute" : durationString(seconds: away)
+        let what = mode == .work ? "“\(workOccurrence?.task.title ?? "your task")”" : "your focus sprint"
+        if Double(away) <= Self.autoResumeLimit {
+            resume(); autoResumedAt = now
+            model.notifier.deliver(AlertContent(kind: .nudge, title: "Welcome back: \(what) is running again",
+                body: "Paused for \(gone) while you were away. That time doesn't count.",
+                symbol: "play.circle", tint: .pink), channels: [.banner])
+        } else {
+            autoResume = false; lastPauseNudge = now
+            model.notifier.deliver(AlertContent(kind: .nudge, title: "Still on \(what)?",
+                body: "It paused while you were away (\(gone)). Resume it, or end it.",
+                symbol: "pause.circle", tint: .pink), channels: [.banner])
+        }
+    }
+
+    func togglePause() {
+        if isPaused { resume() } else if Date().timeIntervalSince(autoResumedAt) > 3 { pause() }
+    }
     var clock: String {
         if mode == .work {
             let s = elapsedSeconds
@@ -225,8 +308,9 @@ final class FocusEngine: ObservableObject {
         if mode == .sprint { workID = nil }
         self.minutes = minutes; self.picked = picked; finished = []
         bonusTicks = []; bonusCredited = []
-        pausedAt = nil; pausedSeconds = 0; pauses = []
+        pausedAt = nil; pausedSeconds = 0; pauses = []; pauseReason = nil; autoResume = false; awaySinceInput = 0
         awaySeconds = 0; distractingSeconds = 0; distractingStreak = 0
+        lastTickAt = Date()
         startedAt = Date(); endsAt = startedAt.addingTimeInterval(Double(minutes * 60)); now = startedAt
         sessionID = UUID(); result = nil; running = true
         timer?.invalidate()
@@ -285,7 +369,12 @@ final class FocusEngine: ObservableObject {
 
     private func tick() {
         now = Date()
+        let previous = lastTickAt
+        lastTickAt = now
+        // The timer doesn't run while the Mac sleeps: a long gap is a sleep we didn't hear about.
+        if pausedAt == nil, !isOffComputer, now.timeIntervalSince(previous) > 60 { pause(at: previous, reason: "sleep") }
         if let p = pausedAt {
+            if autoResume { checkBack(); return }
             // On a break: nothing counts. A reminder every 10 minutes, in case it's turned into something else.
             if now.timeIntervalSince(lastPauseNudge) >= 600 {
                 lastPauseNudge = now
@@ -298,7 +387,18 @@ final class FocusEngine: ObservableObject {
         }
         if now >= endsAt { end(); return }
         let engine = model.engine
-        if engine.screenLocked || engine.displayAsleep { awaySeconds += 1; return }
+        let away = engine.screenLocked || engine.displayAsleep
+        if !isOffComputer {
+            // Left the computer: 5 minutes with no input pauses it, from the last input.
+            let idle = Self.idle
+            if idle < 2 && !away { awaySinceInput = 0 }
+            if idle >= Self.awayAfter { pause(at: now.addingTimeInterval(-idle), reason: "away"); return }
+        }
+        if away {
+            // Off the computer, a locked screen is just where it's meant to be.
+            if !isOffComputer { awaySeconds += 1; awaySinceInput += 1 }
+            return
+        }
         let app = NSWorkspace.shared.frontmostApplication?.localizedName
         if model.screenTime.isDistracting(app) {
             distractingSeconds += 1; distractingStreak += 1
@@ -347,7 +447,7 @@ final class FocusEngine: ObservableObject {
         bonusTicks = []; bonusCredited = []
         s.awaySeconds = awaySeconds; s.distractingSeconds = distractingSeconds; s.focusPercent = percent
         if !pauses.isEmpty { s.pauses = pauses; s.pausedSeconds = pausedSeconds }
-        pausedAt = nil
+        pausedAt = nil; pauseReason = nil; autoResume = false
         if mode == .work {
             s.mode = "work"; s.occurrenceID = workID; s.title = workOccurrence?.task.title
             workID = nil

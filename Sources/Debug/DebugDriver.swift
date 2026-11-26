@@ -15,6 +15,52 @@ import SwiftUI
 /// The app writes "<title> <windowNumber>" lines to <dataDir>/windows.txt for `screencapture -l`.
 @MainActor
 enum DebugDriver {
+    private static func awayTest(_ model: AppModel) {
+        var lastInput = Date()
+        FocusEngine.idleOverride = { Date().timeIntervalSince(lastInput) }
+        let f = model.focus
+        let t0 = Date()
+        func log(_ what: String) {
+            let p = f.pausedAt.map { String(format: "%.1f", $0.timeIntervalSince(t0)) } ?? "-"
+            print(String(format: "[%5.1f] %@ · paused=%@ at %@ reason=%@ elapsed=%d away=%d", Date().timeIntervalSince(t0), what,
+                         f.isPaused ? "yes" : "no", p, f.pauseReason ?? "-", f.elapsedSeconds, f.awaySeconds))
+            fflush(stdout)
+        }
+        func at(_ s: Double, _ step: @escaping () -> Void) { DispatchQueue.main.asyncAfter(deadline: .now() + s, execute: step) }
+        at(1) {
+            guard let o = model.store.todayChecklist().first(where: { !$0.isResolved && !$0.isEvent }) else { print("no task"); exit(1) }
+            if let i = model.store.tasks.firstIndex(where: { $0.id == o.task.id }) { model.store.tasks[i].offComputer = nil }
+            f.startWork(o); lastInput = Date(); log("started work on “\(o.task.title)”, using the computer")
+        }
+        at(3) { lastInput = Date(); log("left the computer") }
+        at(5) { log("2 s away (not yet)") }
+        at(7.5) { log("4.5 s away: expect paused from ~3.0, reason away") }
+        at(9) { lastInput = Date(); log("back (input)") }
+        at(10.5) { log("expect running again, pause 3.0–9.0 left out") }
+        at(11) { lastInput = Date().addingTimeInterval(-1); NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.willSleepNotification, object: nil); log("Mac goes to sleep: expect paused from ~10.0, reason sleep") }
+        at(12.5) { lastInput = Date(); log("input before it's actually asleep: expect still paused") }
+        at(14) { NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil); lastInput = Date(); log("woke up, input") }
+        at(15.5) { log("expect running again") }
+        at(16) { lastInput = Date(); log("left again") }
+        at(25) { log("9 s away, past the 6 s limit") }
+        at(25.5) { lastInput = Date(); log("back") }
+        at(27) { log("expect still paused (waited too long), reason kept") }
+        at(28) { f.resume(); log("resumed by hand") }
+        at(30) {
+            print("session 1 counted:", f.liveSegments.map { String(format: "%.1f–%.1f", $0.start.timeIntervalSince(t0), $0.end.timeIntervalSince(t0)) }.joined(separator: ", "),
+                  "· paused \(f.totalPausedSeconds) s")
+            f.end(quiet: true)
+            guard let o = model.store.todayChecklist().first(where: { !$0.isResolved && !$0.isEvent }),
+                  let i = model.store.tasks.firstIndex(where: { $0.id == o.task.id }) else { exit(1) }
+            model.store.tasks[i].offComputer = true
+            f.startWork(Occurrence(task: model.store.tasks[i], day: o.day)); lastInput = Date()
+            log("off-computer task: started, then walked away")
+        }
+        at(36) { log("6 s away: expect NOT paused (off the computer), away 0") }
+        at(37) { NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.willSleepNotification, object: nil); log("sleep: expect NOT paused") }
+        at(38) { f.end(quiet: true); print("done"); fflush(stdout); exit(0) }
+    }
+
     static func prepare(_ model: AppModel) {
         if LaunchOptions.has("-demo") && model.store.tasks.isEmpty {
             seed(model.store)
@@ -60,6 +106,9 @@ enum DebugDriver {
             print(out)
             exit(0)
         }
+        // -awayTest (with -silent -awayAfter 3 -autoResumeLimit 6): a scripted run of the automatic pause, with
+        // a stand-in for the time since your last input. Prints what happened, then quits.
+        if LaunchOptions.has("-awayTest") { awayTest(model); return }
         // -workDemo: logs a few work/focus/study sessions today (for the calendar strip), then starts work mode
         // on the first open item.
         if LaunchOptions.has("-workDemo") {

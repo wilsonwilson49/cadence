@@ -146,7 +146,7 @@ function sidebar() {
     if (section && folded.has(section) && ui.route !== id) return head;
     const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
       : id === 'habits' ? (store.countedToday(store.tasksOn(new Date())).filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task) && !o.resolved).length || '')
-      : id === 'focus' && focus.running ? (focus.pausedAt ? 'Paused' : fmtClock(focusLeft())) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
+      : id === 'focus' && focus.running ? (focus.pausedAt ? 'Paused' : isWorking() ? workClock() : fmtClock(focusLeft())) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
       : id === 'flashcards' ? (store.dueCardCount || '') : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
     return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
   }).join('');
@@ -627,31 +627,95 @@ const focusLeft = () => Math.max(0, (focus.endsAt || 0) - focusNow());
 const awayNow = () => (focus.awayMs || 0) + (focus.awaySince ? Date.now() - focus.awaySince : 0);
 /** Time spent so far in this session, not counting pauses (ms). */
 const focusElapsed = () => Math.max(0, focusNow() - focus.startedAt - (focus.pausedMs || 0));
-const pauseClock = () => fmtClock(focus.pausedAt ? Date.now() - focus.pausedAt : 0);
-function togglePause() {
-  if (!focus.running) return;
-  const now = Date.now();
-  if (focus.pausedAt) {
-    const d = now - focus.pausedAt;
-    focus.pausedMs = (focus.pausedMs || 0) + d; focus.endsAt += d;
-    if (d >= 1000) focus.pauses = [...(focus.pauses || []), { start: M.iso(new Date(focus.pausedAt)), end: M.iso(new Date(now)) }];
-    focus.pausedAt = null; focus.awaySince = document.hasFocus() ? null : now;
-  } else {
-    if (focus.awaySince) { focus.awayMs = (focus.awayMs || 0) + now - focus.awaySince; focus.awaySince = null; }
-    focus.pausedAt = now; focus.pauseNudgedAt = now;
-  }
+/** "12:34", or "1:02:03" past an hour. */
+const fmtHMS = ms => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+const pauseClock = () => fmtHMS(focus.pausedAt ? Date.now() - focus.pausedAt : 0);
+/** Off the computer: a task in it is marked so. Leaving doesn't pause it, and time away from this tab isn't away. */
+const focusOffComputer = () => (focus.picked || []).some(id => findOcc(id)?.task.offComputer);
+/** Pauses from `at`, which can be in the past (an automatic pause starts when you left) but not before the session
+ * began or the last break ended. `reason`: null = you paused it; 'away' or 'sleep' = it paused by itself. */
+function pauseFocus(at = Date.now(), reason = null) {
+  if (!focus.running || focus.pausedAt) return;
+  const now = Date.now(), t = Math.max(focus.resumedAt || 0, focus.startedAt, Math.min(at, now));
+  if (focus.awaySince) { focus.awayMs = (focus.awayMs || 0) + Math.max(0, t - focus.awaySince); focus.awaySince = null; }
+  Object.assign(focus, { pausedAt: t, pauseNudgedAt: now, pauseReason: reason, autoResume: !!reason });
   saveFocus(); render();
 }
+/** Back to it: the break is left out of the time, and a sprint gets its paused minutes back. */
+function resumeFocus() {
+  if (!focus.running || !focus.pausedAt) return;
+  const now = Date.now(), d = now - focus.pausedAt;
+  focus.pausedMs = (focus.pausedMs || 0) + d; focus.endsAt += d;
+  if (d >= 1000) focus.pauses = [...(focus.pauses || []), { start: M.iso(new Date(focus.pausedAt)), end: M.iso(new Date(now)), ...(focus.pauseReason ? { reason: focus.pauseReason } : {}) }];
+  Object.assign(focus, { pausedAt: null, pauseReason: null, autoResume: false, resumedAt: now, awaySince: document.hasFocus() || focusOffComputer() ? null : now });
+  saveFocus(); render();
+}
+// (A Pause click right after it picked up again by itself was meant for the Resume button it replaced.)
+let autoResumedAt = 0;
+const togglePause = () => (focus.pausedAt ? resumeFocus() : Date.now() - autoResumedAt > 3000 && pauseFocus());
+
+// Leaving the computer (rules in model.js): no input on this page for 5 minutes while it's in front, or the
+// computer asleep, pauses the session from when you left; your next input here picks it up again. In the desktop
+// app (Windows, Linux) it's input anywhere on the computer, and it hears the computer going to sleep.
+let lastInputAt = Date.now(), lastTickAt = focus.seenAt || Date.now(), systemIdle = null, desktopAsleep = false;
+const desk = window.cadenceDesktop;
+/** Pauses it if you've left. Returns true if it did. (Not before the tasks are loaded: is it off the computer?) */
+function focusAwayCheck() {
+  if (!booted) return false;
+  const now = Date.now(), lastTick = lastTickAt;
+  lastTickAt = now;
+  if (now - (focus.seenAt || 0) >= 15_000) { focus.seenAt = now; saveFocus(); }   // for a gap across a reload
+  if (desk?.idleSeconds) desk.idleSeconds().then(s => { systemIdle = Number(s); if (systemIdle < 2 && !desktopAsleep) noteInput(); }).catch(() => {});
+  if (!focus.running || focus.pausedAt || focusOffComputer()) return false;
+  const p = M.autoPauseAt(systemIdle == null
+    ? { now, lastTick, lastInput: lastInputAt, inFront: document.hasFocus() && !document.hidden }
+    : { now, lastTick, lastInput: Math.max(lastInputAt, now - systemIdle * 1000), inFront: true });
+  if (p) pauseFocus(p.at, p.reason);
+  return !!p;
+}
+desk?.onSleep?.(() => {
+  desktopAsleep = true;
+  if (focus.running && !focus.pausedAt && !focusOffComputer()) pauseFocus(Date.now() - Math.min((systemIdle ?? 0) * 1000, M.AWAY_MS), 'sleep');
+});
+desk?.onWake?.(() => { desktopAsleep = false; });
+/** Back after an automatic pause: it picks up again, unless you were gone more than an hour (then it waits for you). */
+function focusBack() {
+  if (!focus.running || !focus.pausedAt || !focus.autoResume) return;
+  const away = Date.now() - focus.pausedAt, what = isWorking() ? `“${focus.title}”` : 'your focus sprint';
+  const gone = away < 60_000 ? 'less than a minute' : M.fmtDuration(away / 1000);
+  if (away <= M.AUTO_RESUME_MS) {
+    resumeFocus(); autoResumedAt = Date.now();
+    reminders.deliver({ kind: 'nudge', title: `Welcome back: ${what} is running again`, body: `Paused for ${gone} while you were away. That time doesn’t count.`, tint: '#82a8ef' }, ['banner']);
+  } else {
+    Object.assign(focus, { autoResume: false, pauseNudgedAt: Date.now() });
+    saveFocus(); render();
+    reminders.deliver({ kind: 'nudge', title: `Still on ${what}?`, body: `It paused while you were away (${gone}). Resume it, or end it.`, tint: '#82a8ef' }, ['banner']);
+  }
+}
+// Picking up again waits a moment, so a click that brought you back (Stop, Complete, Resume) goes first.
+let backTimer = null;
+const noteInput = () => {
+  lastInputAt = Date.now();
+  if (focus.autoResume && !backTimer) backTimer = setTimeout(() => { backTimer = null; focusBack(); }, 400);
+};
+for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, noteInput, { passive: true, capture: true });
+/** What happens if you leave the computer during this session. */
+const awayRule = () => focusOffComputer()
+  ? 'Off the computer: it keeps running while you’re away, and time away from this tab doesn’t count as away.'
+  : 'No input here for 5 minutes (or the computer asleep) and it pauses by itself, from when you left, until you’re back.';
+const pausedNote = () => focus.pauseReason
+  ? `Paused by itself while you were away${focus.pauseReason === 'sleep' ? ' (the computer slept)' : ''}: the clock stopped when you left, so that time doesn’t count.`
+  : 'On a break: the clock is stopped and time in other tabs doesn’t count as away until you resume.';
 /** Work mode: the points the time so far is worth (2 per 5 minutes, times the multiplier), before completing it. */
 function workTimePoints() {
   const e = Math.max(1, focusElapsed()), pct = Math.round(100 * (e - Math.min(e, awayNow())) / e);
   return M.studyPoints(Math.floor(focusElapsed() / 60_000), pct);
 }
 /** Work mode's clock, counting up: "12:34" or "1:02:03". */
-const workClock = () => {
-  const s = Math.max(0, Math.floor(focusElapsed() / 1000));
-  return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-};
+const workClock = () => fmtHMS(focusElapsed());
 
 // Bonus tasks during a session: ticked on the Focus page (reflected on when it ends), or checked off anywhere
 // else while it runs (store.onComplete). Each is +15 points before the multiplier; they're not part of the list.
@@ -682,9 +746,10 @@ store.onComplete = (t, key) => {
 
 function startFocus(minutes, picked, work = null) {
   Object.assign(focus, { running: true, id: M.uuid(), startedAt: Date.now(), endsAt: Date.now() + minutes * 60_000, minutes, picked, finished: [], bonusTicks: [], bonusCredited: [],
-    pausedAt: null, pausedMs: 0, pauses: [],
+    pausedAt: null, pausedMs: 0, pauses: [], pauseReason: null, autoResume: false, resumedAt: null, seenAt: Date.now(),
     awayMs: 0, awaySince: document.hasFocus() ? null : Date.now(), mode: work ? 'work' : 'sprint', workId: work?.id ?? null, title: work?.task.title ?? null });
   ui.focusResult = null;
+  lastInputAt = lastTickAt = Date.now();
   saveFocus(); render(); focusTick();
 }
 
@@ -726,7 +791,7 @@ function endFocus({ quiet = false } = {}) {
     ...(focus.mode === 'work' ? { mode: 'work', title: focus.title, occurrenceID: focus.workId } : {}),
     ...(focus.pauses?.length ? { pauses: focus.pauses, pausedSeconds: Math.round((focus.pausedMs || 0) / 1000) } : {}),
   }, { skip: focus.mode === 'work' && elapsed < 60_000 && !finished && !extras.length });
-  Object.assign(focus, { running: false, bonusTicks: [], bonusCredited: [], pausedAt: null, pausedMs: 0, pauses: [] });
+  Object.assign(focus, { running: false, bonusTicks: [], bonusCredited: [], pausedAt: null, pausedMs: 0, pauses: [], pauseReason: null, autoResume: false });
   saveFocus();
   ui.focusResult = session;
   if (quiet) { render(); return; }
@@ -742,10 +807,11 @@ function focusTick() {
   if (!focus.running) return;
   focusTimer = setInterval(() => {
     if (!focus.running) { clearInterval(focusTimer); return; }
+    if (focusAwayCheck()) return;
     if (focus.pausedAt) {
-      // On a break: only the break's own clock moves, plus a reminder every 10 minutes.
+      // On a break: only the break's own clock moves, plus a reminder every 10 minutes (not while you're away).
       for (const el of document.querySelectorAll('[data-pause-clock]')) el.textContent = pauseClock();
-      if (Date.now() - (focus.pauseNudgedAt || focus.pausedAt) >= 10 * 60_000) {
+      if (!focus.autoResume && Date.now() - (focus.pauseNudgedAt || focus.pausedAt) >= 10 * 60_000) {
         focus.pauseNudgedAt = Date.now(); saveFocus();
         reminders.deliver({ kind: 'nudge', title: 'Still on a break?', body: `Paused for ${Math.round((Date.now() - focus.pausedAt) / 60_000)} min. Resume when you’re back.`, tint: '#82a8ef' }, ['banner']);
       }
@@ -772,12 +838,13 @@ function focusTick() {
     if (badge) badge.textContent = fmtClock(left);
   }, 1000);
 }
-// Time in another tab or app counts as time away.
-window.addEventListener('blur', () => { if (focus.running && !focus.pausedAt && !focus.awaySince) { focus.awaySince = Date.now(); saveFocus(); } });
+// Time in another tab or app counts as time away (not for a task done away from the computer).
+window.addEventListener('blur', () => { if (focus.running && !focus.pausedAt && !focus.awaySince && !focusOffComputer()) { focus.awaySince = Date.now(); saveFocus(); } });
 window.addEventListener('focus', () => {
   if (focus.running && focus.awaySince) { focus.awayMs = (focus.awayMs || 0) + Date.now() - focus.awaySince; focus.awaySince = null; saveFocus(); }
+  noteInput();
 });
-if (focus.running) setTimeout(() => (focusLeft() <= 0 ? endFocus() : focusTick()));
+// A session from before a reload carries on once the tasks are loaded (see the start, at the bottom).
 
 function focusView() {
   const sessions = store.focusSessions, points = sessions.reduce((n, x) => n + (x.points || 0), 0), lv = M.focusLevel(points);
@@ -796,7 +863,7 @@ function focusView() {
       <div class="focus-clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" class="track"/>
         <circle cx="100" cy="100" r="90" class="bar" data-focus-ring style="stroke-dasharray:${2 * Math.PI * 90};stroke-dashoffset:${2 * Math.PI * 90 * (1 - left / (focus.minutes * 60_000))}"/></svg>
         <div class="fc-inner"><div class="fc-time ${focus.pausedAt ? 'paused' : ''}" data-focus-clock>${fmtClock(left)}</div>
-          ${focus.pausedAt ? `<div class="small paused-tag">${ic('pause')} Paused <span data-pause-clock>${pauseClock()}</span></div>` : ''}
+          ${focus.pausedAt ? `<div class="small paused-tag">${ic('pause')} ${focus.pauseReason ? 'Away' : 'Paused'} <span data-pause-clock>${pauseClock()}</span></div>` : ''}
           <div class="small muted">${focus.finished.length} of ${occs.length} done</div>
           ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length ? `<div class="small bonus-pts">${ic('star-fill')} ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length} bonus</div>` : ''}
           <div class="tiny muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div></div>
@@ -808,7 +875,7 @@ function focusView() {
         ${bonusCard()}
         <div class="row">${pauseBtn()}<button class="btn" data-act="focus-more">${ic('plus')} 5 minutes</button><span class="grow"></span>
           <button class="btn danger" data-act="focus-end">End now</button></div>
-        ${focus.pausedAt ? '<div class="small muted">On a break: the clock is stopped and time in other tabs doesn’t count as away until you resume.</div>' : ''}
+        <div class="small muted">${focus.pausedAt ? pausedNote() : awayRule()}</div>
       </div></div>`;
   } else {
     const open = store.todayChecklist().filter(o => !o.resolved);
@@ -920,7 +987,7 @@ function workingView() {
         ${o && M.habitSteps(t).length ? stepList(o, 'work') : ''}
         <div class="row" style="gap:28px;align-items:center;flex-wrap:wrap">
           <div><div class="work-clock ${focus.pausedAt ? 'paused' : ''}" data-focus-clock>${workClock()}</div>${focus.pausedAt
-            ? `<div class="small paused-tag">${ic('pause')} Paused · on a break for <span data-pause-clock>${pauseClock()}</span></div>`
+            ? `<div class="small paused-tag">${ic('pause')} Paused · ${focus.pauseReason ? 'away' : 'on a break'} for <span data-pause-clock>${pauseClock()}</span></div>`
             : `<div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div>`}
             <div class="small green mono" title="2 points for every 5 minutes, times your focus multiplier. Completing it adds more.">+<span data-work-points>${workTimePoints()}</span> points for time so far</div></div>
           ${target ? `<div class="grow" style="max-width:320px"><div class="progress"><div data-work-bar data-target="${target}" style="width:${Math.min(100, (elapsedMin / target) * 100)}%"></div></div>
@@ -934,6 +1001,7 @@ function workingView() {
           <span class="grow"></span>
           <button class="btn danger" data-act="work-stop" title="Stop without checking it off (the time is still logged)">Stop</button>
         </div>
+        <div class="small muted">${focus.pausedAt ? pausedNote() : awayRule()}</div>
       </div>
     </div>`;
 }
@@ -2284,7 +2352,11 @@ function editorDialog(m) {
       <div class="seg wide" role="group" aria-label="Priority">${[['', 'None'], ...M.PRIORITIES].map(([k, l]) => `<button type="button" class="${(M.priorityOf(d) || '') === k ? 'on' : ''}" data-act="edit-priority" data-v="${k}">${l}</button>`).join('')}</div>
       <div class="row" style="gap:10px;margin-top:10px"><span class="small" style="font-weight:600">Hardness</span>
         <span class="hpick" role="group" aria-label="Hardness">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= (M.hardnessOf(d) || 0) ? 'on' : ''}" style="--hc:${hardColor(M.hardnessOf(d) || i)};height:${9 + 3 * i}px" data-act="edit-hardness" data-v="${i}" title="${i}: ${M.HARDNESS[i - 1]}" aria-label="${i}, ${M.HARDNESS[i - 1]}" aria-pressed="${M.hardnessOf(d) === i}"></button>`).join('')}</span>
-        <span class="small muted">${M.hardnessOf(d) ? `${M.hardnessOf(d)} · ${M.HARDNESS[M.hardnessOf(d) - 1]}` : 'Not rated'}</span></div></div>`}
+        <span class="small muted">${M.hardnessOf(d) ? `${M.hardnessOf(d)} · ${M.HARDNESS[M.hardnessOf(d) - 1]}` : 'Not rated'}</span></div></div>
+      <div class="fieldset"><div class="legend">Focus</div>
+        <label class="check"><input type="checkbox" data-edit="offComputer" data-rerender ${d.offComputer ? 'checked' : ''}>Done away from the computer</label>
+        <div class="small muted" style="margin-top:4px">${d.offComputer ? 'A focus session on it keeps running while you’re away or the computer sleeps, and time away from the screen doesn’t count as away.'
+          : 'In a focus session, 5 minutes away from the computer (or the computer going to sleep) pauses it until you’re back.'}</div></div>`}
     ${bonus ? bonusFieldset(m) : `<div class="fieldset"><div class="legend">When</div>
       ${M.isEvent(d) || isHab ? '' : `<div class="seg wide" role="group" aria-label="Starts"><button type="button" class="${d.after ? '' : 'on'}" data-act="edit-starts" data-v="">On a date</button><button type="button" class="${d.after ? 'on' : ''}" data-act="edit-starts" data-v="1">${ic('right')} After another task</button></div>`}
       ${d.after ? followUpControls(d) : ''}
@@ -2417,6 +2489,7 @@ function readEditorInputs() {
   if (val('after')) m.draft.after = val('after').value;
   if (val('afterMinutes')) { const v = Number(val('afterMinutes').value); if (v) m.draft.afterMinutes = v; else delete m.draft.afterMinutes; }
   if (val('hasDue')) m.hasDue = val('hasDue').checked;
+  if (val('offComputer')) { if (val('offComputer').checked) m.draft.offComputer = true; else delete m.draft.offComputer; }
   if (val('bonusLimit')) {
     const v = Number(val('bonusLimit').value);
     if (v === 1) delete m.draft.bonusLimit; else m.draft.bonusLimit = v;
@@ -4623,6 +4696,9 @@ readRoute();
 store.subscribe(render);
 store.boot().then(() => {
   booted = true;
+  // A focus session from before a reload: a long gap since this page last ran (closed, or the computer asleep)
+  // is a pause; a sprint whose time ran out ends.
+  if (focus.running) { focusAwayCheck(); if (focusLeft() <= 0) endFocus(); else focusTick(); }
   render();
   if (store.user) reminders.start();
   else store.subscribe(function startOnce() { if (store.user && !reminders.started) { reminders.started = true; reminders.start(); } });

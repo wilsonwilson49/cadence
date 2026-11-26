@@ -314,5 +314,17 @@ check(gtask.id === await stableUUID('gtasks:abc') && gtask.kind === 'task' && is
   check(M2.workPoints({ minutes: 47, focusPercent: 95, finished: 1, picked: 1 }) === 35 + 27 && M2.workPoints({ minutes: 30, focusPercent: 60, finished: 0, picked: 1 }) === 12
     && M2.workPoints({ minutes: 4, focusPercent: 100, finished: 0, picked: 1 }) === 0, 'work: 2 points per 5 minutes × multiplier, plus completing it');
 }
+// Leaving the computer: 5 minutes with no input (while the page is in front) or a gap from sleep pauses it.
+{
+  const M2 = await import('../public/js/model.js');
+  const now = 10_000_000, min = 60_000;
+  const a = M2.autoPauseAt({ now, lastTick: now - 1000, lastInput: now - 5 * min, inFront: true });
+  const b = M2.autoPauseAt({ now, lastTick: now - 1000, lastInput: now - 4 * min, inFront: true });
+  const c = M2.autoPauseAt({ now, lastTick: now - 1000, lastInput: now - 20 * min, inFront: false });
+  const z = M2.autoPauseAt({ now, lastTick: now - 40 * min, lastInput: now - 41 * min, inFront: true });
+  const th = M2.autoPauseAt({ now, lastTick: now - 61_000, lastInput: now - 61_000, inFront: false });
+  check(a?.reason === 'away' && a.at === now - 5 * min && !b && !c, 'away: 5 minutes with no input on the page in front pauses it, from the last input');
+  check(z?.reason === 'sleep' && z.at === now - 40 * min && !th, 'sleep: a long gap in the clock pauses it from the last tick (a throttled background tab does not)');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

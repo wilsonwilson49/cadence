@@ -135,6 +135,16 @@ struct TaskEditor: View {
                         .pickerStyle(.segmented)
                         LabeledContent("Hardness") { HardnessPicker(value: $task.hardness) }
                     }
+                    Section {
+                        Toggle(isOn: Binding(get: { task.offComputer == true }, set: { task.offComputer = $0 ? true : nil })) {
+                            Label("Done away from the computer", systemImage: "figure.walk")
+                        }
+                    } footer: {
+                        Text(task.offComputer == true
+                             ? "A focus session on it keeps running while you're away or the Mac sleeps, and a locked screen doesn't count as time away."
+                             : "In a focus session, 5 minutes away from the computer (or the Mac going to sleep) pauses it until you're back.")
+                            .font(.app(.caption)).foregroundStyle(.secondary)
+                    }
                 }
 
                 if task.isBonus { bonusSection } else {

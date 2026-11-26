@@ -123,6 +123,7 @@ function refreshTrayMenu(remaining = lastRemaining) {
 }
 ipcMain.on('cadence:badge', (_e, n) => refreshTrayMenu(Number(n) || 0));
 ipcMain.handle('cadence:getOpenAtLogin', () => loginItemEnabled());
+ipcMain.handle('cadence:idle', () => powerMonitor.getSystemIdleTime());
 ipcMain.on('cadence:setOpenAtLogin', (_e, on) => chooseOpenAtLogin(Boolean(on)));
 
 // ---------- app ----------
@@ -150,6 +151,7 @@ app.whenReady().then(() => {
     });
   }
   // "Opening the computer": wake from sleep or unlock → the app's check-in.
+  powerMonitor.on('suspend', () => send('cadence:sleep'));
   powerMonitor.on('resume', () => setTimeout(() => send('cadence:wake', 'wake'), 2500));
   powerMonitor.on('unlock-screen', () => send('cadence:wake', 'unlock'));
 });

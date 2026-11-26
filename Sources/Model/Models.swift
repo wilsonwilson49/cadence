@@ -229,6 +229,10 @@ struct PlanTask: Codable, Identifiable, Hashable {
     var armedBy: String?
     /// Bonus tasks (kind "bonus"): how many times it can be checked off in all. nil = once, 0 = no limit.
     var bonusLimit: Int?
+    /// Done away from the computer (a run, the piano, reading on paper): a focus session on it keeps running while
+    /// you're away or the computer sleeps, and a locked screen isn't time away. Otherwise 5 minutes with no input
+    /// (or the computer sleeping) pauses the session until you're back. Same on the web.
+    var offComputer: Bool?
     /// Habit steps (subtasks): a small checklist that starts fresh each time the habit comes around.
     var steps: [HabitStep]?
     /// Occurrence key → the steps checked off that time.

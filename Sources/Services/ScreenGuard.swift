@@ -59,8 +59,9 @@ final class ScreenGuard: ObservableObject {
         if engine.screenLocked || engine.displayAsleep { return }
         let idle = ScreenTimeTracker.idleSeconds
         // While a focus, work or study session runs, that's the decision made; a fresh allowance comes after.
-        // A pause is a break: the allowance runs again, like a paused study session.
-        let busy = (model.focus.running && !model.focus.isPaused) || (model.study.run.map { !$0.paused } ?? false)
+        // A pause is a break: the allowance runs again, like a paused study session. (Not one that began by
+        // itself while you were away: coming back to it is still part of the session, so no away wall.)
+        let busy = (model.focus.running && (!model.focus.isPaused || model.focus.isAutoPaused)) || (model.study.run.map { !$0.paused } ?? false)
         if busy, allowanceOn { allowanceEnds = now.addingTimeInterval(Double(allowanceMinutes * 60)) }
 
         guard idle < 30 else { return }   // not using it right now: nothing to decide

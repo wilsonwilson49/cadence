@@ -331,6 +331,15 @@ struct EditorSheet: View {
                         .pickerStyle(.segmented)
                         HStack { Text("Hardness"); Spacer(); HardnessPicker(value: $task.hardness, barHeight: 24) }
                     }
+                    Section {
+                        Toggle(isOn: Binding(get: { task.offComputer == true }, set: { task.offComputer = $0 ? true : nil })) {
+                            Label("Done away from the computer", systemImage: "figure.walk")
+                        }
+                    } footer: {
+                        Text(task.offComputer == true
+                             ? "Focus on it from the Mac or the web keeps running while you're away from the computer."
+                             : "Focus on it from the Mac or the web pauses after 5 minutes away from the computer.")
+                    }
                 }
                 if task.isBonus {
                     let limit = task.bonusLimit ?? 1

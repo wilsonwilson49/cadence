@@ -1160,6 +1160,18 @@ export const studyPoints = (minutes, percent) => Math.round(Math.floor(minutes /
 /** Focus › Work counts time the way study does, on top of the points for what it finished. Same as Focus.workPoints. */
 export const workPoints = ({ minutes, focusPercent, finished, picked, bonus = 0 }) =>
   focusPoints({ finished, picked, focusPercent, bonus }) + studyPoints(minutes, focusPercent);
+
+// Leaving the computer during a focus session (same rules as the Mac's FocusEngine): 5 minutes with no input on
+// the page while it's in front, or the computer asleep (seen as a gap in the clock: timers don't run then), pauses
+// it from when you left. It picks up again when you're back, unless you were gone more than an hour. Not for tasks
+// done away from the computer (offComputer).
+export const AWAY_MS = 5 * 60_000, AUTO_RESUME_MS = 60 * 60_000, SLEEP_GAP_MS = 3 * 60_000;
+/** Whether to pause now, and from when: { at, reason: 'sleep' | 'away' }, or null to keep going. */
+export function autoPauseAt({ now, lastTick, lastInput, inFront }) {
+  if (lastTick && now - lastTick > SLEEP_GAP_MS) return { at: lastTick, reason: 'sleep' };
+  if (inFront && now - lastInput >= AWAY_MS) return { at: lastInput, reason: 'away' };
+  return null;
+}
 export const fmtStudyClock = ms => {
   const s = Math.round(Math.abs(ms) / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
   return `${ms < 0 ? '+' : ''}${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${x}`;

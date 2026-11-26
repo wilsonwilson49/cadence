@@ -77,7 +77,7 @@ struct FocusView: View {
                     Text(focus.clock).font(.system(size: 44, weight: .bold).monospacedDigit())
                         .foregroundStyle(focus.isPaused ? Color.secondary : final ? Color.orange : .primary)
                     if focus.isPaused {
-                        Label("Paused \(focus.pauseClock)", systemImage: "pause.fill").font(.app(.caption).weight(.semibold)).foregroundStyle(.orange)
+                        Label("\(focus.isAutoPaused ? "Away" : "Paused") \(focus.pauseClock)", systemImage: "pause.fill").font(.app(.caption).weight(.semibold)).foregroundStyle(.orange)
                     }
                     Text("\(focus.finished.count) of \(occs.count) done").font(.app(.caption)).foregroundStyle(.secondary)
                     let extra = focus.bonusTicks.count + focus.bonusCredited.count
@@ -91,6 +91,7 @@ struct FocusView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Tick each one as you finish it. You'll write the reflections when time's up, so the clock is only for doing. Switching to a distracting app counts against your focus.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
+                awayRule
                 if !occs.isEmpty {
                 Card {
                     VStack(spacing: 0) {
@@ -115,11 +116,24 @@ struct FocusView: View {
                     Button("End now", role: .destructive) { focus.end() }
                 }
                 if focus.isPaused {
-                    Text("On a break: the clock is stopped, nothing counts as distracted, and blocking is lifted until you resume.")
-                        .font(.app(.caption)).foregroundStyle(.secondary)
+                    Text(pausedNote).font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
         }
+    }
+
+    private var pausedNote: String {
+        focus.isAutoPaused
+            ? "Paused by itself while you were away\(focus.pauseReason == "sleep" ? " (the Mac slept)" : ""): the clock stopped at your last input, so that time doesn't count."
+            : "On a break: the clock is stopped, nothing counts as distracted, and blocking is lifted until you resume."
+    }
+
+    /// What happens if you leave the computer during this session.
+    private var awayRule: some View {
+        Label(focus.isOffComputer ? "Off the computer: it keeps running while you're away or the Mac sleeps."
+              : "Away for 5 minutes (or the Mac asleep) and it pauses by itself, from your last input, until you're back.",
+              systemImage: focus.isOffComputer ? "figure.walk" : "moon.zzz")
+            .font(.app(.caption)).foregroundStyle(.secondary)
     }
 
     private var openItems: [Occurrence] { store.todayChecklist().filter { !$0.isResolved } }
@@ -250,11 +264,12 @@ struct FocusView: View {
                         Text(focus.clock).font(.system(size: 54, weight: .bold).monospacedDigit())
                             .foregroundStyle(focus.isPaused ? Color.secondary : .primary)
                         if focus.isPaused {
-                            Label("Paused · on a break for \(focus.pauseClock)", systemImage: "pause.fill")
+                            Label(focus.isAutoPaused ? "Paused · away for \(focus.pauseClock)" : "Paused · on a break for \(focus.pauseClock)", systemImage: "pause.fill")
                                 .font(.app(.callout).weight(.semibold)).foregroundStyle(.orange)
                         } else {
                             Text("\(focus.focusPercent)% focused" + (focus.distractingSeconds + focus.awaySeconds > 0
-                                 ? " · \(durationString(seconds: focus.distractingSeconds + focus.awaySeconds)) away or distracted" : ""))
+                                 ? " · \(durationString(seconds: focus.distractingSeconds + focus.awaySeconds)) away or distracted" : "")
+                                 + (focus.totalPausedSeconds >= 60 ? " · \(durationString(seconds: focus.totalPausedSeconds)) paused" : ""))
                                 .font(.app(.caption)).foregroundStyle(.secondary)
                             Text("+\(focus.timePointsSoFar) points for time so far")
                                 .font(.app(.caption).monospacedDigit()).foregroundStyle(.green)
@@ -279,6 +294,7 @@ struct FocusView: View {
                       : "Blocking is off for this session.",
                       systemImage: model.nag.blocker.isOn ? "lock.fill" : "lock.open")
                     .font(.app(.caption)).foregroundStyle(.secondary)
+                if focus.isPaused { Text(pausedNote).font(.app(.caption)).foregroundStyle(.secondary) } else { awayRule }
 
                 HStack(spacing: 10) {
                     Button { focus.completeWork() } label: { Label("Complete", systemImage: "checkmark").padding(.horizontal, 8) }

@@ -207,6 +207,8 @@ struct FocusSession: Codable, Identifiable, Hashable {
 struct FocusPause: Codable, Hashable {
     var start: Date
     var end: Date
+    /// Why it paused: nil = you paused it; "away" (5 minutes with no input) or "sleep" (the computer slept).
+    var reason: String?
 
     /// `from`–`to` with the pauses cut out.
     static func segments(from: Date, to: Date, pauses: [FocusPause]) -> [(start: Date, end: Date)] {

@@ -47,6 +47,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func deliver(_ content: AlertContent, channels: Set<AlertChannel>) {
+        #if DEBUG
+        // -silent (scripted test runs): print alerts instead of showing them.
+        if LaunchOptions.has("-silent") { print("[alert] \(content.title) | \(content.body)"); fflush(stdout); return }
+        #endif
         let settings = model?.store.settings ?? AppSettings()
         var channels = channels
         // If macOS notifications are blocked, fall back to our own banner so nothing is silently lost.
