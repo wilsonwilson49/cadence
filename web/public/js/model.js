@@ -607,7 +607,7 @@ export const bonusListed = (t, day) => isBonus(t) && !t.archived && Boolean(bonu
 /** This round: "Once", "Done", "2 of 3 done", "Done 5 times · no limit". */
 export function bonusSummary(t, day = new Date()) {
   const n = bonusRoundKeys(t, day).length, max = bonusMax(t);
-  if (max == null) return n ? `Done ${n} time${n === 1 ? '' : 's'} · no limit` : 'As often as you like';
+  if (max == null) return n ? `Done ${n} time${n === 1 ? '' : 's'} · no limit` : 'No limit';
   if (max === 1) return n ? 'Done' : 'Once';
   return n ? `${Math.min(n, max)} of ${max} done` : `Up to ${max} times`;
 }
@@ -1054,27 +1054,27 @@ export function projectMapLayout(p, collapsed = new Set()) {
 // (kinds 'course', 'study', 'note'); a running session stays in this browser.
 
 export const STUDY_MODES = {
-  timed: { title: 'Timed', icon: 'timer', blurb: 'Study and break on a clock, for as many rounds as you like.' },
-  dynamic: { title: 'Intervals', icon: 'study', blurb: 'Run a preset of intervals: the class period, 25 on / 5 off, or your own. Every length is adjustable.' },
-  offline: { title: 'No computer', icon: 'book', blurb: 'Put the computer away and study on paper. Cadence keeps time and notes if you come back to the screen.' },
+  timed: { title: 'Timed', icon: 'timer', blurb: 'Study and break periods on a clock, for as many rounds as you choose.' },
+  dynamic: { title: 'Intervals', icon: 'study', blurb: 'Run a preset of intervals, such as the class period, 25 minutes on and 5 off, or your own. Every length can be changed.' },
+  offline: { title: 'No computer', icon: 'book', blurb: 'Put the computer away and study on paper. Cadence keeps the time and records it if you use the computer during the session.' },
 };
 export const PHASES = ['reading', 'learning', 'understanding', 'testing'];
 export const PHASE_INFO = {
-  reading: { title: 'Reading', blurb: 'The chapter seems like a pile of words and you don’t understand it yet.', rules: { homework: 'open', quiz: 'open' } },
-  learning: { title: 'Learning', blurb: 'You’re beginning to understand.', rules: { homework: 'open', quiz: 'closed' } },
-  understanding: { title: 'Understanding', blurb: 'You understand it; now make it stick.', rules: { homework: 'open', quiz: 'closed' } },
-  testing: { title: 'Testing', blurb: 'Test yourself the way the real test will.', rules: { homework: 'textbook', quiz: 'closed' } },
+  reading: { title: 'Reading', blurb: 'You have read the chapter but do not understand it yet.', rules: { homework: 'open', quiz: 'open' } },
+  learning: { title: 'Learning', blurb: 'You are beginning to understand the chapter.', rules: { homework: 'open', quiz: 'closed' } },
+  understanding: { title: 'Understanding', blurb: 'You understand the chapter, and the goal now is to remember it.', rules: { homework: 'open', quiz: 'closed' } },
+  testing: { title: 'Testing', blurb: 'Test yourself in the same way the real test will.', rules: { homework: 'textbook', quiz: 'closed' } },
 };
 export const NOTE_RULES = { open: 'Open note', textbook: 'Textbook only', closed: 'Closed note' };
 export const PERIOD_KINDS = {
-  lecture: { title: 'Lecture', minutes: 30, blurb: 'The whole chapter, just an info dump. Go slowly so you pick up a lot; take what you can and leave the rest for later. Memorization can wait.' },
-  questions: { title: 'Any questions?', minutes: 10, blurb: 'Your chance to begin understanding. Ask AI, ask a partner, look things up.' },
-  homework: { title: 'Homework', minutes: 30, blurb: 'Solve as many problems as you can. Ask AI, check the back of the textbook.' },
-  officeHours: { title: 'Office hours', minutes: 15, blurb: 'Ask about the problems you got stuck on: a friend who’s studying it, AI, a teacher. Learn as much as you can.' },
-  quiz: { title: 'Quiz', minutes: 15, blurb: 'Try to retain as much as you can. Write down what you got wrong; you’ll start there next session.' },
+  lecture: { title: 'Lecture', minutes: 30, blurb: 'Go through the whole chapter once. Read slowly enough to take in most of it, and leave the rest for later. Memorizing comes afterwards.' },
+  questions: { title: 'Any questions?', minutes: 10, blurb: 'Work out what you did not understand. Ask AI or a partner, or look it up.' },
+  homework: { title: 'Homework', minutes: 30, blurb: 'Solve as many problems as you can, checking answers with AI or the back of the textbook.' },
+  officeHours: { title: 'Office hours', minutes: 15, blurb: 'Ask about the problems you got stuck on, whether to a friend studying the same thing, AI or a teacher.' },
+  quiz: { title: 'Quiz', minutes: 15, blurb: 'Answer from memory. Write down what you got wrong, because the next session starts there.' },
   custom: { title: 'Your own period', minutes: 15, blurb: '' },
   study: { title: 'Study', minutes: 25, blurb: '' },
-  breakTime: { title: 'Break', minutes: 5, blurb: 'Stand up, stretch, drink some water, look away from the screen.' },
+  breakTime: { title: 'Break', minutes: 5, blurb: 'Stand up, stretch, drink some water and look away from the screen.' },
 };
 export const STARTABLE_MODES = ['dynamic', 'offline'];
 /** Built-in presets to start from. Same as Course.Template on the Mac. */
@@ -1224,9 +1224,9 @@ export const newCustomReminder = (over = {}) => ({ id: uuid(), title: 'New remin
 // ---------- for things you'd rather put off (same as NagLevel in Swift) ----------
 export const NAG_LEVELS = [
   ['normal', 'Normal', 'One reminder at the times you choose.'],
-  ['persistent', 'Persistent', 'The reminder comes back every few minutes until it’s checked off.'],
+  ['persistent', 'Persistent', 'The reminder comes back every few minutes until the task is checked off.'],
   ['pushy', 'Pushy', 'A window opens in the middle of the screen, again and again.'],
-  ['strict', 'Strict', 'Covers the screen, putting it off asks why, and the Mac app blocks your distracting apps and sites until it’s done.'],
+  ['strict', 'Strict', 'A window covers the screen and asks for a reason when you put it off, and the Mac app blocks your distracting apps and sites until the task is done.'],
 ];
 export const NAG_EVERY = [3, 5, 10, 15, 20, 30, 60];
 export const nagLevel = t => (['persistent', 'pushy', 'strict'].includes(t?.nag) ? t.nag : 'normal');

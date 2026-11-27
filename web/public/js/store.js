@@ -188,7 +188,7 @@ class Store {
       this.syncState = { status: 'synced', lastSynced: new Date(), error: null };
     } catch (e) {
       if (e.status === 401) { this.user = null; this.emit(); return; }
-      this.syncState = { ...this.syncState, status: 'offline', error: navigator.onLine ? e.message : 'Offline — changes will sync later' };
+      this.syncState = { ...this.syncState, status: 'offline', error: navigator.onLine ? e.message : 'Offline. Changes will sync when the connection returns.' };
     }
     this.syncing = false;
     this.#notifySync();

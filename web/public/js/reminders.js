@@ -29,7 +29,7 @@ export class Reminders {
       const away = this.hiddenSince ? Date.now() - this.hiddenSince : 0;
       this.hiddenSince = null;
       // Coming back to the tab after a while is the browser's version of "unlocking the computer".
-      if (away > 10 * 60_000 && store.settings.checkInOnUnlock) this.checkIn('Welcome back — check your list');
+      if (away > 10 * 60_000 && store.settings.checkInOnUnlock) this.checkIn('Your list for today');
     });
     // Opening Cadence checks in, but not on every page reload: at most once every 2 hours per browser.
     if (store.settings.checkInOnLaunch) {
@@ -94,7 +94,7 @@ export class Reminders {
       const title = `Still not done: ${o.task.title}`;
       if (level === 'persistent') {
         this.deliver({ kind: 'task', title, tag: `nag-${o.id}`, occurrence: o, tint: '#e3a23e',
-          body: n === 1 ? 'This one keeps reminding you until it’s checked off.' : `Reminder ${n}. It’ll keep coming back every ${M.nagMinutes(o.task)} min until it’s checked off.` },
+          body: n === 1 ? 'This task keeps reminding you until it is checked off.' : `Reminder ${n}. It comes back every ${M.nagMinutes(o.task)} min until it is checked off.` },
           ['notification', 'banner', 'sound']);
       } else {
         this.ui.nag(o, level, n, this.putOff.get(o.id) || []);
@@ -117,7 +117,7 @@ export class Reminders {
     // Timers stop while the computer sleeps; a big gap means it just woke up.
     if (now - this.lastTick > 3 * 60_000 && store.settings.checkInOnWake) {
       this.lastNudge = now;
-      setTimeout(() => this.checkIn('Welcome back — check your list'), 1500);
+      setTimeout(() => this.checkIn('Your list for today'), 1500);
     }
     const windowStart = Math.max(this.lastTick, now - 15 * 60_000);
     this.lastTick = now;
@@ -166,8 +166,8 @@ export class Reminders {
       if (open.length || !s.nudgeOnlyWhenIncomplete) {
         const names = open.slice(0, 3).map(o => o.task.title).join(', ') + (open.length > 3 ? ` +${open.length - 3} more` : '');
         this.deliver(open.length
-          ? { kind: 'nudge', title: `Checklist check — ${open.length} left`, body: names, tint: '#5e5ce6', tag: 'nudge' }
-          : { kind: 'nudge', title: 'Checklist check', body: 'All done for today. Nice work.', tint: '#30d158', tag: 'nudge' },
+          ? { kind: 'nudge', title: `Checklist: ${open.length} left`, body: names, tint: '#5e5ce6', tag: 'nudge' }
+          : { kind: 'nudge', title: 'Checklist', body: 'Everything on today’s list is done.', tint: '#30d158', tag: 'nudge' },
         s.nudgeChannels);
       }
     }
@@ -176,14 +176,14 @@ export class Reminders {
 
 function reminderContent(occ, offset) {
   if (occ.event) {
-    const when = occ.start ? (offset === 0 ? `Starting now (${M.fmtTime(occ.start)})` : offset < 0 ? `${M.offsetLabel(offset)} (until ${M.fmtTime(occ.end)})` : `Starts at ${M.fmtTime(occ.start)} — ${M.offsetLabel(offset)}`) : 'Today';
+    const when = occ.start ? (offset === 0 ? `Starting now (${M.fmtTime(occ.start)})` : offset < 0 ? `${M.offsetLabel(offset)} (until ${M.fmtTime(occ.end)})` : `Starts at ${M.fmtTime(occ.start)} (${M.offsetLabel(offset)})`) : 'Today';
     return { kind: 'event', title: occ.task.title, body: when + (occ.task.notes ? ` · ${occ.task.notes}` : ''),
       tint: M.COLORS[occ.task.color] || '#0a84ff', tag: occ.id };
   }
   let body;
   if (occ.start) {
     body = offset < 0 ? `Check-in: ${M.offsetLabel(offset)} (until ${M.fmtTime(occ.end)})`
-      : offset === 0 ? `Starting now (${M.fmtTime(occ.start)})` : `At ${M.fmtTime(occ.start)} — ${M.offsetLabel(offset)}`;
+      : offset === 0 ? `Starting now (${M.fmtTime(occ.start)})` : `At ${M.fmtTime(occ.start)} (${M.offsetLabel(offset)})`;
   } else {
     body = offset >= 1440 ? `Coming up ${M.fmtDay(occ.day, { weekday: 'long' })}` : "On today's checklist";
   }

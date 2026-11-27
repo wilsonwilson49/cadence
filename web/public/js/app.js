@@ -219,8 +219,8 @@ function installBar() {
     if (Date.now() - later < 14 * 86_400_000) return '';
   }
   const how = installEvent
-    ? 'Install it to open it from your home screen, full screen like an app.'
-    : `It opens full screen, like an app. In Safari, tap <b>Share</b> <span class="share">${ic('share')}</span> (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. You’ll sign in there once more.`;
+    ? 'Installing it adds Cadence to your home screen, where it opens without the browser bars.'
+    : `In Safari, tap <b>Share</b> <span class="share">${ic('share')}</span> (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Cadence then opens from its icon without the Safari bars. The Home Screen copy has its own sign-in, so you sign in once more there.`;
   return `<div class="install-bar" role="dialog" aria-label="Add Cadence to your Home Screen"><img src="/apple-touch-icon.png" alt="">
     <div class="grow"><b>Put Cadence on your Home Screen</b><div class="small muted" style="margin-top:3px">${how}</div>
       <div class="row" style="margin-top:8px">${installEvent ? `<button type="button" class="btn sm primary" data-act="install-now">Install</button>` : ''}
@@ -303,7 +303,7 @@ function followUpsFieldset(m) {
     ${list.map(f => `<div class="row" style="gap:8px">${ic('right')}<span class="grow ellipsis">${esc(f.title)}</span><span class="small muted">${M.afterLabel(f.afterMinutes || 0)}</span>
       <button type="button" class="btn sm ghost" data-act="edit-followup" data-id="${f.id}">Edit</button></div>`).join('')}
     <div><button type="button" class="btn sm" data-act="edit-add-followup">${ic('plus')} Add a task that follows this one</button></div>
-    <div class="small muted">Follow-ups wait off your list until this is checked off, then come up on their own: chain the next step to the last.</div></div>`;
+    <div class="small muted">A follow-up stays off your list until this task is checked off, and then comes up by itself. This way the next step of a piece of work can be set in advance.</div></div>`;
 }
 
 function timeTakenFieldset(m) {
@@ -346,7 +346,7 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   else if (!o.resolved && typ && !compact) meta.push(`<span title="${esc(typicalText(t))}">${ic('timer')}usually ${M.fmtMinutes(typ)}</span>`);
   if (M.nagLevel(t) !== 'normal' && !o.resolved) {
     const [, label, desc] = M.NAG_LEVELS.find(x => x[0] === M.nagLevel(t));
-    meta.push(`<span class="${M.nagLevel(t) === 'strict' ? 'red' : 'orange'}" title="Keeps after you until it’s checked off. ${esc(desc)}">${ic(M.nagLevel(t) === 'strict' ? 'lock' : 'bell')}${label}</span>`);
+    meta.push(`<span class="${M.nagLevel(t) === 'strict' ? 'red' : 'orange'}" title="Reminds you repeatedly until it is checked off. ${esc(desc)}">${ic(M.nagLevel(t) === 'strict' ? 'lock' : 'bell')}${label}</span>`);
   }
   if (M.pastDue(t)) meta.push(`<span class="red"><b>Past due</b></span>`);
   if (o.overdue) meta.push('<span class="red"><b>Overdue</b></span>');
@@ -361,10 +361,10 @@ function crow(o, { compact = false, showDate = false, ctx = '' } = {}) {
   const hasRefl = o.resolved && store.reflectionFor(o, o.missed ? 'missed' : 'done');
   return `<div class="crow ${o.done ? 'done' : ''} ${o.missed ? 'missed' : ''} ${ui.justDone.has(o.id) ? 'just-done' : ''}">
     <button class="checkbtn" style="${o.done ? `color:${color(t.color)}` : ''}" data-act="toggle" data-occ="${esc(o.id)}" data-ctx="${ctx}"
-      title="${o.done ? 'Mark as not done' : 'Complete — you’ll write a short reflection first'}">${ic(o.done ? 'checked' : 'circle')}</button>
-    ${o.bonus ? `<span class="bonus-star" title="Bonus task: optional, +${M.BONUS_POINTS} points when you finish it during a focus session">${ic('star-fill')}</span>`
+      title="${o.done ? 'Mark as not done' : 'Check it off (you write a short reflection first)'}">${ic(o.done ? 'checked' : 'circle')}</button>
+    ${o.bonus ? `<span class="bonus-star" title="Bonus task. It is optional, and finishing it during a focus session gives +${M.BONUS_POINTS} points.">${ic('star-fill')}</span>`
       : `<button class="missbtn ${o.missed ? 'on' : ''}" data-act="miss" data-occ="${esc(o.id)}" data-ctx="${ctx}"
-      title="${o.missed ? 'Undo “didn’t do it”' : 'Didn’t do it / couldn’t — you’ll reflect on why'}">${ic('x')}</button>`}
+      title="${o.missed ? 'Undo “didn’t do it”' : 'Mark it as not done (you write a short reflection on why)'}">${ic('x')}</button>`}
     ${compact ? '' : `<span class="bar" style="background:${color(t.color)}"></span>`}
     <div class="grow"><div class="title ellipsis">${esc(t.title)}</div><div class="meta">${meta.join('')}</div>${steps.length && !compact ? stepList(o, ctx) : ''}</div>
     ${hasRefl ? `<span class="muted" title="Reflection saved">${ic('quote')}</span>` : ''}
@@ -423,7 +423,7 @@ function homeView() {
     <div class="hero"><div class="grow">
       <div class="muted" style="font-size:17px">${greet}${store.user ? `, ${esc(store.user.username)}` : ''}</div>
       <h2>${M.fmtDay(now)}</h2>
-      <div class="muted">${!total ? 'Nothing on your checklist today.' : done === total ? 'Everything is checked off. Nice work.' : `${open.length + projOpen} thing${open.length + projOpen === 1 ? '' : 's'} left today.`}</div></div>
+      <div class="muted">${!total ? 'Nothing on your checklist today.' : done === total ? 'Everything is checked off.' : `${open.length + projOpen} thing${open.length + projOpen === 1 ? '' : 's'} left today.`}</div></div>
       <div class="row"><button class="btn" data-act="check-in">${ic('sun')} Check in</button><button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn primary" data-act="new-task">${ic('plus')} New task</button></div></div>
 
     <div class="home-grid">
@@ -443,7 +443,7 @@ function homeView() {
           : '<div class="muted small">Nothing else scheduled with a time.</div>'}
         <div class="section-title" style="margin:14px 0 6px">${ic('quote')}Latest reflection</div>
         ${latest ? `<div class="small" style="font-style:italic">“${esc(latest.text.length > 140 ? latest.text.slice(0, 140) + '…' : latest.text)}”</div>
-          <div class="tiny muted" style="margin-top:4px">${esc(latest.taskTitle)}</div>` : '<div class="muted small">Check something off to write your first one.</div>'}
+          <div class="tiny muted" style="margin-top:4px">${esc(latest.taskTitle)}</div>` : '<div class="muted small">Your first reflection appears here after you check something off.</div>'}
       </div>
     </div>
 
@@ -480,7 +480,7 @@ function eventRow(ev) {
   return `<div class="crow erow" data-act="detail" data-item="${esc(ev.id)}">
     <span class="evt-time">${ev.allDay ? 'All day' : `${M.fmtTime(ev.start)}<small>${M.fmtTime(ev.end)}</small>`}</span>
     <span class="bar ${ev.busy === false ? 'free' : ''}" style="--hue:${ev.color};background:${ev.color}"></span>
-    <div class="grow"><div class="title ellipsis">${esc(ev.title)}</div><div class="meta">${src}${ev.busy === false ? `<span title="Open: just for info">${ic('eye')}Open</span>` : ''}${ev.notes ? `<span class="ellipsis">${esc(ev.notes)}</span>` : ''}${ev.silent === false ? `<span title="Reminds you">${ic('bell')}</span>` : ''}</div></div>
+    <div class="grow"><div class="title ellipsis">${esc(ev.title)}</div><div class="meta">${src}${ev.busy === false ? `<span title="Open: for information only">${ic('eye')}Open</span>` : ''}${ev.notes ? `<span class="ellipsis">${esc(ev.notes)}</span>` : ''}${ev.silent === false ? `<span title="Reminds you">${ic('bell')}</span>` : ''}</div></div>
     ${ev.link ? `<a href="${esc(ev.link)}" target="_blank" rel="noopener" title="Open">${ic('link')}</a>` : ''}
   </div>`;
 }
@@ -499,7 +499,7 @@ function todayView() {
   const done = all.filter(o => o.done).length + projDone, settled = all.filter(o => o.resolved).length + projDone;
   const hour = today.getHours();
   const greet = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
-  const status = !total ? 'A clear day.' : done === total ? 'Everything is checked off. Nice work.'
+  const status = !total ? 'Nothing is planned for today.' : done === total ? 'Everything is checked off.'
     : settled === total ? `All settled: ${done} done, ${total - done} not done.` : `${total - settled} of ${total} left to check off.`;
   const events = scheduleOn(today);
   const s = store.settings;
@@ -509,22 +509,22 @@ function todayView() {
       <div class="muted" style="font-size:17px">${greet}</div>
       <h2>${M.fmtDay(today)}</h2><div class="muted">${status}</div></div><button class="ring-btn" data-act="ring-mode" title="${store.settings.ringShowsLeft ?? true ? 'Showing what’s left · click to show what’s done' : 'Showing what’s done · click to show what’s left'}">${todayRing(done, total, 80, 9)}</button></div>
     ${perm === 'default' && reminders.enabled ? `<div class="callout warn"><span class="big">${ic('bell')}</span>
-      <div class="grow"><b>Turn on notifications</b><div class="small muted">So reminders reach you even when this tab is in the background.</div></div>
+      <div class="grow"><b>Turn on notifications</b><div class="small muted">Without them, reminders only appear while this tab is in front.</div></div>
       <button class="btn primary" data-act="ask-notify">Allow</button></div>` : ''}
-    <form class="quickadd" data-form="quick">${ic('plus')}<input id="quickAdd" placeholder="Quick add to today — press Return" autocomplete="off"></form>
+    <form class="quickadd" data-form="quick">${ic('plus')}<input id="quickAdd" placeholder="Add to today, then press Return" autocomplete="off"></form>
     ${overdue.length ? `<div><div class="section-title">${ic('alert')}Overdue <span class="count">${overdue.length}</span></div>
       <div class="card">${overdue.map(o => crow(o)).join('')}</div></div>` : ''}
     <div><div class="section-title">${ic('list')}Today’s checklist <span class="count">${daily.length}</span></div>
       <div class="card">${daily.length ? daily.map(o => crow(o)).join('')
-        : `<div class="crow"><span style="font-size:22px;color:var(--orange)">${ic('sun')}</span><div><div>${ongoing.length ? 'Nothing else scheduled for today.' : 'Nothing scheduled for today.'}</div><div class="small muted">Add a task above, or use New Task for one with a time and repeat schedule.</div></div></div>`}</div>
-      ${ongoing.length ? '' : `<div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div>`}</div>
+        : `<div class="crow"><span style="font-size:22px;color:var(--orange)">${ic('sun')}</span><div><div>${ongoing.length ? 'Nothing else scheduled for today.' : 'Nothing scheduled for today.'}</div><div class="small muted">Add a task in the box above. To give it a time or a repeat schedule, use New Task instead.</div></div></div>`}</div>
+      ${ongoing.length ? '' : `<div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words, which is saved under Reflections.</div>`}</div>
     ${habits.length ? `<div><div class="section-title">${ic('habit')}Habits <span class="count">${habits.filter(o => !o.resolved).length} left</span><span class="grow"></span>
         <a class="btn sm" href="/app/habits">Habit tracker</a></div>
       <div class="card">${habits.map(o => crow(o)).join('')}</div></div>` : ''}
     ${ongoing.length ? `<div><div class="section-title">${ic('flame')}Until done <span class="count">${ongoing.length}</span>
         <span class="small muted" style="font-weight:400">stays on your list until you check it off or mark it “didn’t do it”</span></div>
       <div class="card">${ongoing.map(o => crow(o)).join('')}</div>
-      <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words. They’re saved under Reflections.</div></div>` : ''}
+      <div class="small muted" style="margin-top:6px">Checking an item off asks for a reflection of at least ${s.minReflectionWords} words, which is saved under Reflections.</div></div>` : ''}
     ${(() => { const bonus = store.bonusTasks(); return bonus.length ? `<div><div class="section-title">${ic('star')}Bonus <span class="count">${bonus.filter(o => !o.done).length}</span>
         <span class="small muted" style="font-weight:400">optional · not counted in today’s progress · +${M.BONUS_POINTS} each in a focus session</span></div>
       <div class="card">${bonus.map(o => crow(o)).join('')}</div></div>` : ''; })()}
@@ -540,7 +540,7 @@ function todayView() {
     ${projectUpcomingSection()}
     <div><div class="section-title">${ic('cal')}Schedule <span class="count">${events.length}</span><span class="grow"></span>
       <button class="btn sm" data-act="new-event">${ic('plus')} New event</button></div>
-      <div class="card">${events.length ? events.map(eventRow).join('') : '<div class="crow muted">No events today. Events show on your calendars but never on the checklist.</div>'}</div></div>
+      <div class="card">${events.length ? events.map(eventRow).join('') : '<div class="crow muted">No events today. Events appear on the calendars only, not on the checklist.</div>'}</div></div>
     ${(() => { const st = screenSummary(today); if (!st.has) return '';
       const over = s.screenLimitMinutes && st.total > s.screenLimitMinutes * 60;
       return `<a class="callout" href="/app/screentime" style="text-decoration:none;color:inherit"><span class="big" style="color:#5ac8fa">${ic('monitor')}</span><div class="grow">
@@ -548,7 +548,7 @@ function todayView() {
         <div class="small muted">${M.fmtDuration(st.distracting)} in distracting apps${st.apps[0] ? ` · most: ${esc(st.apps[0].name)} (${M.fmtDuration(st.apps[0].seconds)})` : ''}. A focus session helps.</div></div></a>`; })()}
     <div class="callout"><span class="big">${ic('bell')}</span><div class="grow">
       <b>${s.nudgeEnabled ? `Checklist reminder every ${s.nudgeIntervalMinutes} min while this page is open` : 'Recurring checklist reminders are off'}</b>
-      <div class="small muted">${!reminders.enabled ? 'Browser reminders are off on this device (Settings).' : s.nudgeEnabled ? `Next one around ${M.fmtTime(reminders.nextNudge)}. You’ll also get a check-in when you come back to your computer.` : 'Turn them on in Settings.'}</div></div>
+      <div class="small muted">${!reminders.enabled ? 'Browser reminders are off on this device (Settings).' : s.nudgeEnabled ? `The next one is around ${M.fmtTime(reminders.nextNudge)}. A check-in also appears when you come back to the computer.` : 'Turn them on in Settings.'}</div></div>
       <button class="btn" data-act="check-in">Check in now</button></div>
   </div>`;
 }
@@ -607,7 +607,7 @@ function habitCard(t, st) {
     <div class="hc-meta"><span>${st.rate == null ? 'New' : `${st.rate}% kept`}</span><span>${st.votes} vote${st.votes === 1 ? '' : 's'}${h.identity ? ' for who you’re becoming' : ''}</span>
       ${h.twoMinute ? `<span title="The 2-minute version">${ic('timer')}${esc(h.twoMinute)}</span>` : ''}${h.reward ? `<span title="Reward">${ic('check')}then ${esc(h.reward)}</span>` : ''}</div>
     ${occ && M.habitSteps(t).length ? stepList(occ) : ''}
-    ${st.missTwice ? `<div class="hc-warn">${ic('alert')} Missed last time. Never miss twice: even the 2-minute version counts today.</div>` : ''}
+    ${st.missTwice ? `<div class="hc-warn">${ic('alert')} This was missed last time. To avoid missing it twice in a row, even the 2-minute version counts today.</div>` : ''}
     <div class="row" style="flex-wrap:wrap">
       ${occ && !occ.resolved ? `<button class="btn primary sm" data-act="toggle" data-occ="${esc(occ.id)}">${ic('check')} Done today…</button>
         <button class="btn sm" data-act="miss" data-occ="${esc(occ.id)}">${ic('x')} Didn’t do it…</button>`
@@ -650,7 +650,7 @@ function habitsView() {
   for (const t of habits) if (t.habit?.identity) identities.set(t.habit.identity, (identities.get(t.habit.identity) || 0) + stats.get(t.id).votes);
   const card = store.settings.habitScorecard || [];
   const stat = (v, l, icon, c) => `<div class="stat" style="background:${tint(c, .1)}"><span style="color:${c}">${ic(icon)}</span><div><b>${v}</b><span class="small muted">${l}</span></div></div>`;
-  return `<div class="header"><div class="grow"><h1>Habits</h1><div class="sub">Small habits, repeated. Every check-off is a vote for the person you’re becoming.</div></div>
+  return `<div class="header"><div class="grow"><h1>Habits</h1><div class="sub">Habits are tasks that repeat on a schedule. This page shows the streak and history of each one.</div></div>
       <button class="btn primary" data-act="new-habit">${ic('plus')} New habit</button></div>
     <div class="page stack">
       ${habits.length ? habitTable(habits, stats) : ''}
@@ -658,7 +658,7 @@ function habitsView() {
         ${stat(votes, 'votes cast', 'habit', '#5e5ce6')}${stat(habits.length, habits.length === 1 ? 'habit' : 'habits', 'repeat', '#30b0c7')}</div>
       ${identities.size ? `<div class="identities">${[...identities].map(([id, n]) => `<span class="identity">${ic('quote')} I am someone who ${esc(id)} <b>${n} vote${n === 1 ? '' : 's'}</b></span>`).join('')}</div>` : ''}
       ${habits.length ? `<div class="habit-grid">${habits.map(t => habitCard(t, stats.get(t.id))).join('')}</div>`
-        : empty('habit', 'No habits yet', 'Start tiny: pick one thing you want to do every day, and the 2-minute version of it.')}
+        : empty('habit', 'No habits yet', 'Add one thing you want to do every day, together with a 2-minute version of it for days with little time.')}
       <div><div class="section-title">${ic('list')}Habit scorecard <span class="small muted" style="font-weight:400">what you already do, rated</span></div>
         <div class="card">
           ${card.map(c => `<div class="crow"><span class="grow">${esc(c.text)}</span>
@@ -668,11 +668,11 @@ function habitsView() {
           <form class="crow" data-form="scorecard"><input class="input grow" name="text" placeholder="Something you do every day, e.g. check my phone right after waking up" autocomplete="off">
             <button class="btn">${ic('plus')} Add</button></form>
         </div>
-        <div class="small muted" style="margin-top:6px">Rate each one good (+), neutral (=) or bad (–) for who you want to be. “Replace it” starts a habit that takes a bad one’s place.</div></div>
-      <div class="laws">${[['1', 'Make it obvious', 'Give it a cue: a time and place, or stack it after a habit you already have.'],
-        ['2', 'Make it attractive', 'Pair it with something you enjoy, and spend time with people who already do it.'],
-        ['3', 'Make it easy', 'Shrink it to a 2-minute version. Showing up matters more than doing it well.'],
-        ['4', 'Make it satisfying', 'Reward yourself right after, and don’t break the chain: never miss twice.']]
+        <div class="small muted" style="margin-top:6px">Rate each one good (+), neutral (=) or bad (–). “Replace it” starts a new habit to take the place of a bad one.</div></div>
+      <div class="laws">${[['1', 'Make it obvious', 'Give it a cue, such as a time and place, or do it right after a habit you already have.'],
+        ['2', 'Make it attractive', 'Pair it with something you enjoy, or do it with people who already have the habit.'],
+        ['3', 'Make it easy', 'Make a 2-minute version of it. Doing it every day matters more than doing it well.'],
+        ['4', 'Make it satisfying', 'Reward yourself right after it, and do not miss it two days in a row.']]
         .map(([n, t, d]) => `<div class="law"><b>${n}</b><div><div style="font-weight:650">${t}</div><div class="small muted">${d}</div></div></div>`).join('')}</div>
     </div>`;
 }
@@ -751,11 +751,11 @@ function focusBack() {
   const gone = away < 60_000 ? 'less than a minute' : M.fmtDuration(away / 1000);
   if (away <= M.AUTO_RESUME_MS) {
     resumeFocus(); autoResumedAt = Date.now();
-    reminders.deliver({ kind: 'nudge', title: `Welcome back: ${what} is running again`, body: `Paused for ${gone} while you were away. That time doesn’t count.`, tint: '#82a8ef' }, ['banner']);
+    reminders.deliver({ kind: 'nudge', title: `Resumed ${what}`, body: `It was paused for ${gone} while you were away, so that time is not counted.`, tint: '#82a8ef' }, ['banner']);
   } else {
     Object.assign(focus, { autoResume: false, pauseNudgedAt: Date.now() });
     saveFocus(); render();
-    reminders.deliver({ kind: 'nudge', title: `Still on ${what}?`, body: `It paused while you were away (${gone}). Resume it, or end it.`, tint: '#82a8ef' }, ['banner']);
+    reminders.deliver({ kind: 'nudge', title: `Still paused: ${what}`, body: `It has been paused for ${gone}, since you left the computer. Resume it or end it.`, tint: '#82a8ef' }, ['banner']);
   }
 }
 // Picking up again waits a moment, so a click that brought you back (Stop, Complete, Resume) goes first.
@@ -767,11 +767,11 @@ const noteInput = () => {
 for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, noteInput, { passive: true, capture: true });
 /** What happens if you leave the computer during this session. */
 const awayRule = () => focusOffComputer()
-  ? 'Off the computer: it keeps running while you’re away, and time away from this tab doesn’t count as away.'
-  : 'No input here for 5 minutes (or the computer asleep) and it pauses by itself, from when you left, until you’re back.';
+  ? 'This task is done away from the computer, so the session keeps running while you are away, and time outside this tab is not counted as away.'
+  : 'If there is no input on this page for 5 minutes, or the computer sleeps, the session pauses. The pause starts at your last input, so the time away is not counted.';
 const pausedNote = () => focus.pauseReason
-  ? `Paused by itself while you were away${focus.pauseReason === 'sleep' ? ' (the computer slept)' : ''}: the clock stopped when you left, so that time doesn’t count.`
-  : 'On a break: the clock is stopped and time in other tabs doesn’t count as away until you resume.';
+  ? `The session paused because you were away${focus.pauseReason === 'sleep' ? ' and the computer slept' : ''}. The clock stopped at your last input, so the time away is not counted.`
+  : 'The session is paused. The clock is stopped, and time in other tabs is not counted as away until you resume.';
 /** Work mode: the points the time so far is worth (2 per 5 minutes, times the multiplier), before completing it. */
 function workTimePoints() {
   const e = Math.max(1, focusElapsed()), pct = Math.round(100 * (e - Math.min(e, awayNow())) / e);
@@ -859,7 +859,7 @@ function endFocus({ quiet = false } = {}) {
   ui.focusResult = session;
   if (quiet) { render(); return; }
   reflectQueue([...focus.finished.map(findOcc).filter(Boolean), ...ticked]);
-  reminders.deliver({ kind: 'nudge', title: `Time! ${finished} done${extras.length ? ` + ${extras.length} bonus` : ''}`, body: `${focusPercent}% focused · +${session.points} points. Write your reflections to check them off.`, tint: '#82a8ef' },
+  reminders.deliver({ kind: 'nudge', title: `Focus session over: ${finished} done${extras.length ? ` + ${extras.length} bonus` : ''}`, body: `${focusPercent}% focused · +${session.points} points. Write a reflection for each finished task to check it off.`, tint: '#82a8ef' },
     store.settings.defaultChannels);
   navigate('focus');
 }
@@ -876,7 +876,7 @@ function focusTick() {
       for (const el of document.querySelectorAll('[data-pause-clock]')) el.textContent = pauseClock();
       if (!focus.autoResume && Date.now() - (focus.pauseNudgedAt || focus.pausedAt) >= 10 * 60_000) {
         focus.pauseNudgedAt = Date.now(); saveFocus();
-        reminders.deliver({ kind: 'nudge', title: 'Still on a break?', body: `Paused for ${Math.round((Date.now() - focus.pausedAt) / 60_000)} min. Resume when you’re back.`, tint: '#82a8ef' }, ['banner']);
+        reminders.deliver({ kind: 'nudge', title: 'The focus session is still paused', body: `It has been paused for ${Math.round((Date.now() - focus.pausedAt) / 60_000)} min.`, tint: '#82a8ef' }, ['banner']);
       }
       return;
     }
@@ -929,7 +929,7 @@ function focusView() {
           ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length ? `<div class="small bonus-pts">${ic('star-fill')} ${(focus.bonusTicks || []).length + (focus.bonusCredited || []).length} bonus</div>` : ''}
           <div class="tiny muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div></div></div>
       <div class="grow stack" style="gap:10px;min-width:0">
-        <div class="small muted">Tap Done as you finish each one. You’ll write the reflections when time’s up, so the clock is only for doing.</div>
+        <div class="small muted">Tick each task as you finish it. The reflections are written after the time is up, so they do not use any of the session.</div>
         ${occs.length ? `<div class="card">${occs.map(o => { const on = focus.finished.includes(o.id); return `<div class="crow ${on ? 'done' : ''}">
           <button class="checkbtn" data-act="focus-done" data-occ="${esc(o.id)}" style="${on ? `color:${color(o.task.color)}` : ''}">${ic(on ? 'checked' : 'circle')}</button>
           <div class="grow"><div class="title ellipsis">${esc(o.task.title)}</div><div class="meta"><span>${M.isHabit(o.task) ? 'Habit' : 'Task'}</span></div></div></div>`; }).join('')}</div>` : ''}
@@ -963,19 +963,19 @@ function focusView() {
           <div class="row" style="flex-wrap:wrap">${lengths.map(n => `<span class="flen"><button class="btn ${mins === n ? 'primary' : ''}" data-act="focus-mins" data-m="${n}">${M.fmtFocusLength(n)}</button><button class="flen-x" data-act="focus-len-remove" data-m="${n}" title="Remove this length">${ic('x')}</button></span>`).join('')}
             <span class="flen-custom"><input class="input" type="number" min="1" max="${M.FOCUS_MAX_MINUTES}" style="width:80px" value="${mins}" data-bind="focusMinutes" title="Any length, in minutes"><span class="small muted">min</span></span>
             ${lengths.includes(mins) ? '' : `<button class="btn sm" data-act="focus-len-save" title="Add ${M.fmtFocusLength(mins)} to the length buttons">${ic('plus')} Save ${M.fmtFocusLength(mins)}</button>`}</div>
-          <div class="tiny muted" style="margin-top:6px">Type any length up to ${M.FOCUS_MAX_MINUTES / 60} hours. Save it to keep it as a button; hover a button and click × to remove it.</div></div>
+          <div class="tiny muted" style="margin-top:6px">Type a length of up to ${M.FOCUS_MAX_MINUTES / 60} hours. Saving a length adds it as a button, and the × on a button removes it.</div></div>
         <div><div class="section-title" style="margin:0 0 8px">${ic('list')}What will you get through? <span class="count">${pick.size}</span></div>
           ${open.length ? `<div class="focus-pick">${open.map(o => `<label class="check"><input type="checkbox" data-act-change="focus-pick" value="${esc(o.id)}" ${pick.has(o.id) ? 'checked' : ''}>
             <span class="ellipsis">${esc(o.task.title)}</span><span class="tiny muted">${M.isHabit(o.task) ? 'habit' : M.isUntilDone(o.task) ? 'until done' : 'today'}</span></label>`).join('')}</div>`
-            : `<div class="muted">${bonusOpen.length ? 'Nothing open on today’s list, but there are bonus tasks.' : 'Nothing open on today’s list. Add a task first.'}</div>`}</div>
-        ${bonusOpen.length ? `<div class="small muted">${ic('star')} Bonus: ${esc(bonusOpen.map(o => o.task.title).join(', '))}. They’re listed while the clock runs: tick off any you do for +${M.BONUS_POINTS} points each.</div>` : ''}
-        <div class="row"><div class="small muted grow">Score: 10 points per task finished in time, ${M.BONUS_POINTS} per bonus task, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.</div>
+            : `<div class="muted">${bonusOpen.length ? 'There is nothing left on today’s list, but there are bonus tasks.' : 'There is nothing left on today’s list. Add a task first.'}</div>`}</div>
+        ${bonusOpen.length ? `<div class="small muted">${ic('star')} Bonus: ${esc(bonusOpen.map(o => o.task.title).join(', '))}. They are listed while the clock runs, and each one you tick off gives +${M.BONUS_POINTS} points.</div>` : ''}
+        <div class="row"><div class="small muted grow">Each task finished in time gives 10 points and each bonus task ${M.BONUS_POINTS}. Staying 90% focused multiplies this by 1.5 (75% by 1.25), and finishing the whole list adds 20.</div>
           <button class="btn primary" data-act="focus-start" ${pick.size || bonusOpen.length ? '' : 'disabled'}>${ic('target')} Start ${M.fmtFocusLength(mins)} focus</button></div>
       </div>`}`;
   }
   return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">${workMode && !focus.running
-    ? 'Work on one thing: pick it, and it stays up front until you complete it. The Mac app also blocks distracting apps and sites.'
-    : 'Race the clock: set a time, then see how much of your list you can finish before it runs out.'}</div></div></div>
+    ? 'Pick one task. It stays at the top of the page until you complete it, and the Mac app blocks distracting apps and sites in the meantime.'
+    : 'Set a length of time and pick tasks from your list. The session ends when the time runs out or every task is done.'}</div></div></div>
     <div class="page stack" style="max-width:980px">
       ${levelCard}${body}
       ${sessions.length ? `<div><div class="section-title">${ic('clock')}Recent sessions</div><div class="card">${sessions.slice(0, 8).map(x => `<div class="crow">
@@ -992,8 +992,8 @@ function workSetup(open, bonus = []) {
   const list = open.filter(o => !o.event).map((o, i) => [o, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([o]) => o);
   return `<div class="card pad stack" style="gap:12px">
     <div class="section-title" style="margin:0">${ic('target')}What are you working on?</div>
-    <div class="small muted">Click one and it starts straight away: it goes up front as your headline and the clock runs until you complete it. Time in other tabs and apps counts as away.</div>
-    <div class="small muted">Score: 2 points for every 5 minutes you work (pauses don’t count), plus 10 for completing it, all ×1.5 if you stay 90% focused (×1.25 at 75%), and +20 when you complete it.</div>
+    <div class="small muted">Clicking a task starts the session at once. The task stays at the top of the page and the clock runs until you complete it. Time in other tabs and apps is counted as away.</div>
+    <div class="small muted">Every 5 minutes of work gives 2 points, and paused time is not counted. Completing the task adds 10. Staying 90% focused multiplies both by 1.5 (75% by 1.25), and completing the task adds another 20.</div>
     <form class="row" data-form="work-new"><input class="input grow" name="title" placeholder="Something else? Type it and press Enter" autocomplete="off"><button class="btn">Start</button></form>
     ${list.length ? `<div class="work-pick">${list.map(o => {
       const t = o.task, pr = M.priorityOf(t), hd = M.hardnessOf(t), typ = M.typicalMinutes(t);
@@ -1011,7 +1011,7 @@ function workSetup(open, bonus = []) {
 }
 
 /** Pause / Resume for a running session (sprint or work). */
-const pauseBtn = () => `<button class="btn ${focus.pausedAt ? 'primary' : ''}" data-act="focus-pause" title="${focus.pausedAt ? 'Back to it' : 'Take a break: the clock stops and nothing counts until you resume'}">${ic(focus.pausedAt ? 'play' : 'pause')} ${focus.pausedAt ? 'Resume' : 'Pause'}</button>`;
+const pauseBtn = () => `<button class="btn ${focus.pausedAt ? 'primary' : ''}" data-act="focus-pause" title="${focus.pausedAt ? 'Resume the session' : 'Pause the session. The clock stops and nothing is counted until you resume.'}">${ic(focus.pausedAt ? 'play' : 'pause')} ${focus.pausedAt ? 'Resume' : 'Pause'}</button>`;
 
 /** While a sprint runs: the bonus tasks, to tick off each time you do one (up to its limit). */
 function bonusCard() {
@@ -1021,7 +1021,7 @@ function bonusCard() {
     <div class="card">${list.map(o => {
       const t = o.task, n = bonusDone(t.id), can = canTickBonus(t), mine = (focus.bonusTicks || []).includes(t.id), left = M.bonusLeft(t);
       return `<div class="crow">
-        <button class="checkbtn bonus-btn ${n ? 'on' : ''}" data-act="bonus-tick" data-task="${t.id}" ${can ? '' : 'disabled'} title="${can ? (n ? 'Did it again' : `Did it: +${M.BONUS_POINTS} points`) : 'That’s its limit'}">${ic(n ? 'star-fill' : 'star')}</button>
+        <button class="checkbtn bonus-btn ${n ? 'on' : ''}" data-act="bonus-tick" data-task="${t.id}" ${can ? '' : 'disabled'} title="${can ? (n ? 'Did it again' : `Did it: +${M.BONUS_POINTS} points`) : 'It has reached its limit'}">${ic(n ? 'star-fill' : 'star')}</button>
         <div class="grow"><div class="title ellipsis">${esc(t.title)}</div><div class="meta"><span>${left == null ? 'no limit' : left === 0 ? 'used up' : `${left} left`}</span></div></div>
         ${n ? `<b class="bonus-pts mono">×${n} +${n * M.BONUS_POINTS}</b>` : ''}
         ${mine ? `<button class="btn ghost sm" data-act="bonus-untick" data-task="${t.id}" title="Take one back">−1</button>` : ''}</div>`;
@@ -1038,7 +1038,7 @@ function workingView() {
   const otherBonus = store.openBonusTasks().filter(x => x.task.id !== o?.task.id);
   const credited = (focus.bonusCredited || []).length;
   const elapsedMin = focusElapsed() / 60_000;
-  return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">Working on one thing until it’s done.</div></div></div>
+  return `<div class="header"><div class="grow"><h1>Focus</h1><div class="sub">One task, shown until you complete it.</div></div></div>
     <div class="page stack" style="max-width:980px">
       <div class="work-head" style="border-left-color:${color(t.color)}">
         <div class="kicker">Now working on</div>
@@ -1050,12 +1050,12 @@ function workingView() {
           <div><div class="work-clock ${focus.pausedAt ? 'paused' : ''}" data-focus-clock>${workClock()}</div>${focus.pausedAt
             ? `<div class="small paused-tag">${ic('pause')} Paused · ${focus.pauseReason ? 'away' : 'on a break'} for <span data-pause-clock>${pauseClock()}</span></div>`
             : `<div class="small muted">away <span data-focus-away>${M.fmtDuration(awayNow() / 1000)}</span></div>`}
-            <div class="small green mono" title="2 points for every 5 minutes, times your focus multiplier. Completing it adds more.">+<span data-work-points>${workTimePoints()}</span> points for time so far</div></div>
+            <div class="small green mono" title="2 points for every 5 minutes, multiplied by your focus multiplier. Completing the task adds more.">+<span data-work-points>${workTimePoints()}</span> points for time so far</div></div>
           ${target ? `<div class="grow" style="max-width:320px"><div class="progress"><div data-work-bar data-target="${target}" style="width:${Math.min(100, (elapsedMin / target) * 100)}%"></div></div>
             <div class="small muted" style="margin-top:4px">${elapsedMin > target ? `Past the ${M.fmtMinutes(target)} it usually takes` : `It usually takes ${M.fmtMinutes(target)}`}</div></div>` : ''}
         </div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
-          <button class="btn primary" data-act="work-complete" title="Check it off: you’ll write the reflection, with the time already filled in">${ic('check')} Complete</button>
+          <button class="btn primary" data-act="work-complete" title="Check it off. The reflection opens with the time already filled in.">${ic('check')} Complete</button>
           ${pauseBtn()}
           ${others.length || otherBonus.length ? `<select class="input" style="width:auto" data-work-switch aria-label="Switch task"><option value="">Switch task…</option>${others.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}
             ${otherBonus.length ? `<optgroup label="Bonus">${otherBonus.map(x => `<option value="${esc(x.id)}">${esc(x.task.title)}</option>`).join('')}</optgroup>` : ''}</select>` : ''}
@@ -1085,10 +1085,10 @@ function screenTimeView() {
   const sel = (key, value) => `<select class="input" style="width:auto" data-setting="${key}">${[[0, 'Off'], [30, '30 min'], [60, '1 hour'], [90, '1.5 hours'], [120, '2 hours'], [180, '3 hours'], [240, '4 hours'], [360, '6 hours'], [480, '8 hours']]
     .map(([v, l]) => `<option value="${v}" ${Number(value) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   const over = (sec, lim) => lim && sec > lim * 60;
-  return `<div class="header"><div class="grow"><h1>Screen Time</h1><div class="sub">Where your computer time goes, so focus time and habits can use it.</div></div></div>
+  return `<div class="header"><div class="grow"><h1>Screen Time</h1><div class="sub">The time spent in each app on your Mac, as recorded by the Cadence Mac app.</div></div></div>
     <div class="page stack" style="max-width:980px">
       ${!today.has && !days.some(x => x.has) ? `<div class="callout"><span class="big">${ic('monitor')}</span><div class="grow"><b>Screen time comes from the Cadence Mac app</b>
-        <div class="small muted">A website can’t see what other apps you use. In the Mac app, open Screen Time and turn on tracking: it records how long each app is in front while you’re using your Mac, and the daily totals show up here and on every device.</div></div></div>` : ''}
+        <div class="small muted">A website cannot see which other apps you use, so this data comes from the Mac app. In the Mac app, open Screen Time and turn on tracking. It records how long each app is in front while you use the Mac, and the daily totals appear here and on your other devices.</div></div></div>` : ''}
       <div class="stats">
         <div class="stat" style="background:${tint('#5ac8fa', .12)}"><span style="color:#5ac8fa">${ic('monitor')}</span><div><b class="${over(today.total, s.screenLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.total) : '—'}</b><span class="small muted">today${s.screenLimitMinutes ? ` · limit ${M.fmtDuration(s.screenLimitMinutes * 60)}` : ''}</span></div></div>
         <div class="stat" style="background:${tint('#e4685f', .1)}"><span style="color:#e4685f">${ic('alert')}</span><div><b class="${over(today.distracting, s.distractingLimitMinutes) ? 'red' : ''}">${today.has ? M.fmtDuration(today.distracting) : '—'}</b><span class="small muted">distracting${s.distractingLimitMinutes ? ` · limit ${M.fmtDuration(s.distractingLimitMinutes * 60)}` : ''}</span></div></div>
@@ -1100,13 +1100,13 @@ function screenTimeView() {
           <div class="tiny muted">${M.WEEKDAY_SHORT[x.d.getDay()]}</div><div class="tiny">${x.has ? M.fmtDuration(x.total) : ''}</div></div>`).join('')}</div>
         <div class="tiny muted" style="margin-top:6px"><span class="st-key"></span> all apps <span class="st-key dis"></span> distracting</div></div>` : ''}
       ${today.apps.length ? `<div class="card pad"><div class="section-title" style="margin:0 0 10px">${ic('list')}Today by app <span class="small muted" style="font-weight:400">click one to mark it distracting</span></div>
-        ${today.apps.slice(0, 12).map(a => `<div class="st-app ${a.distracting ? 'dis' : ''}" data-act="toggle-distracting" data-app="${esc(a.name)}" title="${a.distracting ? 'Distracting — click to unmark' : 'Click to mark as distracting'}">
+        ${today.apps.slice(0, 12).map(a => `<div class="st-app ${a.distracting ? 'dis' : ''}" data-act="toggle-distracting" data-app="${esc(a.name)}" title="${a.distracting ? 'Distracting. Click to unmark it.' : 'Click to mark as distracting'}">
           <span class="ellipsis" style="width:160px">${esc(a.name)}</span><div class="grow st-track"><div style="width:${100 * a.seconds / today.apps[0].seconds}%"></div></div>
           <span class="small" style="width:64px;text-align:right">${M.fmtDuration(a.seconds)}</span>${a.distracting ? `<span class="tiny red">distracting</span>` : '<span class="tiny muted" style="visibility:hidden">distracting</span>'}</div>`).join('')}</div>` : ''}
       <div><h3 style="margin:6px 0">Focus settings</h3><div class="card">
-        <div class="srow"><div>Daily screen-time limit<div class="small muted">The Mac app nudges you once you go past it.</div></div>${sel('screenLimitMinutes', s.screenLimitMinutes)}</div>
+        <div class="srow"><div>Daily screen-time limit<div class="small muted">The Mac app reminds you when you go past it.</div></div>${sel('screenLimitMinutes', s.screenLimitMinutes)}</div>
         <div class="srow"><div>Daily limit for distracting apps</div>${sel('distractingLimitMinutes', s.distractingLimitMinutes)}</div>
-        <div class="srow" style="flex-wrap:wrap"><div class="grow">Distracting apps<div class="small muted">During a focus session, the Mac app nudges you back when one of these comes to the front, and time in them lowers your focus score.</div>
+        <div class="srow" style="flex-wrap:wrap"><div class="grow">Distracting apps<div class="small muted">During a focus session, the Mac app reminds you when one of these comes to the front, and time spent in them lowers your focus score.</div>
           <div class="chips" style="margin-top:8px">${(s.distractingApps || []).map(a => `<span class="chip-x">${esc(a)}<button data-act="toggle-distracting" data-app="${esc(a)}" title="Remove">${ic('x')}</button></span>`).join('') || '<span class="small muted">None yet.</span>'}</div></div>
           <form class="row" data-form="distracting"><input class="input" name="app" placeholder="App name, e.g. YouTube" style="width:200px"><button class="btn">${ic('plus')} Add</button></form></div>
       </div></div>
@@ -1158,7 +1158,7 @@ function weekSelBar(days) {
   const pick = n ? '' : `${days.map(d => `<button class="btn sm" data-act="sel-day" data-day="${M.dateKey(d)}">${M.WEEKDAY_SHORT[d.getDay()]}</button>`).join('')}<button class="btn sm" data-act="sel-week">Whole week</button>`;
   const acts = !n ? '' : `<button class="btn sm" data-act="sel-checkoff">${ic('check')} Check off</button>
     <button class="btn sm" data-act="sel-mode" data-v="untilDone">${ic('flame')} Until done</button>
-    <button class="btn sm" data-act="sel-mode" data-v="">Just on its day</button>
+    <button class="btn sm" data-act="sel-mode" data-v="">Only on its day</button>
     <button class="btn sm" data-act="sel-urgent" data-v="1">Urgent</button><button class="btn sm" data-act="sel-urgent" data-v="">Not urgent</button>
     <select class="input sm" style="width:auto" data-sel-color><option value="">Color…</option>${Object.keys(M.COLORS).map(c => `<option value="${c}">${c[0].toUpperCase() + c.slice(1)}</option>`).join('')}</select>
     <select class="input sm" style="width:auto" data-sel-priority><option value="">Priority…</option>${M.PRIORITIES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}<option value="none">None</option></select>
@@ -1215,7 +1215,7 @@ function weekView() {
   const title = `${M.fmtDay(days[0], { month: 'short', day: 'numeric' })} – ${M.fmtDay(end, { month: days[0].getMonth() === end.getMonth() ? undefined : 'short', day: 'numeric' })}, ${end.getFullYear()}`;
   const now = new Date();
   return `<div class="week">
-    <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">${weekSub}Double-click an empty slot — or inside an existing block — to add a task at that time.</div></div>
+    <div class="header"><div class="grow"><h1>${title}</h1><div class="sub">${weekSub}Double-click an empty slot, or inside an existing block, to add a task at that time.</div></div>
       <div class="row"><button class="btn ${showFocus ? 'primary' : ''}" data-act="week-focus" title="Show the time you spent focusing (purple), working on a task (blue) and studying (green) down the left of each day" aria-pressed="${showFocus}">${ic('target')} Focus time</button><button class="btn ${ui.weekSelecting ? 'primary' : ''}" data-act="sel-toggle" title="Pick several tasks to change them all at once. You can also ⌘/Ctrl- or Shift-click tasks, or Shift-drag a box around them.">${ic('check')} Select</button>${calendarsMenu()}<button class="btn" data-act="new-event">${ic('cal')} New event</button><button class="btn icon" data-act="week-prev" title="Previous week">${ic('left')}</button>
       <button class="btn" data-act="week-today">Today</button><button class="btn icon" data-act="week-next" title="Next week">${ic('right')}</button></div></div>
     ${weekSelBar(days)}
@@ -1238,7 +1238,7 @@ function weekView() {
           const top = Math.max(0, (p.start - dayStart) / 3_600_000) * HOUR;
           const bottom = Math.min(24, (p.end - dayStart) / 3_600_000) * HOUR;
           return `<div class="block ${ui.weekSel?.has(p.id) ? 'picked' : ''} ${p.done ? 'done' : ''} ${p.missed ? 'missed' : ''} ${p.kind !== 'task' ? 'evt' : ''} ${busyOf(p) ? '' : 'free'}" data-item="${esc(p.id)}" data-start="${+p.start}" data-end="${+p.end}"
-            title="${busyOf(p) ? 'Closed' : 'Open (just for info)'} · click for details · double-click to add a task at this time"
+            title="${busyOf(p) ? 'Closed' : 'Open (for information only)'} · click for details · double-click to add a task at this time"
             style="top:${top}px;height:${Math.max(20, bottom - top - 1)}px;left:calc(${lane}px + (100% - ${lane}px) * ${p.lane / p.lanes} + 2px);width:calc((100% - ${lane}px) / ${p.lanes} - 4px);
             background:${tint(p.color, p.done ? .1 : p.kind !== 'task' ? .14 : .24)};border-color:${p.color}">
             <b>${p.ud ? `<span class="flame">${ic('flame')}</span> ` : p.kind !== 'task' ? `${ic('cal')} ` : ''}${esc(p.title)}</b>${M.fmtTime(p.start)}</div>`;
@@ -1271,7 +1271,7 @@ function monthView() {
   const sel = ui.selectedDay;
   const tasks = store.tasksOn(sel), events = scheduleOn(sel);
   return `<div class="month"><div class="month-main">
-    <div class="header"><div class="grow"><h1>${M.fmtDay(ui.month, { month: 'long', year: 'numeric' })}</h1><div class="sub">Click a day to see it, double-click to add a task.</div></div>
+    <div class="header"><div class="grow"><h1>${M.fmtDay(ui.month, { month: 'long', year: 'numeric' })}</h1><div class="sub">Click a day to see its items, or double-click it to add a task.</div></div>
       <div class="row">${calendarsMenu()}<button class="btn icon" data-act="month-prev">${ic('left')}</button><button class="btn" data-act="month-today">Today</button><button class="btn icon" data-act="month-next">${ic('right')}</button></div></div>
     <div class="dows">${M.WEEKDAY_SHORT.map(w => `<div>${w.toUpperCase()}</div>`).join('')}</div>
     <div class="mgrid">${cells}</div></div>
@@ -1356,7 +1356,7 @@ function todoView() {
     if (bonus.length) body += `<div><div class="section-title">${ic('star')}Bonus <span class="count">${bonus.length}</span></div><div class="card">${bonus.map(row).join('')}</div></div>`;
     if (!body) body = empty('list', t.search ? 'No matches' : 'No tasks yet', '');
   }
-  return `<div class="header"><div class="grow"><h1>To-Do List</h1><div class="sub">Every task in one place. Repeating things are habits now: they live on the <a href="/app/habits">Habits</a> page.</div></div>
+  return `<div class="header"><div class="grow"><h1>To-Do List</h1><div class="sub">Every task, in one list. Tasks that repeat are habits, and they are listed on the <a href="/app/habits">Habits</a> page.</div></div>
     <div class="seg"><button class="${t.mode === 'checklist' ? 'on' : ''}" data-act="todo-mode" data-mode="checklist">Upcoming checklist</button>
     <button class="${t.mode === 'tasks' ? 'on' : ''}" data-act="todo-mode" data-mode="tasks">All tasks</button>
     <button class="${t.mode === 'events' ? 'on' : ''}" data-act="todo-mode" data-mode="events">Events</button></div></div>
@@ -1381,7 +1381,7 @@ function reflectionsView() {
   const groups = new Map();
   for (const r of list) { const k = M.dateKey(r.createdAt); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
   const stat = (v, l, icon, c) => `<div class="stat" style="background:${tint(c, .1)}"><span style="color:${c}">${ic(icon)}</span><div><b>${v}</b><span class="small muted">${l}</span></div></div>`;
-  return `<div class="header"><div class="grow"><h1>Reflections</h1><div class="sub">A record of what you wrote each time you checked something off, or didn’t get to it.</div></div>
+  return `<div class="header"><div class="grow"><h1>Reflections</h1><div class="sub">What you wrote each time you checked an item off or marked it as not done.</div></div>
       <button class="btn" data-act="export-refl" ${all.length ? '' : 'disabled'}>${ic('copy')} Export</button></div>
     <div class="page stack">
       <div class="stats">${stat(all.length, 'reflections', 'quote', '#5e5ce6')}${stat(words, 'words written', 'text', '#30b0c7')}
@@ -1389,7 +1389,7 @@ function reflectionsView() {
         ${stat(new Set(all.map(r => r.taskID)).size, 'different tasks', 'stack', '#30d158')}</div>
       <div class="row" style="flex-wrap:wrap"><div class="seg">${[['all', 'All'], ['done', 'Done'], ['missed', `Didn’t do (${missedCount})`]].map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-act="refl-filter" data-f="${k}">${l}</button>`).join('')}</div>
         <input id="reflSearch" class="input grow" placeholder="Search reflections" value="${esc(ui.reflSearch)}" data-bind="reflSearch"></div>
-      ${!all.length ? empty('quote', 'No reflections yet', `Each time you check off a task you’ll write a short reflection (at least ${store.settings.minReflectionWords} words). They collect here.`) : ''}
+      ${!all.length ? empty('quote', 'No reflections yet', `Each time you check off a task, you write a short reflection of at least ${store.settings.minReflectionWords} words. They are listed here.`) : ''}
       ${[...groups].map(([k, rs]) => `<div><div class="section-title">${M.isToday(M.parseKey(k)) ? 'Today' : M.fmtDay(M.parseKey(k), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
         <div class="stack" style="gap:8px">${rs.map(r => {
           const t = store.tasks.get(r.taskID);
@@ -1479,18 +1479,18 @@ function bookingView() {
     for (const [s, e] of d.extra) { const pos = clip(d.day, s, e); if (pos) parts.push(`<div class="ot-item closed gbusy" style="${pos};left:2px;right:2px" title="Busy in Google Calendar">Busy</div>`); }
     for (const p of d.timed) {
       const pos = clip(d.day, +p.start, +p.end);
-      if (pos) parts.push(`<div class="ot-item ${p.busy ? 'closed' : 'open'}" data-act="detail" data-item="${esc(p.id)}" title="${esc(p.title)} · ${p.busy ? 'closed: blocks this time' : 'open: just for info'}"
+      if (pos) parts.push(`<div class="ot-item ${p.busy ? 'closed' : 'open'}" data-act="detail" data-item="${esc(p.id)}" title="${esc(p.title)} · ${p.busy ? 'closed: blocks this time' : 'open: for information only'}"
         style="${pos};left:calc(${(p.lane * 100) / p.lanes}% + 2px);width:calc(${100 / p.lanes}% - 4px);--hue:${p.color}"><b>${esc(p.title)}</b>${M.fmtTime(p.start)}</div>`);
     }
     if (M.isToday(d.day)) { const t = y(d.day, now); if (t > 0 && t < (h1 - h0) * OT_HOUR) parts.push(`<div class="nowline" style="top:${t}px"></div>`); }
     return `<div class="ot-col ${M.isToday(d.day) ? 'today' : ''}" data-day="${M.dateKey(d.day)}" data-h0="${h0}" style="height:${(h1 - h0) * OT_HOUR}px">${parts.join('')}</div>`;
   };
-  return `<div class="header"><div class="grow"><h1>Booking</h1><div class="sub">Your open time for the next 7 days. Click a green stretch to book it; click anything else to change it, or drag it to move it. Double-click a free spot to add an event.</div></div>
+  return `<div class="header"><div class="grow"><h1>Booking</h1><div class="sub">Your open time for the next 7 days. Click a green stretch to book it. Click any other item to edit it or drag it to move it, and double-click a free spot to add an event.</div></div>
       ${calendarsMenu()}<button class="btn" data-act="busy-refresh" ${b.loading ? 'disabled' : ''}>${ic('refresh', b.loading ? 'spinning' : '')} Refresh</button>
       <button class="btn" data-act="copy-avail" ${total ? '' : 'disabled'}>${ic('copy')} Copy open times</button></div>
     <div class="page stack" style="max-width:1200px">
       ${!store.google.connected ? `<div class="callout warn"><span class="big">${ic('cal')}</span><div class="grow"><b>Google Calendar isn’t connected</b>
-        <div class="small muted">Open time only accounts for what’s in Cadence, and bookings are saved as Cadence events without sending invites.</div></div>
+        <div class="small muted">Without Google Calendar, open time only accounts for items in Cadence, and bookings are saved as Cadence events without sending invitations.</div></div>
         <a class="btn" href="/app/settings">Connect in Settings</a></div>` : ''}
       ${b.message ? `<div class="callout" style="background:${tint('#30d158', .12)}"><span class="big green">${ic('check')}</span><div class="grow">${esc(b.message)}</div></div>` : ''}
       <div class="ot-summary"><div><span class="ot-big">${durLabel(total)}</span> open this week</div><span class="grow"></span>
@@ -1506,22 +1506,22 @@ function bookingView() {
           <div class="row" style="gap:6px"><span class="small muted">Keep free around closed items</span>${sel('availability.bufferMinutes', [[0, 'None'], [5, '5 min'], [10, '10 min'], [15, '15 min'], [30, '30 min']], a.bufferMinutes)}</div>
           <span class="small muted">Changes apply right away and sync to your Mac.</span></div>`;
       })() : ''}
-      <div class="ot-legend"><span><i class="sw open-time"></i>Open time</span><span><i class="sw closed"></i>Closed — blocks time</span>
-        <span><i class="sw open"></i>Open — just for info</span><span><i class="sw off"></i>Outside your open hours</span></div>
+      <div class="ot-legend"><span><i class="sw open-time"></i>Open time</span><span><i class="sw closed"></i>Closed: blocks the time</span>
+        <span><i class="sw open"></i>Open: for information only</span><span><i class="sw off"></i>Outside your open hours</span></div>
       <div class="ot-wrap"><div class="ot">
         <div></div>${week.map(d => `<div class="ot-head ${M.isToday(d.day) ? 'today' : ''}"><div class="dow">${M.isToday(d.day) ? 'TODAY' : M.WEEKDAY_SHORT[d.day.getDay()].toUpperCase()}</div>
           <div class="num">${d.day.getDate()}</div><div class="small ${d.total ? 'green' : 'muted'}">${d.total ? `${durLabel(d.total)} open` : 'no open time'}</div></div>`).join('')}
-        <div class="ot-lab">all<br>day</div>${week.map(d => `<div class="ot-allday">${d.allDay.map(it => `<div class="ot-chip ${it.busy ? 'closed' : 'open'}" style="--hue:${it.color}" data-act="detail" data-item="${esc(it.id)}" title="${it.busy ? 'Closed: blocks the whole day' : 'Open: just for info'}">${esc(it.title)}</div>`).join('')}</div>`).join('')}
+        <div class="ot-lab">all<br>day</div>${week.map(d => `<div class="ot-allday">${d.allDay.map(it => `<div class="ot-chip ${it.busy ? 'closed' : 'open'}" style="--hue:${it.color}" data-act="detail" data-item="${esc(it.id)}" title="${it.busy ? 'Closed: blocks the whole day' : 'Open: for information only'}">${esc(it.title)}</div>`).join('')}</div>`).join('')}
         <div class="ot-hours">${[...Array(h1 - h0)].map((_, i) => `<div style="height:${OT_HOUR}px">${M.fmtTimeMinutes((h0 + i) * 60)}</div>`).join('')}</div>
         ${week.map(col).join('')}
       </div></div>
       ${store.calendly.connected && store.calendly.eventTypes.length ? `<div><div class="section-title">${ic('link')}Your Calendly links</div>
-        <div class="small muted" style="margin:-4px 0 8px">Public links anyone can book from. Booked meetings land on your calendar automatically.</div>
+        <div class="small muted" style="margin:-4px 0 8px">Public links that anyone can book a meeting from. Booked meetings are added to your calendar automatically.</div>
         <div class="card">${store.calendly.eventTypes.map(t => `<div class="crow"><span style="width:10px;height:10px;border-radius:50%;background:${esc(t.color || '#bf5af2')}"></span>
           <div class="grow"><div class="title">${esc(t.name)}</div><div class="meta"><span>${t.minutes} min</span><span class="ellipsis">${esc(t.url)}</span></div></div>
           <button class="btn sm" data-act="copy-text" data-text="${esc(t.url)}">${ic('copy')} Copy link</button>
           <a class="btn sm icon" href="${esc(t.url)}" target="_blank" rel="noopener" title="Open">${ic('link')}</a></div>`).join('')}</div></div>` : ''}
-      <div class="small muted">Closed items take their time out of your open time; open ones are just for info. Events you make in Cadence start out closed and tasks start out open — change it in any item’s editor. “Copy open times” puts the list on your clipboard to paste into an email.</div>
+      <div class="small muted">Closed items are taken out of your open time, and open items are shown for information only. Events made in Cadence start out closed and tasks start out open, which you can change in each item’s editor. “Copy open times” copies the list so you can paste it into an email.</div>
     </div>`;
 }
 
@@ -1540,7 +1540,7 @@ function nagDialog(m) {
     ${putOff.length ? `<div class="nag-log"><b>Put off ${putOff.length} time${putOff.length === 1 ? '' : 's'} today:</b>${putOff.slice(-3).map(p => `<div>${M.fmtTime(p.at)} — “${esc(p.reason)}”</div>`).join('')}</div>` : ''}
     ${strict ? '<div class="small muted">In the Cadence Mac app, your distracting apps and blocked websites stay blocked until this is done.</div>' : ''}
     <div class="row nag-actions"><button class="btn primary" data-act="nag-done" autofocus>${ic('check')} Check it off…</button><button class="btn" data-act="nag-open">Open Today</button></div>
-    ${strict ? `<div class="nag-why"><label class="field"><span>Not now? Say why, in a few words.</span>
+    ${strict ? `<div class="nag-why"><label class="field"><span>To put it off, write the reason in a few words.</span>
         <input class="input" id="nagWhy" value="${esc(m.why || '')}" placeholder="e.g. at dinner with family, back at 8" autocomplete="off"></label>
         <div class="row"><select class="input" id="nagMin" style="width:auto">${[10, 15, 30, 60].map(x => `<option value="${x}" ${(m.minutes || 15) === x ? 'selected' : ''}>${x === 60 ? '1 hour' : `${x} min`}</option>`).join('')}</select>
         <button class="btn" data-act="nag-snooze">Put it off</button>${m.error ? `<span class="error">${esc(m.error)}</span>` : ''}</div></div>`
@@ -1583,20 +1583,20 @@ function settingsView() {
   const chans = key => `<div class="chans">${M.CHANNELS.map(([c, l, d]) => `<label class="check" title="${esc(d)}"><input type="checkbox" data-setting-set="${key}" value="${c}" ${s[key].includes(c) ? 'checked' : ''}>${l}</label>`).join('')}</div>`;
   const times = (from, to) => { const o = []; for (let m = from; m <= to; m += 30) o.push([m, M.fmtTimeMinutes(m)]); return o; };
   const a = s.availability;
-  return `<div class="header"><div class="grow"><h1>Settings</h1><div class="sub">Settings marked “this device” stay on this browser; everything else syncs with the Mac app.</div></div></div>
+  return `<div class="header"><div class="grow"><h1>Settings</h1><div class="sub">Settings marked “this device” apply to this browser only. The others sync to your Mac and iPhone.</div></div></div>
   <div class="page settings">
     ${ui.flash ? `<div class="callout"><span class="big">${ic('check')}</span><div class="grow">${esc(ui.flash)}</div><button class="btn ghost sm" data-act="clear-flash">${ic('x')}</button></div>` : ''}
     <div><h3>Install the app</h3><div class="card">
       ${isStandalone() ? `<div class="srow"><div>${ic('check')} Installed: you’re using Cadence as an app on this device.</div></div>` : `
-      <div class="srow"><div>iPhone or iPad<div class="small muted">In Safari, tap <b>Share</b> ${ic('share')} (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Cadence then opens from its icon, full screen like an app.</div></div></div>
+      <div class="srow"><div>iPhone or iPad<div class="small muted">In Safari, tap <b>Share</b> ${ic('share')} (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Cadence then opens from its icon without the Safari bars.</div></div></div>
       <div class="srow"><div>Android<div class="small muted">In Chrome, open the <b>⋮</b> menu and tap <b>Install app</b> (or <b>Add to Home screen</b>).</div></div></div>
-      <div class="srow"><div>Computer<div class="small muted">Chrome and Edge show an install button at the right end of the address bar. On a Mac, the <a href="/#download">Cadence Mac app</a> does more (blocking, focus tracking).</div></div></div>
+      <div class="srow"><div>Computer<div class="small muted">Chrome and Edge show an install button at the right end of the address bar. On a Mac, the <a href="/#download">Cadence Mac app</a> also blocks distracting apps and tracks focus.</div></div></div>
       ${installEvent ? `<div class="srow"><div>This browser can install it right now.</div><button class="btn primary" data-act="install-now">${ic('plus')} Install Cadence</button></div>` : ''}`}
     </div></div>
     <div><h3>Appearance</h3><div class="card">
       <div class="srow"><div>Theme<div class="small muted">This device. Dark is the default.</div></div>
         <select class="input" data-theme-pick>${[['dark', 'Dark'], ['light', 'Light'], ['system', 'Match the system']].map(([v, l]) => `<option value="${v}" ${currentTheme() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="srow"><div>Font<div class="small muted">This device. Verdana is the default; “Another font…” takes the name of any font installed on this computer.</div></div>
+      <div class="srow"><div>Font<div class="small muted">This device. Verdana is the default. “Another font…” accepts the name of any font installed on this computer.</div></div>
         <div class="row" style="justify-content:flex-end;flex-wrap:wrap">
           <select class="input" data-font-pick>${FONT_CHOICES.map(([v, l]) => `<option value="${v}" ${(currentFont().startsWith('custom:') ? 'custom' : currentFont()) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
           ${currentFont().startsWith('custom:') || ui.fontCustom ? `<form class="row" data-form="font-custom"><input class="input" id="fontName" placeholder="e.g. Avenir Next" value="${esc(currentFont().startsWith('custom:') ? currentFont().slice(7) : '')}" style="min-width:160px" autocomplete="off"><button class="btn">Use</button></form>` : ''}</div></div>
@@ -1604,9 +1604,9 @@ function settingsView() {
     </div></div>
 
     <div><h3>Tough love</h3><div class="card">
-      <div class="srow"><div class="grow">For things you’d rather put off<div class="small muted">In a task’s editor, set <b>Persistent</b>, <b>Pushy</b> or <b>Strict</b> and it keeps after you until it’s checked off. Strict covers the screen and asks why when you put it off.</div></div></div>
+      <div class="srow"><div class="grow">For things you’d rather put off<div class="small muted">In a task’s editor, set <b>Persistent</b>, <b>Pushy</b> or <b>Strict</b> and it keeps reminding you until it is checked off. Strict covers the screen and asks for a reason when you put it off.</div></div></div>
       <div class="srow">${tog('blockDuringFocus', 'Block distracting apps and sites during focus and study sessions (Mac app)', s.blockDuringFocus)}</div>
-      <div class="srow" style="flex-wrap:wrap"><div class="grow">Blocked websites<div class="small muted">The Cadence Mac app blocks these in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera and Firefox (Firefox needs Accessibility access for Cadence) while a strict task is overdue (and during focus sessions if that’s on). A browser tab can’t block other sites, so this needs the Mac app.</div>
+      <div class="srow" style="flex-wrap:wrap"><div class="grow">Blocked websites<div class="small muted">The Cadence Mac app blocks these in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera and Firefox (Firefox needs Accessibility access for Cadence) while a strict task is overdue, and during focus sessions if that is turned on. A browser tab cannot block other sites, so this needs the Mac app.</div>
         <div class="chips" style="margin-top:8px">${(s.blockedSites || []).map(x => `<span class="chip-x">${esc(x)}<button data-act="site-remove" data-site="${esc(x)}" title="Remove">${ic('x')}</button></span>`).join('') || '<span class="small muted">None yet.</span>'}</div>
         <form class="row" data-form="site-add" style="margin-top:8px"><input class="input" id="siteNew" placeholder="e.g. youtube.com" style="max-width:240px" autocomplete="off"><button class="btn">Add</button>
           <select class="input" data-site-suggest style="width:auto"><option value="">Suggestions…</option>${['youtube.com', 'instagram.com', 'tiktok.com', 'reddit.com', 'x.com', 'facebook.com', 'netflix.com', 'twitch.tv'].filter(x => !(s.blockedSites || []).includes(x)).map(x => `<option>${x}</option>`).join('')}</select></form></div></div>
@@ -1614,14 +1614,14 @@ function settingsView() {
     </div></div>
 
     <div><h3>AI check</h3><div class="card">
-      <div class="srow"><div class="grow">Check that reflections are real<div class="small muted">Before a reflection is accepted, Google’s Gemini reads it and sends back keyboard mashing, padding and copy-paste. Honest short answers pass. If Gemini can’t be reached, it’s accepted as usual.</div></div>
+      <div class="srow"><div class="grow">Check that reflections are real<div class="small muted">Before a reflection is accepted, Google’s Gemini reads it and rejects keyboard mashing, padding and copied text. Short honest answers are accepted. If Gemini cannot be reached, the reflection is accepted as usual.</div></div>
         <label class="check"><input type="checkbox" data-act-change="ai-toggle" ${ai.on ? 'checked' : ''} ${ai.key ? '' : 'disabled'}>On</label></div>
       <div class="srow" style="flex-wrap:wrap">${ai.key
         ? `<div class="grow">${ic('lock')} Gemini API key saved in this browser</div><button class="btn sm danger" data-act="ai-remove">Remove key</button>`
         : `<form class="row grow" data-form="ai-key"><input class="input grow" type="password" name="key" placeholder="Paste your Gemini API key" autocomplete="off"><button class="btn">Save</button></form>`}</div>
       <div class="srow" style="flex-wrap:wrap"><label class="row grow" style="gap:8px">Model <input class="input" data-ai-model value="${esc(ai.model)}" placeholder="${DEFAULT_MODEL}" style="max-width:260px"></label>
         <button class="btn sm" data-act="ai-test" ${ai.key ? '' : 'disabled'}>Test</button><span class="small" id="aiTest">${esc(ui.aiTest || '')}</span></div>
-      <div class="srow"><div class="small muted">Get a key at aistudio.google.com (API keys). It stays in this browser only: it isn’t sent to Cadence or synced, and reflection text goes to Google only while this is on.</div></div>
+      <div class="srow"><div class="small muted">Get a key at aistudio.google.com under API keys. The key is kept in this browser only and is not sent to Cadence or synced. Reflection text is sent to Google only while this is on.</div></div>
     </div></div>
 
     <div><h3>Account & sync</h3><div class="card">
@@ -1633,12 +1633,12 @@ function settingsView() {
         <button class="btn danger" data-act="delete-account">${ic('trash')} Delete account…</button></div>
       <div class="srow"><div>Desktop apps<div class="small muted">Cadence for Mac, Windows and Linux keeps reminders running in the background.</div></div>
         <div class="row" style="flex-wrap:wrap;justify-content:flex-end">${downloadButtons()}</div></div>
-      <div class="srow"><div>Mac app<div class="small muted">In Cadence for Mac, open Settings › Sync with Cadence Web and sign in with this same username and password. That's all — it finds this site automatically.</div></div></div>
+      <div class="srow"><div>Mac app<div class="small muted">In Cadence for Mac, open Settings › Sync with Cadence Web and sign in with this username and password. The Mac app finds this site by itself.</div></div></div>
     </div></div>
 
     ${window.cadenceDesktop?.setOpenAtLogin ? `<div><h3>This computer</h3><div class="card">
       <div class="srow"><label class="check"><input type="checkbox" data-act-change="open-at-login" ${ui.openAtLogin ? 'checked' : ''}>Open Cadence when I log in</label>
-        <span class="small muted">It starts quietly in the tray, so reminders and check-ins work all day.</span></div></div></div>` : ''}
+        <span class="small muted">It starts in the tray when the computer starts, so reminders and check-ins work all day.</span></div></div></div>` : ''}
     <div><h3>Reminders on this device</h3><div class="card">
       <div class="srow"><label class="check"><input type="checkbox" data-act-change="browser-reminders" ${reminders.enabled ? 'checked' : ''}>Show reminders in this browser</label>
         <span class="small muted">Turn off if the Mac app already reminds you on this computer.</span></div>
@@ -1705,12 +1705,12 @@ function settingsView() {
     <div><h3>Calendar imports</h3><div class="card">
       <div class="srow">${tog('autoImportCalendars', 'Import Google Calendar events and Calendly meetings onto my checklist', s.autoImportCalendars)}</div>
       <div class="srow"><span>Import the next</span>${sel('importDaysAhead', [3, 7, 14, 21, 30, 60].map(n => [n, `${n} days`]), s.importDaysAhead)}</div>
-      <div class="srow"><div class="small muted grow">${ui.importSummary ? esc(ui.importSummary) : `Imported items never notify you — turn notifications on for any single one in its editor. Deleting one hides it for good. Google Calendar is re-checked every 2 minutes while this page is open${store.google.push ? ' and pushes changes instantly' : ''}; Calendly every 30 minutes.`}</div>
+      <div class="srow"><div class="small muted grow">${ui.importSummary ? esc(ui.importSummary) : `Imported items never send notifications, but you can turn them on for one item in its editor. Deleting an imported item hides it permanently. Google Calendar is re-checked every 2 minutes while this page is open${store.google.push ? ' and pushes changes instantly' : ''}; Calendly every 30 minutes.`}</div>
         <button class="btn ${ui.importing ? 'busy' : ''}" data-act="import-now" ${ui.importing || !(store.google.connected || store.calendly.connected) ? 'disabled' : ''}>${ic('sync', ui.importing ? 'spinning' : '')} ${ui.importing ? 'Importing…' : 'Import now'}</button></div>
     </div></div>
 
     <div id="presets"><h3>Task presets</h3><div class="card">
-      <div class="srow small muted">Saved combinations of conditions (repeat, keep until done, due date, reminders, color…). Pick one at the top of the New Task window, or save the current one there with “Save as preset”.</div>
+      <div class="srow small muted">A preset is a saved set of conditions, such as the repeat schedule, due date, reminders and color. Pick one at the top of the New Task window, or save the current conditions there with “Save as preset”.</div>
       ${(s.taskPresets || []).map(p => `<div class="srow"><span class="dot" style="width:10px;height:10px;border-radius:50%;flex:none;background:${color(p.color)}"></span>
         <input class="input" style="max-width:220px" value="${esc(p.name)}" data-preset-name="${p.id}" aria-label="Preset name">
         <span class="small muted grow">${esc(presetSummary(p))}</span>
@@ -1723,16 +1723,16 @@ function settingsView() {
         <span class="small muted">${SCREENS.filter(x => x[3] === sec).map(x => x[1]).join(', ')}</span></div>`).join('')}
       <div class="srow small muted">Hidden sections are only hidden in this browser. Click a section’s heading in the sidebar to fold it.</div></div></div>
     <div><h3>Today’s progress ring</h3><div class="card">
-      <div class="srow"><div>The ring shows<div class="small muted">What’s left starts full and empties as you check things off; what’s done fills up. Click the ring on Today to switch quickly. Syncs to your Mac.</div></div>
+      <div class="srow"><div>The ring shows<div class="small muted">With “what’s left”, the ring starts full and empties as you check things off. With “what’s done”, it fills up instead. Clicking the ring on Today also switches between them. This setting syncs to your Mac.</div></div>
         <div class="seg"><button class="${s.ringShowsLeft ?? true ? 'on' : ''}" data-act="ring-mode-set" data-v="1">What’s left</button><button class="${s.ringShowsLeft ?? true ? '' : 'on'}" data-act="ring-mode-set" data-v="0">What’s done</button></div></div>
-      <div class="srow"><div>Until-done tasks and project subtasks count today when<div class="small muted">Ones due later are listed apart and don’t count. Urgent ones always count.</div></div>${projectTodaySelect()}</div>
+      <div class="srow"><div>Until-done tasks and project subtasks count today when<div class="small muted">Items due later are listed separately and are not counted. Urgent items are always counted.</div></div>${projectTodaySelect()}</div>
     </div></div>
     <div id="open-hours"><h3>Open hours</h3><div class="card">
-      <div class="srow small muted">When you’re normally free to be booked. Booking shows what’s left of these hours after your closed tasks and events.</div>
+      <div class="srow small muted">The hours when you can normally be booked. Booking shows what remains of these hours after your closed tasks and events.</div>
       <div class="srow"><span>Days</span><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button class="${a.weekdays.includes(w) ? 'on' : ''}" data-act="avail-day" data-w="${w}" title="${M.WEEKDAY_SHORT[w - 1]}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div></div>
       <div class="srow"><span>From</span>${sel('availability.startMinutes', times(360, 1200), a.startMinutes)}</div>
       <div class="srow"><span>Until</span>${sel('availability.endMinutes', times(480, 1380), a.endMinutes)}</div>
-      <div class="srow"><span>Breathing room around closed items</span>${sel('availability.bufferMinutes', [[0, 'None'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'], [30, '30 minutes']], a.bufferMinutes)}</div>
+      <div class="srow"><span>Free time kept around closed items</span>${sel('availability.bufferMinutes', [[0, 'None'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'], [30, '30 minutes']], a.bufferMinutes)}</div>
     </div></div>
 
     <div class="small muted" style="order:99">Read our <a href="/privacy" target="_blank">Privacy Policy</a> and <a href="/terms" target="_blank">Terms of Service</a>.</div>
@@ -1758,8 +1758,8 @@ function authView() {
   const a = ui.auth, create = a.mode === 'register';
   return `<div class="auth"><form class="auth-card" data-form="auth">
     <a href="/" class="small muted" style="text-decoration:none">← Back to home</a>
-    <div class="logo"><img src="/icon-192.png" alt=""><div><h1>Cadence</h1><div class="muted small">Your checklist, calendars and reflections — on the web and on your Mac.</div></div></div>
-    ${isIOS && !isStandalone() ? `<div class="callout small"><span>${ic('share')}</span><div>On an iPhone? Put Cadence on your Home Screen first: in Safari tap <b>Share</b> (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Sign in there: it keeps its own sign-in, apart from Safari.</div></div>` : ''}
+    <div class="logo"><img src="/icon-192.png" alt=""><div><h1>Cadence</h1><div class="muted small">Your checklist, calendars and reflections, on the web and on your computer.</div></div></div>
+    ${isIOS && !isStandalone() ? `<div class="callout small"><span>${ic('share')}</span><div>On an iPhone, add Cadence to your Home Screen before signing in: in Safari tap <b>Share</b> (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Then sign in from the Home Screen icon, because it keeps its own sign-in, separate from Safari.</div></div>` : ''}
     <div class="seg" style="align-self:flex-start"><button type="button" class="${!create ? 'on' : ''}" data-act="auth-mode" data-mode="login">Sign in</button>
       <button type="button" class="${create ? 'on' : ''}" data-act="auth-mode" data-mode="register">Create account</button></div>
     <label class="field"><span>Username</span><input class="input" name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\\-]+" autofocus></label>
@@ -1790,8 +1790,8 @@ function renderModal() {
   else if (m.type === 'booking') html = bookingDialog(m);
   else if (m.type === 'delete-account') html = `<form class="dialog sm" data-form="delete-account"><div class="body">
     <div class="row" style="gap:12px"><span class="badge-icon" style="background:var(--red)">${ic('trash')}</span><h2>Delete your account?</h2></div>
-    <div>This permanently deletes <b>${esc(store.user.username)}</b> and everything in it — tasks, reflections, settings, and your Google and Calendly connections — for every device. It can’t be undone.</div>
-    <div class="small muted">Tip: <a href="/api/account/export" download>download your data</a> first. The Mac app keeps its own copy on your Mac until you delete it there.</div>
+    <div>This permanently deletes <b>${esc(store.user.username)}</b> and everything in it, including tasks, reflections, settings and your Google and Calendly connections, on every device. This cannot be undone.</div>
+    <div class="small muted">You can <a href="/api/account/export" download>download your data</a> first. The Mac app keeps its own copy on your Mac until you delete it there.</div>
     <label class="field"><span>Type your password to confirm</span><input class="input" name="password" type="password" autocomplete="current-password" required autofocus></label>
     ${m.error ? `<div class="error">${esc(m.error)}</div>` : ''}
     </div><div class="foot"><span class="grow"></span><button type="button" class="btn" data-act="close">Cancel</button>
@@ -1806,7 +1806,7 @@ function renderModal() {
   else if (m.type === 'nag') html = nagDialog(m);
   else if (m.type === 'pj-keys') html = `<div class="dialog sm"><div class="body"><h2>Keyboard shortcuts</h2>
       <table class="keys">${PROJECT_KEYS.map(([k, v]) => `<tr><td><kbd>${esc(k)}</kbd></td><td class="muted">${esc(v)}</td></tr>`).join('')}</table>
-      <div class="small muted" style="margin-top:10px">No shortcuts needed: the + boxes add subtasks, the bar above the list changes picked ones, and each row has its own buttons. On Windows, use Ctrl for ⌘.</div></div>
+      <div class="small muted" style="margin-top:10px">None of these are required: the + boxes add subtasks, the bar above the list changes the picked rows, and each row has its own buttons. On Windows, use Ctrl in place of ⌘.</div></div>
     <div class="foot"><span class="grow"></span><button class="btn primary" data-act="close">Done</button></div></div>`;
   else if (m.type === 'sel-checkoff') html = `<div class="dialog sm"><div class="body"><h2>Check off ${ui.weekSel?.size || 0} item${ui.weekSel?.size === 1 ? '' : 's'}</h2>
       <div class="muted small">One reflection (at least ${store.settings.minReflectionWords} words), saved for each of them.</div>
@@ -1864,7 +1864,7 @@ function reflectionDialog(o, ctx, mode = 'done', minutes = null, left = 0) {
   return `<form class="dialog" data-form="reflection" data-occ="${esc(o.id)}" data-ctx="${ctx}" data-mode="${mode}"><div class="body">
     <div class="row" style="gap:12px"><span class="badge-icon" style="background:${missed ? 'var(--red)' : color(o.task.color)}">${ic(missed ? 'x' : 'quote')}</span>
       <div class="grow"><h2>${missed ? 'Why didn’t it happen?' : 'Reflect to complete'}</h2><div class="muted ellipsis">${esc(o.task.title)} · ${M.fmtDay(o.day, { weekday: 'long', month: 'short', day: 'numeric' })}</div></div></div>
-    <div>${missed ? `Write at least ${min} words about why you didn’t or couldn’t do it. It’s marked as not done, not failed — this is for learning.` : `Write at least ${min} words before checking this off.`} Some prompts:<ul class="prompts">${prompts.map(p => `<li>${p}</li>`).join('')}</ul></div>
+    <div>${missed ? `Write at least ${min} words about why you didn’t or couldn’t do it. It is marked as not done rather than failed, and the reflection is for learning what got in the way.` : `Write at least ${min} words before checking this off.`} Some prompts:<ul class="prompts">${prompts.map(p => `<li>${p}</li>`).join('')}</ul></div>
     <textarea class="input" id="reflText" rows="7" placeholder="${missed ? 'What happened?' : 'How did it go?'}" autofocus data-min="${min}"></textarea>
     ${missed ? '' : `<div class="taken"><div class="row" style="gap:8px;flex-wrap:wrap">${ic('timer')}<label for="reflTaken"><b>How long did it take?</b></label>
         <input class="input" id="reflTaken" style="width:130px" placeholder="e.g. 45 or 1:30" autocomplete="off" value="${minutes || ''}"><span class="small muted" id="reflTakenNote">${minutes ? M.fmtMinutes(minutes) : 'optional'}</span></div>
@@ -1884,8 +1884,8 @@ function checkInDialog(m) {
     <div class="row" style="gap:14px"><span class="badge-icon" style="width:46px;height:46px;background:var(--orange)">${ic('sun')}</span>
       <div class="grow"><h2>${esc(m.title)}</h2><div class="muted">${M.fmtDay(new Date())} · ${!items.length ? 'nothing scheduled' : done === items.length ? 'all done' : left ? `${left} left` : 'all settled'}</div></div>
       ${todayRing(done, items.length, 54, 6, 'checkin')}</div>
-    ${done && done === items.length ? `<div class="green">${ic('check')} Everything is checked off. Nice work.</div>` : ''}
-    <div class="card" style="max-height:340px;overflow:auto">${items.length ? splitUntilDone(items).map(([label, list]) => (label ? `<div class="crow-sub">${ic(label === 'Habits' ? 'habit' : 'flame')}${label}</div>` : '') + list.map(o => crow(o, { ctx: 'checkin' })).join('')).join('') : '<div class="crow muted">Nothing on today’s checklist. Add something so future-you knows the plan.</div>'}</div>
+    ${done && done === items.length ? `<div class="green">${ic('check')} Everything is checked off.</div>` : ''}
+    <div class="card" style="max-height:340px;overflow:auto">${items.length ? splitUntilDone(items).map(([label, list]) => (label ? `<div class="crow-sub">${ic(label === 'Habits' ? 'habit' : 'flame')}${label}</div>` : '') + list.map(o => crow(o, { ctx: 'checkin' })).join('')).join('') : '<div class="crow muted">There is nothing on today’s checklist yet.</div>'}</div>
     ${upcoming.length ? `<div><b>Still ahead on your calendar</b>${upcoming.slice(0, 4).map(e => `<div class="row small" style="margin-top:4px">
       <span style="width:3px;height:16px;background:${e.colorHex || '#0a84ff'};border-radius:2px"></span><span class="muted" style="width:72px">${M.fmtTime(e.startDate)}</span>${esc(e.title)}</div>`).join('')}</div>` : ''}
     </div><div class="foot"><button class="btn" data-act="new-task">${ic('plus')} Add task</button><span class="grow"></span>
@@ -1910,7 +1910,7 @@ function deleteRepeatDialog(m) {
   const b = (scope, text, sub, cls = '') => `<button class="btn ${cls} del-opt" data-act="delete-task" data-task="${t.id}" data-scope="${scope}" data-day="${m.day}"><b>${text}</b><span class="small muted">${sub}</span></button>`;
   return `<div class="dialog sm"><div class="body"><h2>Delete “${esc(t.title)}”?</h2><div class="muted">It repeats (${esc(M.planSummary(t) || 'repeating')}).</div>
     <div class="stack" style="gap:8px;margin-top:6px">
-      ${b('one', `Only this one (${label})`, M.isUntilDone(t) ? 'That round is skipped; the next one comes as usual.' : 'Just that day is skipped; the rest stay.')}
+      ${b('one', `Only this one (${label})`, M.isUntilDone(t) ? 'That round is skipped; the next one comes as usual.' : 'Only that day is skipped, and the rest stay.')}
       ${b('fromHere', 'This one and all later ones', 'It stops here. Past days and their reflections stay.')}
       ${b('all', 'All of them, past and future', 'The whole task goes. Reflections you wrote are kept.', 'danger')}
     </div></div><div class="foot"><span class="grow"></span><button class="btn" data-act="close">Cancel</button></div></div>`;
@@ -1934,7 +1934,7 @@ function detailDialog(m) {
       <div class="muted">${ic('clock')} ${o.start ? `${M.fmtTime(o.start)} – ${M.fmtTime(o.end)}` : 'All day'}</div>
       ${M.planSummary(t) ? `<div class="muted">${ic('repeat')} ${esc(M.planSummary(t))}</div>` : ''}
       ${t.notes ? `<div>${esc(t.notes)}</div>` : ''}
-      <div class="small muted">${from} · ${M.isBusy(t) ? 'closed: blocks this time' : 'open: just for info'} · ${M.isSilent(t) ? 'no reminders' : 'reminds you'} · not on your checklist</div>`;
+      <div class="small muted">${from} · ${M.isBusy(t) ? 'closed: blocks this time' : 'open: for information only'} · ${M.isSilent(t) ? 'no reminders' : 'reminds you'} · not on your checklist</div>`;
     buttons = `${t.externalURL ? `<a class="btn" href="${esc(t.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open</a>` : ''}
       <button class="btn" data-act="edit" data-task="${t.id}">Edit…</button>
       <button class="btn" data-act="make-kind" data-task="${t.id}" data-kind="task" title="Put it on your checklist">${ic('list')} Make it a task</button>
@@ -1944,7 +1944,7 @@ function detailDialog(m) {
     body = `<div class="muted">${ic('cal')} ${M.fmtDay(o.day)}</div>
       <div class="muted">${ic('clock')} ${o.start ? `${M.fmtTime(o.start)} – ${M.fmtTime(o.end)}` : 'Any time'}</div>
       ${M.planSummary(t) ? `<div class="muted">${ic('repeat')} ${esc(M.planSummary(t))}</div>` : ''}
-      ${t.notes ? `<div>${esc(t.notes)}</div>` : ''}<div class="small muted">${M.isBusy(t) ? 'Closed: blocks this time' : 'Open: just for info, you’re still free then'}</div>${r ? `<div class="muted" style="font-style:italic">“${esc(r.text)}”</div>` : ''}`;
+      ${t.notes ? `<div>${esc(t.notes)}</div>` : ''}<div class="small muted">${M.isBusy(t) ? 'Closed: blocks this time' : 'Open: shown for information, and you can still be booked then'}</div>${r ? `<div class="muted" style="font-style:italic">“${esc(r.text)}”</div>` : ''}`;
     buttons = `${o.done ? `<button class="btn" data-act="toggle" data-occ="${esc(o.id)}">Mark not done</button>` : `<button class="btn primary" data-act="toggle" data-occ="${esc(o.id)}">Complete…</button>`}
       ${o.missed ? `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">Undo “didn’t do it”</button>` : o.done ? '' : `<button class="btn" data-act="miss" data-occ="${esc(o.id)}">${ic('x')} Didn’t do it…</button>`}
       <button class="btn" data-act="edit" data-task="${t.id}">Edit…</button>
@@ -1979,7 +1979,7 @@ function quickEditFields(it, id) {
     ${fixed && timed ? '<div class="small muted">It repeats, so a new time applies to every repeat.</div>' : ''}
     <div class="row">${it.kind === 'google' ? `<button class="btn sm danger" data-act="gevent-delete" data-item="${esc(id)}">${ic('trash')} Delete from Google</button>` : ''}
       <span class="grow"></span><button class="btn sm primary" data-act="quick-save" data-item="${esc(id)}">Save changes</button></div>
-    <div class="tiny muted">Tip: on the week and booking grids you can also drag a block to move it, or drag its bottom edge to change its length.</div></div>`;
+    <div class="tiny muted">On the week and booking grids, you can also drag a block to move it, or drag its bottom edge to change its length.</div></div>`;
 }
 
 /**
@@ -2296,8 +2296,8 @@ function stepFields(m) {
       <button type="button" class="btn ghost sm icon" data-act="step-move" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Move up">↑</button>
       <button type="button" class="btn ghost sm icon" data-act="step-move" data-i="${i}" data-d="1" ${i < steps.length - 1 ? '' : 'disabled'} title="Move down">↓</button>
       <button type="button" class="btn ghost sm icon danger" data-act="step-remove" data-i="${i}" title="Remove">${ic('x')}</button></div>`).join('')}
-    <div class="row"><input class="input grow" id="stepNew" data-edit="step-new" placeholder="Add a step, e.g. stretch — press Return"><button type="button" class="btn sm" data-act="step-add">${ic('plus')} Add</button></div>
-    <div class="small muted">Tick them off each time; they start fresh every time it comes around. Ticking the last one opens the check-off.</div></div>`;
+    <div class="row"><input class="input grow" id="stepNew" data-edit="step-new" placeholder="Add a step, such as stretching, then press Return"><button type="button" class="btn sm" data-act="step-add">${ic('plus')} Add</button></div>
+    <div class="small muted">Steps are ticked off each time and start unticked the next time the habit comes around. Ticking the last step opens the check-off.</div></div>`;
 }
 
 function habitFields(m) {
@@ -2305,13 +2305,13 @@ function habitFields(m) {
   const others = [...store.tasks.values()].filter(t => M.isHabit(t) && !t.archived && t.id !== d.id).map(t => t.title);
   const field = (k, label, ph) => `<label class="field"><span>${label}</span><input class="input" data-edit="h-${k}" value="${esc(h[k] ?? '')}" placeholder="${esc(ph)}"></label>`;
   const sentence = habitSentence(d);
-  return `<div class="fieldset"><div class="legend">${ic('habit')} Make it stick</div>
+  return `<div class="fieldset"><div class="legend">${ic('habit')} Habit plan</div>
     <div class="seg wide">${M.HABIT_STYLES.map(([v, l]) => `<button type="button" class="${style === v ? 'on' : ''}" data-act="habit-style" data-style="${v}">${l.replace(/ a (new )?habit$/, '').replace('Stack it on', 'Stack on')}</button>`).join('')}</div>
     ${style === 'stack' ? `<label class="field"><span>After I… (a habit you already have)</span><input class="input" data-edit="h-stackAfter" list="habitTitles" value="${esc(h.stackAfter ?? '')}" placeholder="pour my morning coffee"></label>
       <datalist id="habitTitles">${others.map(o => `<option value="${esc(o[0].toLowerCase() + o.slice(1))}">`).join('')}</datalist>` : ''}
     ${style === 'replace' ? field('replaces', 'Instead of… (the habit you’re replacing)', 'scrolling my phone in bed') : ''}
     ${style === 'break' ? `<div class="grid2">${field('app', 'Screen-time app to keep down (optional)', 'YouTube')}${field('limitMinutes', 'Daily limit (minutes)', '30')}</div>
-      <div class="small muted" style="margin-top:-6px">The Cadence Mac app measures screen time, so the habit shows how you’re doing against the limit.</div>` : ''}
+      <div class="small muted" style="margin-top:-6px">The Cadence Mac app measures screen time, so the habit can show your time against the limit.</div>` : ''}
     ${field('identity', 'Who you’re becoming: I am someone who…', 'reads every day')}
     <div class="grid2">${field('cue', 'Make it obvious: when and where', 'at 9 PM on the couch')}${field('twoMinute', 'Make it easy: the 2-minute version', 'read one page')}</div>
     ${field('reward', 'Make it satisfying: right after, I get…', 'a cup of tea')}
@@ -2328,7 +2328,7 @@ function presetRow(m) {
     ${m.namingPreset ? `<input class="input" data-edit="presetName" placeholder="Preset name" value="${esc(m.presetName)}" style="width:170px">
       <button type="button" class="btn sm primary" data-act="preset-save">Save preset</button><button type="button" class="btn sm" data-act="preset-cancel">Cancel</button>`
       : `<button type="button" class="btn sm" data-act="preset-new" title="Save these conditions (repeat, keep until done, reminders, color…) to reuse">${ic('plus')} Save as preset</button>`}</div>
-    ${m.presetSaved ? `<div class="small green" style="margin-top:-8px">${ic('check')} Saved “${esc(m.presetSaved)}”. Pick it from the preset menu next time.</div>` : ''}`;
+    ${m.presetSaved ? `<div class="small green" style="margin-top:-8px">${ic('check')} Saved “${esc(m.presetSaved)}”. It is now in the preset menu.</div>` : ''}`;
 }
 
 function presetSummary(p) {
@@ -2410,10 +2410,10 @@ function editorDialog(m) {
       <button type="button" class="${kindName === 'Habit' ? 'on' : ''}" data-act="edit-kind" data-kind="habit">${ic('habit')} Habit</button>
       <button type="button" class="${kindName === 'Event' ? 'on' : ''}" data-act="edit-kind" data-kind="event">${ic('cal')} Event</button>
       <button type="button" class="${kindName === 'Bonus' ? 'on' : ''}" data-act="edit-kind" data-kind="bonus">${ic('star')} Bonus</button></div></div>
-    <div class="small muted" style="margin-top:-6px">${M.isEvent(d) ? 'Events show on your calendars only: no checkbox, no reflection.'
-      : bonus ? `Bonus tasks are optional extras: listed on Today and in Focus, but never required, never overdue and never reminding you. Each one you finish during a focus session is worth +${M.BONUS_POINTS} points.`
-      : isHab ? 'Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you’re becoming.'
-      : 'Tasks go on your checklist; checking one off asks for a short reflection.'}</div>
+    <div class="small muted" style="margin-top:-6px">${M.isEvent(d) ? 'Events appear on the calendars only. They have no checkbox and no reflection.'
+      : bonus ? `Bonus tasks are optional. They are listed on Today and in Focus, but they are never overdue and never send reminders. Each one finished during a focus session gives +${M.BONUS_POINTS} points.`
+      : isHab ? 'Habits repeat on a schedule and are tracked on the Habits page, which shows their streaks.'
+      : 'Tasks go on your checklist, and checking one off asks for a short reflection.'}</div>
     ${bonus ? '' : presetRow(m)}
     <label class="field"><span>Title</span><input class="input" data-edit="title" value="${esc(d.title)}" placeholder="What do you need to do?" autofocus required></label>
     <label class="field"><span>Notes</span><textarea class="input" data-edit="notes" rows="2" placeholder="Optional details">${esc(d.notes)}</textarea></label>
@@ -2424,8 +2424,8 @@ function editorDialog(m) {
         <span class="small muted">${M.hardnessOf(d) ? `${M.hardnessOf(d)} · ${M.HARDNESS[M.hardnessOf(d) - 1]}` : 'Not rated'}</span></div></div>
       <div class="fieldset"><div class="legend">Focus</div>
         <label class="check"><input type="checkbox" data-edit="offComputer" data-rerender ${d.offComputer ? 'checked' : ''}>Done away from the computer</label>
-        <div class="small muted" style="margin-top:4px">${d.offComputer ? 'A focus session on it keeps running while you’re away or the computer sleeps, and time away from the screen doesn’t count as away.'
-          : 'In a focus session, 5 minutes away from the computer (or the computer going to sleep) pauses it until you’re back.'}</div></div>`}
+        <div class="small muted" style="margin-top:4px">${d.offComputer ? 'A focus session on this task keeps running while you are away or the computer sleeps, and time away from the screen is not counted as away.'
+          : 'A focus session on this task pauses after 5 minutes without input, or when the computer sleeps, and resumes when you come back.'}</div></div>`}
     ${bonus ? bonusFieldset(m) : `<div class="fieldset"><div class="legend">When</div>
       ${M.isEvent(d) || isHab ? '' : `<div class="seg wide" role="group" aria-label="Starts"><button type="button" class="${d.after ? '' : 'on'}" data-act="edit-starts" data-v="">On a date</button><button type="button" class="${d.after ? 'on' : ''}" data-act="edit-starts" data-v="1">${ic('right')} After another task</button></div>`}
       ${d.after ? followUpControls(d) : ''}
@@ -2437,9 +2437,9 @@ function editorDialog(m) {
     <div class="fieldset"><div class="legend">Your time</div>
       <div class="seg wide"><button type="button" class="${M.isBusy(d) ? 'on' : ''}" data-act="edit-busy" data-busy="1">${ic('lock')} Closed</button>
         <button type="button" class="${M.isBusy(d) ? '' : 'on'}" data-act="edit-busy" data-busy="0">${ic('eye')} Open</button></div>
-      <div class="small muted">${M.isBusy(d) ? `Blocks this time: it’s taken out of your open time on Booking${d.source === 'google' || m.syncGoogle ? ', and shows as busy in Google Calendar' : ''}.` : 'Just for info: it shows on your calendars, but you’re still free to be booked then.'}</div></div>
+      <div class="small muted">${M.isBusy(d) ? `It blocks this time, so it is taken out of your open time on Booking${d.source === 'google' || m.syncGoogle ? ', and shows as busy in Google Calendar' : ''}.` : 'It is shown on your calendars for information, and you can still be booked at that time.'}</div></div>
     ${overlaps.length ? `<div class="fieldset"><div class="legend">${ic('layers')} Overlaps with</div>${overlaps.map(l => `<div class="small">${esc(l)}</div>`).join('')}
-      <div class="small muted">That’s fine: this task’s reminders will still fire on time, even in the middle of the other one.</div></div>` : ''}
+      <div class="small muted">This task’s reminders still fire on time, even during the other item.</div></div>` : ''}
     ${d.source === 'google' && !m.isNew ? `<div class="fieldset"><div class="legend">${ic('sync')} Synced with Google Calendar</div>
       <div class="small muted">Changes you save here update the event in Google Calendar, and changes made in Google show up here. Repeats are managed in Google Calendar.</div>
       ${d.externalURL ? `<a class="small" href="${esc(d.externalURL)}" target="_blank" rel="noopener">${ic('link')} Open in Google Calendar</a>` : ''}</div>` : `
@@ -2455,8 +2455,8 @@ function editorDialog(m) {
           <input class="input" type="number" min="1" max="365" style="width:80px" data-edit="cycleGap" data-rerender value="${m.cycleGap}">
           <select class="input" style="width:auto" data-edit="cycleUnit" data-rerender><option value="days" ${m.cycleUnit === 'days' ? 'selected' : ''}>days</option><option value="weeks" ${m.cycleUnit === 'weeks' ? 'selected' : ''}>weeks</option></select></div></label>
         <label class="field"><span>Times in total</span><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="cycleTimes" data-rerender value="${m.cycleTimes}"></label></div>
-        <div class="small muted">${ic('flame')} No dates: it stays on your list every day until you check it off (or mark it “didn’t do it”), then takes a ${m.cycleGap}-${m.cycleUnit === 'weeks' ? 'week' : 'day'} break and comes back — ${m.cycleTimes} time${m.cycleTimes == 1 ? '' : 's'} in total, then it’s finished for good.</div>` : ''}
-      ${lt ? `<div class="small muted">${ic('repeat')} On your checklist and reminds you every day until ${M.fmtDay(M.parseKey(m.endDate), { weekday: 'short', month: 'short', day: 'numeric' })} (${Math.max(0, M.daysBetween(M.parseKey(m.date), M.parseKey(m.endDate))) + 1} days). Check off each day on its own.</div>` : ''}
+        <div class="small muted">${ic('flame')} It has no dates. It stays on your list every day until you check it off or mark it “didn’t do it”, then takes a ${m.cycleGap}-${m.cycleUnit === 'weeks' ? 'week' : 'day'} break and comes back, ${m.cycleTimes} time${m.cycleTimes == 1 ? '' : 's'} in total. After that it is finished.</div>` : ''}
+      ${lt ? `<div class="small muted">${ic('repeat')} It is on your checklist and reminds you every day until ${M.fmtDay(M.parseKey(m.endDate), { weekday: 'short', month: 'short', day: 'numeric' })} (${Math.max(0, M.daysBetween(M.parseKey(m.date), M.parseKey(m.endDate))) + 1} days). Each day is checked off separately.</div>` : ''}
       ${!lt && !cyc && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
         <button type="button" class="btn sm" data-act="edit-weekdays">Weekdays</button></div>` : ''}
       ${!lt && !cyc && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
@@ -2467,8 +2467,8 @@ function editorDialog(m) {
         <div class="small muted">${esc(M.recurrenceSummary(preview, M.parseKey(m.date)))}</div>` : ''}
       ${M.isEvent(d) || lt || cyc ? '' : `<label class="check" style="margin-top:4px"><input type="checkbox" data-edit="persist" data-rerender ${persist ? 'checked' : ''}>${ic('flame')} Keep it on my list every day until it’s done</label>
         ${persist ? `<div class="small muted" style="margin-top:-4px">${r.frequency === 'none'
-          ? 'It shows up and reminds you every day until you check it off or mark it “didn’t do it”. Then it’s gone.'
-          : 'Each one shows up and reminds you every day until you check it off or mark it “didn’t do it”, or until the next one arrives and takes its place.'}</div>
+          ? 'It appears and reminds you every day until you check it off or mark it “didn’t do it”, and then it leaves the list.'
+          : 'Each one appears and reminds you every day until you check it off or mark it “didn’t do it”, or until the next one replaces it.'}</div>
           ${r.frequency === 'none' ? `<div class="row" style="flex-wrap:wrap"><label class="check"><input type="checkbox" data-edit="hasDue" data-rerender ${m.hasDue ? 'checked' : ''}>Has a due date</label>
             ${m.hasDue ? `<input class="input" style="width:auto" type="date" data-edit="dueDate" data-rerender value="${m.dueDate}" min="${m.date}"><span class="small muted">It keeps going past the due date, marked “Past due”.</span>` : ''}</div>` : ''}` : ''}`}
     </div>
@@ -2477,7 +2477,7 @@ function editorDialog(m) {
     ${isHab ? habitFields(m) : ''}
     ${bonus ? '' : `<div class="fieldset"><div class="legend">Reminders</div>
       <label class="check"><input type="checkbox" data-edit="notify" data-rerender ${d.channels.length ? 'checked' : ''}>
-        ${d.channels.length ? `${ic('bell')} Notify me about this task` : `${ic('bell-off')} No notifications — stays on the checklist quietly`}</label>
+        ${d.channels.length ? `${ic('bell')} Notify me about this task` : `${ic('bell-off')} No notifications. It stays on the checklist without reminders.`}</label>
       ${d.channels.length ? `
       <div class="checks">${BEFORE.map(offCheck).join('')}</div>
       ${m.hasTime ? `<div class="small" style="font-weight:600">During the task</div><div class="checks">${DURING.filter(o => -o < d.durationMinutes).map(offCheck).join('')}</div>` : ''}
@@ -2494,7 +2494,7 @@ function editorDialog(m) {
     <div class="fieldset"><div class="legend">Color</div><div class="swatches">${Object.entries(M.COLORS).map(([k, v]) => `<button type="button" class="swatch ${d.color === k ? 'on' : ''}" style="background:${v}" data-act="edit-color" data-color="${k}" title="${k}"></button>`).join('')}</div></div>
     ${store.google.connected && store.google.tasks && m.isNew && !M.isEvent(d) && !isHab && !bonus && !d.source
       ? `<label class="check"><input type="checkbox" data-edit="addToGTasks" ${m.addToGTasks ? 'checked' : ''}>${ic('list')} Also add to Google Tasks</label>` : ''}
-    ${d.source === 'gtasks' ? `<div class="small muted">${ic('sync')} Synced with Google Tasks: title, notes, due date and checking it off update Google too.</div>` : ''}
+    ${d.source === 'gtasks' ? `<div class="small muted">${ic('sync')} Synced with Google Tasks. Changing the title, notes or due date, or checking it off, also updates Google.</div>` : ''}
     ${!store.google.connected || d.googleEventID || d.source || bonus ? '' : M.isEvent(d)
       ? `<label class="check"><input type="checkbox" data-edit="syncGoogle" data-rerender ${m.syncGoogle ? 'checked' : ''}>${ic('sync')} Sync with Google Calendar</label>
          <div class="small muted" style="margin-top:-8px">${m.syncGoogle ? `Creates it in your Google Calendar${r.frequency !== 'none' ? ' (with the repeat schedule)' : ''}; edits stay in sync both ways.` : 'Keep this event in Cadence only.'}</div>`
@@ -2516,8 +2516,8 @@ function bonusFieldset(m) {
       <label class="field"><span>${repeats ? 'Each time, it can be checked off' : 'Can be checked off'}</span><select class="input" data-edit="bonusLimit" data-rerender>${opts.map(n => `<option value="${n}" ${n === limit ? 'selected' : ''}>${M.bonusLimitLabel(n)}</option>`).join('')}</select></label></div>
     ${saved && M.bonusCount(saved) ? `<div class="small">Checked off ${M.bonusCount(saved)} time${M.bonusCount(saved) === 1 ? '' : 's'} so far${M.bonusFinished(saved) ? ': all done' : repeats ? ` (this time: ${esc(M.bonusSummary(saved).toLowerCase())})` : ''}</div>` : ''}
     <div class="small muted">${limit <= 0 ? `No limit: check it off as many times as you like (several times a day too)${repeats ? ', each time it comes around' : ''}.`
-      : limit === 1 ? (repeats ? 'Check it off once each time it comes around.' : 'Check it off once and it’s done for good. It never shows as overdue or missed if you don’t.')
-      : `It stays on your list until you’ve checked it off ${limit} times (several times a day is fine)${repeats ? ', then waits until it comes around again' : ', then it’s done for good'}.`}</div></div>
+      : limit === 1 ? (repeats ? 'Check it off once each time it comes around.' : 'It can be checked off once, and then it is finished. If it is never done, it is not shown as overdue or missed.')
+      : `It stays on your list until you’ve checked it off ${limit} times (it can be checked off several times a day)${repeats ? ', then waits until it comes around again' : ', and then it is finished'}.`}</div></div>
   <div class="fieldset"><div class="legend">Comes back</div>
     <div class="grid2"><label class="field"><span>Comes back</span><select class="input" data-edit="bonusRepeat" data-rerender>
       <option value="none" ${!cyc && r.frequency === 'none' ? 'selected' : ''}>No, just once</option>
@@ -2528,7 +2528,7 @@ function bonusFieldset(m) {
         <input class="input" type="number" min="1" max="365" style="width:80px" data-edit="cycleGap" data-rerender value="${m.cycleGap}">
         <select class="input" style="width:auto" data-edit="cycleUnit" data-rerender><option value="days" ${m.cycleUnit === 'days' ? 'selected' : ''}>days</option><option value="weeks" ${m.cycleUnit === 'weeks' ? 'selected' : ''}>weeks</option></select></div></label>
       <label class="field"><span>Times in total</span><input class="input" type="number" min="1" max="99" style="width:80px" data-edit="cycleTimes" data-rerender value="${m.cycleTimes}"></label></div>
-      <div class="small muted">${ic('flame')} Once it’s been checked off${limit === 1 ? '' : ` ${limit} times`}, it takes a ${m.cycleGap}-${m.cycleUnit === 'weeks' ? 'week' : 'day'} break and comes back: ${m.cycleTimes} time${m.cycleTimes == 1 ? '' : 's'} in total.</div>` : ''}
+      <div class="small muted">${ic('flame')} After it has been checked off${limit === 1 ? '' : ` ${limit} times`}, it takes a ${m.cycleGap}-${m.cycleUnit === 'weeks' ? 'week' : 'day'} break and comes back, ${m.cycleTimes} time${m.cycleTimes == 1 ? '' : 's'} in total.</div>` : ''}
     ${!cyc && r.frequency === 'weekly' ? `<div class="row" style="flex-wrap:wrap"><div class="wd">${[1, 2, 3, 4, 5, 6, 7].map(w => `<button type="button" class="${M.effectiveWeekdays(r, M.parseKey(m.date)).includes(w) ? 'on' : ''}" data-act="edit-weekday" data-w="${w}">${M.WEEKDAY_LETTER[w - 1]}</button>`).join('')}</div>
       <button type="button" class="btn sm" data-act="edit-weekdays">Weekdays</button></div>` : ''}
     ${!cyc && r.frequency !== 'none' ? `<div class="grid2"><label class="field"><span>Ends</span><select class="input" data-edit="endMode" data-rerender>
@@ -2536,7 +2536,7 @@ function bonusFieldset(m) {
         <option value="afterCount" ${m.endMode === 'afterCount' ? 'selected' : ''}>After a number of times</option></select></label>
       ${m.endMode === 'onDate' ? `<label class="field"><span>End date</span><input class="input" type="date" data-edit="endDate" data-rerender value="${m.endDate}" min="${m.date}"></label>` : ''}
       ${m.endMode === 'afterCount' ? `<label class="field"><span>Times</span><input class="input" type="number" min="1" max="999" data-edit="endCount" data-rerender value="${m.endCount}"></label>` : ''}</div>
-      <div class="small muted">${esc(M.recurrenceSummary(preview, M.parseKey(m.date)))}. Each time it comes around it’s a fresh start: anything not checked off doesn’t carry over.</div>` : ''}
+      <div class="small muted">${esc(M.recurrenceSummary(preview, M.parseKey(m.date)))}. Each time it comes around the count starts again, and unused check-offs do not carry over.</div>` : ''}
   </div>`;
 }
 
@@ -2699,7 +2699,7 @@ async function saveEditor() {
       closeModal(); toast('Added to Cadence and Google Tasks', { icon: 'sync', tone: 'good' });
     } catch (e) {
       store.upsertTask(t);
-      m.saving = false; m.error = `Saved in Cadence only — Google Tasks failed: ${e.message}`; renderModal();
+      m.saving = false; m.error = `Saved in Cadence only, because Google Tasks failed: ${e.message}`; renderModal();
     }
     return;
   }
@@ -2730,7 +2730,7 @@ async function saveEditor() {
       if (t.recurrence.frequency !== 'none') runImport();
     } catch (e) {
       store.upsertTask(t);
-      m.saving = false; m.error = `Saved in Cadence only — Google Calendar failed: ${e.message}`; renderModal();
+      m.saving = false; m.error = `Saved in Cadence only, because Google Calendar failed: ${e.message}`; renderModal();
     }
     return;
   }
@@ -2843,7 +2843,7 @@ function toggleOcc(id, ctx) {
   if (o.done) {
     store.uncomplete(o);
     if (ui.modal?.type === 'detail') closeModal();
-    toast(`Unchecked ${o.task.title} — the reflection stays saved`, { icon: 'circle' });
+    toast(`Unchecked ${o.task.title}. The reflection stays saved.`, { icon: 'circle' });
     return;
   }
   if (ctx === 'checkin' && ui.modal?.type === 'checkin') { ui.modal.reflecting = o; ui.modal.reflectMode = 'done'; renderModal(); return; }
@@ -2857,7 +2857,7 @@ function missOcc(id, ctx) {
   if (o.missed) {
     store.unmiss(o);
     if (ui.modal?.type === 'detail') closeModal();
-    toast(`${o.task.title} is open again — the reflection stays saved`, { icon: 'circle' });
+    toast(`${o.task.title} is open again. The reflection stays saved.`, { icon: 'circle' });
     return;
   }
   if (ctx === 'checkin' && ui.modal?.type === 'checkin') { ui.modal.reflecting = o; ui.modal.reflectMode = 'missed'; renderModal(); return; }
@@ -2913,16 +2913,16 @@ function projectCard(p) {
 function projectListView() {
   const active = store.activeProjects, archived = [...store.projects.values()].filter(p => p.archived);
   const gantt = store.device('projectListGantt', false), folded = projCollapsed('all');
-  return `<div class="header"><div class="grow"><h1>Projects</h1><div class="sub">Break a big goal into subtasks, give each a deadline, and see it all on a Gantt chart.</div></div>
+  return `<div class="header"><div class="grow"><h1>Projects</h1><div class="sub">A project is split into subtasks, each with its own deadline, and can be viewed as an outline, a Gantt chart or a map.</div></div>
       <div class="seg"><button class="${gantt ? '' : 'on'}" data-act="project-list-mode" data-gantt="0">Cards</button><button class="${gantt ? 'on' : ''}" data-act="project-list-mode" data-gantt="1">Gantt</button></div>
       <button class="btn primary" data-act="project-new">${ic('plus')} New Project</button></div>
     <div class="page stack" style="max-width:${gantt ? 1300 : 1100}px">
-      ${active.length && gantt ? `<div class="row small muted"><span class="grow">Every project on one chart. Click a project's name to fold it; click a subtask to open its project.</span>
+      ${active.length && gantt ? `<div class="row small muted"><span class="grow">Every project on one chart. Click a project’s name to fold it, or click a subtask to open its project.</span>
           <button class="btn sm" data-act="gantt-fold-all" data-fold="1">Fold all</button><button class="btn sm" data-act="gantt-fold-all" data-fold="0">Unfold all</button></div>
         <div class="card pad">${ganttChart(active, folded)}</div>`
       : active.length ? `<div class="pgrid">${active.map(projectCard).join('')}</div>`
         : `<div class="card pad stack" style="gap:8px"><b>${ic('layers')} No projects yet</b>
-            <div class="muted">A project is anything with several steps: an essay, a science fair entry, a trip. Add subtasks, split those into smaller ones, and give any of them a deadline. Deadlines coming up show on your Today list.</div>
+            <div class="muted">A project is any piece of work with several steps, such as an essay or a science fair entry. Subtasks can be split into smaller ones, and any of them can have a deadline. Subtasks with a deadline coming up appear on the Today list.</div>
             <div><button class="btn primary" data-act="project-new">${ic('plus')} Start a project</button></div></div>`}
       ${archived.length ? `<details><summary class="section-title" style="cursor:pointer">Archived (${archived.length})</summary><div class="pgrid">${archived.map(projectCard).join('')}</div></details>` : ''}
     </div>`;
@@ -3068,8 +3068,8 @@ function projectOutline(p, collapsed) {
   while (open.length) { const g = open.pop(); parts.push(`<div class="prow pghost" style="--depth:${g.depth + 1}">${ghostBtn(`Add to “${g.title || 'this'}”`, `data-act="pj-add" data-parent="${esc(g.id)}"`)}</div>`); }
   return `<div class="card poutline" style="--pc:${color(p.color)}">${rows.length ? parts.join('')
       : '<div class="muted" style="padding:10px 4px">No subtasks yet. Add the first one below, then use + on a row to break it down further.</div>'}
-      <form class="prow padd" data-form="project-add" data-project="${esc(p.id)}">${ic('plus')}<input id="padd-${esc(p.id)}" placeholder="Add a subtask — press Return" autocomplete="off"></form></div>
-    <div class="small muted">Return adds the next subtask, Tab moves it in a level, Shift-Tab out. Click a row’s edge to pick it (⌘ or Shift for several, or Shift-drag a box), then change them all from the bar. Press ? for every shortcut.</div>`;
+      <form class="prow padd" data-form="project-add" data-project="${esc(p.id)}">${ic('plus')}<input id="padd-${esc(p.id)}" placeholder="Add a subtask, then press Return" autocomplete="off"></form></div>
+    <div class="small muted">Return adds the next subtask, Tab moves it in a level and Shift-Tab moves it out. Click a row’s edge to pick it (⌘ or Shift picks several, as does Shift-dragging a box), then change the picked rows from the bar. Press ? to see every shortcut.</div>`;
 }
 
 function projectRow(p, r, collapsed, { selectedView = false } = {}) {
@@ -3209,7 +3209,7 @@ function projectMap(p, collapsed) {
 }
 
 const PROJECT_TODAY_CHOICES = [[-1, 'Only urgent ones'], [0, 'Due today'], [1, 'Due by tomorrow'], [2, 'Due within 2 days'], [3, 'Due within 3 days'], [7, 'Due within a week']];
-const projectTodaySelect = () => `<label class="small muted row" style="gap:6px" title="Which project subtasks join today’s list and its progress ring. Urgent ones always do.">On today:
+const projectTodaySelect = () => `<label class="small muted row" style="gap:6px" title="Which project subtasks are added to today’s list and its progress ring. Urgent subtasks are always added.">On today:
   <select class="input sm" style="width:auto" data-bind="projectTodayDays">${PROJECT_TODAY_CHOICES.map(([v, l]) => `<option value="${v}" ${(store.settings.projectTodayDays ?? 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
 
 function projectDeadlineRow(d, { upcoming = false } = {}) {
@@ -3297,7 +3297,7 @@ function studyTick() {
     if (!r.pausedAt) {
       if (r.mode === 'timed') {
         const st = M.timedState(r, now);
-        if (st.finished) { studyNotify('Study session done', `${r.rounds} round${r.rounds === 1 ? '' : 's'} of ${r.title}. Nice work.`); finishStudy(); return; }
+        if (st.finished) { studyNotify('Study session done', `${r.rounds} round${r.rounds === 1 ? '' : 's'} of ${r.title} finished.`); finishStudy(); return; }
         const key = `${st.round}|${st.onBreak}`;
         if (!studyNotified.has(key)) {
           studyNotified.add(key);
@@ -3311,7 +3311,7 @@ function studyTick() {
         studyNotified.add(`p${r.cycle}|${r.index}`);
         const last = r.index + 1 >= r.periods.length && r.cycle >= (r.repeats || 1);
         if (r.autoAdvance) {
-          if (last) { studyNotify('Session done', `${r.title}: all intervals finished. Nice work.`); finishStudy(); return; }
+          if (last) { studyNotify('Session done', `${r.title}: all intervals finished.`); finishStudy(); return; }
           updateRun(x => M.nextPeriod(x, now));
           const n = M.runPeriod(studyRun);
           studyNotify(`${n.title}: ${n.minutes} min`, n.kind === 'breakTime' ? 'Break time. Look away from the screen.' : `Back to ${r.title}.`);
@@ -3371,7 +3371,7 @@ function studyView() {
   const tab = store.device('studyTab', 'session');
   const tabs = [['session', 'Session'], ['courses', 'Presets'], ['history', 'History']];
   const body = tab === 'courses' ? coursesPanel() : tab === 'history' ? studyHistory() : studyRun ? runningStudy() : studySetup();
-  return `<div class="header"><div class="grow"><h1>Study</h1><div class="sub">Interval presets (the class period, 25 on / 5 off, your own) or time away from the screen.</div></div>
+  return `<div class="header"><div class="grow"><h1>Study</h1><div class="sub">Study in timed intervals, such as the class period or 25 minutes on and 5 off, or away from the screen.</div></div>
       <div class="seg">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="study-tab" data-tab="${k}">${l}</button>`).join('')}</div></div>
     <div class="page stack" style="max-width:1000px">${body}</div>`;
 }
@@ -3403,7 +3403,7 @@ function studySetup() {
   if (mode === 'offline') {
     const pm = d.plannedMinutes ?? 60;
     options = `<label class="row small">How long <select class="input sm" style="width:auto" data-study-opt="plannedMinutes">${[30, 45, 60, 90, 120, 180, 0].map(m => `<option value="${m}" ${m === pm ? 'selected' : ''}>${m ? M.fmtDuration(m * 60) : 'Until I stop'}</option>`).join('')}</select></label>
-      <div class="small muted">Close the laptop or walk away from it. If you use this page during the session, Cadence notes it and reminds you.</div>`;
+      <div class="small muted">Close the laptop or move away from it. If you use this page during the session, Cadence records it and reminds you.</div>`;
   } else {
     const changed = saved && JSON.stringify([saved.periods, saved.repeats, saved.autoAdvance, saved.taskBased]) !== JSON.stringify([c.periods, c.repeats, c.autoAdvance, c.taskBased]);
     options = `${c.showPhase !== false && saved ? phaseBanner(saved) : ''}
@@ -3412,7 +3412,7 @@ function studySetup() {
       <div class="period-strip">${c.periods.map((p, i) => p.enabled === false ? '' : `<span class="period-pill ${p.kind === 'breakTime' ? 'brk' : ''}"><b>${esc(p.title)}</b>${c.taskBased ? `<span class="tiny muted">${p.tasks.length} task${p.tasks.length === 1 ? '' : 's'}</span>` : minutesInput(p.minutes, `data-draft="minutes" data-i="${i}"`)}</span>`).join('<span class="muted">›</span>')}</div>
       <div class="row small" style="gap:14px">Repeat <input class="input sm" type="number" min="1" max="20" value="${c.repeats || 1}" data-draft="repeats" style="width:60px">×
         <label class="check"><input type="checkbox" data-draft="autoAdvance" ${c.autoAdvance ? 'checked' : ''}>Move on to the next interval by itself</label></div>
-      <div class="row small"><span class="muted grow">${c.taskBased ? 'Tick off each interval’s tasks, then move on.' : `About ${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * (c.repeats || 1) * 60)} in all. Change any length; it’s just for this session unless you save it.`}</span>
+      <div class="row small"><span class="muted grow">${c.taskBased ? 'Tick off each interval’s tasks, then move on.' : `About ${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * (c.repeats || 1) * 60)} in all. Changes to the lengths apply to this session only, unless you save them.`}</span>
         ${saved ? (changed ? `<button class="btn sm" data-act="draft-save">Save to ${esc(saved.title)}</button>` : '') : '<button class="btn sm" data-act="draft-save">Save as my preset</button>'}</div>`;
   }
   return `${last ? `<div class="callout" style="background:${tint('#30d158', .12)}"><span class="big green">${ic('check')}</span><div class="grow"><b>Logged ${M.fmtDuration(last.minutes * 60)} of ${esc(last.title)}</b>
@@ -3439,14 +3439,14 @@ function runningStudy() {
     const st = M.timedState(r, now), total = (st.onBreak ? r.breakMinutes : r.studyMinutes) * 60_000;
     body = `<div class="card pad row" style="gap:30px">${bigClock(st.msLeft, total, st.onBreak ? 'break' : 'studying', st.onBreak ? 'var(--green)' : 'var(--accent)')}
       <div class="stack" style="gap:10px"><h2 style="margin:0">${st.onBreak ? 'Break' : `Round ${st.round} of ${r.rounds}`}</h2>
-        <div class="muted">${st.onBreak ? 'Stand up, stretch, drink some water, look away from the screen.' : `Just ${esc(r.title)}. Phone away.`}</div>
+        <div class="muted">${st.onBreak ? 'Stand up, stretch, drink some water and look away from the screen.' : `Work on ${esc(r.title)} only, with your phone put away.`}</div>
         <div class="row" style="gap:5px">${[...Array(r.rounds)].map((_, i) => `<span class="round-pip ${i + 1 < st.round || (i + 1 === st.round && st.onBreak) ? 'done' : i + 1 === st.round ? 'now' : ''}"></span>`).join('')}</div>
         <div class="small muted">${r.studyMinutes} min study · ${r.breakMinutes} min break</div></div></div>`;
   } else if (r.mode === 'offline') {
     const left = M.offlineMsLeft(r, now);
     body = `<div class="card pad row" style="gap:30px">${bigClock(left ?? M.runElapsed(r, now), left == null ? 1 : r.plannedMinutes * 60_000, left == null ? 'away' : left < 0 ? 'over' : 'left', 'var(--teal, #30b0c7)')}
       <div class="stack" style="gap:10px"><h2 style="margin:0">Away from the screen</h2>
-        <div class="muted">Close the laptop or walk away. Paper, textbook, whiteboard. Come back and end the session when you’re done.</div>
+        <div class="muted">Close the laptop or move away from it, and work on paper. Come back and end the session when you are done.</div>
         <div class="${r.screenMs < 10_000 ? 'green' : 'orange'}">${ic(r.screenMs < 10_000 ? 'check' : 'monitor')} Screen used: <span data-study-screen>${M.fmtStudyClock(r.screenMs)}</span></div></div></div>`;
   } else {
     const strip = `<div class="period-strip"><span class="small muted">Cycle ${r.cycle}</span>${r.periods.map((p, i) => `<button class="period-pill ${i === r.index && !r.wrapUp ? 'now' : i < r.index || r.wrapUp ? 'done' : ''}" data-act="period-go" data-i="${i}">${i < r.index || r.wrapUp ? ic('check') + ' ' : ''}${esc(p.title)}</button>`).join('')}</div>`;
@@ -3454,7 +3454,7 @@ function runningStudy() {
       const next = M.nextPhase(r.phase);
       const ph = r.showPhase !== false;
       body = `${course && ph ? phaseBanner(course, r.phase) : ''}${strip}<div class="card pad stack" style="gap:12px"><h2 style="margin:0">${ic('check')} ${ph ? `Cycle ${r.cycle} done` : 'All intervals done'}</h2>
-        <div class="muted">${ph ? 'Repeat, and move on to the next phase if it seems good.' : 'Go again, or finish and log it.'}</div>
+        <div class="muted">${ph ? 'Repeat the phase, or move on to the next one if you are ready.' : 'Go again, or finish and log it.'}</div>
         <div class="row" style="flex-wrap:wrap"><button class="btn" data-act="cycle-repeat" data-phase="${r.phase}">${ic('refresh')} ${ph ? `Repeat ${M.PHASE_INFO[r.phase].title.toLowerCase()}` : 'Go again'}</button>
           ${next && ph ? `<button class="btn primary" data-act="cycle-repeat" data-phase="${next}">Move on to ${M.PHASE_INFO[next].title.toLowerCase()}</button>` : ''}<span class="grow"></span>
           <button class="btn" data-act="study-finish">Finish and log</button></div>
@@ -3533,11 +3533,11 @@ function courseEditor(c) {
     <label class="check"><input type="checkbox" data-act-change="course-showphase" data-course="${cid}" ${c.showPhase !== false ? 'checked' : ''}>Use the phase, note rules and “what you got wrong” (the class-period way of studying)</label>
     ${c.showPhase === false ? '' : `<div class="card pad stack" style="gap:10px"><div class="section-title" style="margin:0">${ic('study')} Phase</div>
       <div class="seg">${M.PHASES.map(p => `<button class="${c.phase === p ? 'on' : ''}" data-act="course-phase" data-course="${cid}" data-phase="${p}">${M.PHASE_INFO[p].title}</button>`).join('')}</div>
-      <div class="small muted">These overlap a lot with the class periods, so it’s guidance: some ideas to try while studying.</div>
+      <div class="small muted">These overlap with the class periods, so they are suggestions to try while studying rather than rules.</div>
       <table class="rules"><tr><th>Phase</th><th>Homework</th><th>Quiz</th></tr>${rulesTable}</table></div>`}
     <div class="card pad stack" style="gap:10px"><div class="row"><div class="section-title grow" style="margin:0">${ic('timer')} Intervals</div>
         <div class="seg"><button class="${c.taskBased ? '' : 'on'}" data-act="course-taskbased" data-course="${cid}" data-v="0">Timed</button><button class="${c.taskBased ? 'on' : ''}" data-act="course-taskbased" data-course="${cid}" data-v="1">By tasks</button></div></div>
-      <div class="small muted">${c.taskBased ? 'Each period ends when you’ve ticked off its tasks.' : `Each interval ends when its time is up (${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * 60)} per round). Tasks are a checklist along the way.`}</div>
+      <div class="small muted">${c.taskBased ? 'Each period ends when you’ve ticked off its tasks.' : `Each interval ends when its time is up (${M.fmtDuration(M.activePeriods(c).reduce((n, p) => n + p.minutes, 0) * 60)} per round). Tasks are a checklist to tick off during each period.`}</div>
       <div class="row small" style="gap:14px">Repeat <input class="input sm" type="number" min="1" max="20" value="${c.repeats || 1}" data-course-num="repeats" data-course="${cid}" style="width:60px">×
         <label class="check"><input type="checkbox" data-act-change="course-auto" data-course="${cid}" ${c.autoAdvance ? 'checked' : ''}>Move on by itself when time’s up</label></div>
       ${periods}
@@ -3571,7 +3571,7 @@ function flashcardsView() {
             <span class="tiny mono ${days <= 0 ? 'pink' : 'muted'}">${days <= 0 ? 'due' : `in ${days}d`}</span>
             <button class="btn ghost sm icon" data-act="card-delete" data-course="${c.id}" data-card="${esc(k.id)}">${ic('trash')}</button></div>`; }).join('')}</div></div>` : ''; }).join('')}`;
   }
-  return `<div class="header"><div class="grow"><h1>Flashcards</h1><div class="sub">Spaced repetition: what you know comes back less often, what you miss comes back soon.</div></div>
+  return `<div class="header"><div class="grow"><h1>Flashcards</h1><div class="sub">Cards you answer correctly come back less often, and cards you miss come back soon.</div></div>
       <select class="input" style="width:auto" data-act-change="cards-course"><option value="">All courses</option>${courses.map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></div>
     <div class="page stack" style="max-width:900px">${body}</div>`;
 }
@@ -3593,7 +3593,7 @@ function notesView() {
   let sel = ui.noteSel;
   if (!store.notes.get(sel)) sel = ui.noteSel = notes[0]?.id || null;
   const n = sel && store.notes.get(sel);
-  return `<div class="header"><div class="grow"><h1>Notes</h1><div class="sub">Quick notes that sync to your Mac and iPhone.</div></div>
+  return `<div class="header"><div class="grow"><h1>Notes</h1><div class="sub">Notes sync to your Mac and iPhone.</div></div>
       <button class="btn primary" data-act="note-new">${ic('plus')} New note</button></div>
     <div class="page notes-page"><div class="note-list"><input class="input" id="noteSearch" placeholder="Search" value="${esc(ui.noteSearch || '')}" data-bind="noteSearch">
         ${notes.map(x => `<button class="note-item ${x.id === sel ? 'on' : ''}" data-act="note-pick" data-id="${x.id}"><b class="ellipsis">${x.pinned ? ic('pin') + ' ' : ''}${esc(M.noteTitle(x))}</b>
@@ -3637,7 +3637,7 @@ function customRemindersView() {
     ${kind === 'once' ? `<div class="srow"><input type="datetime-local" class="input" style="width:auto" value="${r.at ? localDT(r.at) : ''}" data-rem-at data-id="${r.id}"></div>` : ''}
     <div class="small muted">${esc(M.reminderSummary(r))}${(() => { const n = M.nextReminderFire(r); return n ? ` · next ${M.fmtDay(n, { weekday: 'short' })} ${M.fmtTime(n)}` : ''; })()}</div>
     <div class="srow"><span class="small muted">Alert with</span> ${[['notification', 'Notification'], ['banner', 'On-screen banner'], ['sound', 'Sound']].map(([c, t]) => `<label class="row small"><input type="checkbox" data-rem-chan="${c}" data-id="${r.id}" ${(r.channels || []).includes(c) ? 'checked' : ''}> ${t}</label>`).join(' ')}</div>`;
-  return `<div class="header"><div class="grow"><h1>Reminders</h1><div class="sub">Get notified about anything: drink water, stretch, take medicine. Syncs to your Mac and iPhone.</div></div>
+  return `<div class="header"><div class="grow"><h1>Reminders</h1><div class="sub">Reminders for things that are not tasks, such as drinking water or taking medicine. They sync to your Mac and iPhone.</div></div>
       <select class="input" style="width:auto" data-rem-template><option value="">From a template…</option>${REMINDER_TEMPLATES.map((t, i) => `<option value="${i}">${esc(t.title)}</option>`).join('')}</select>
       <button class="btn primary" data-act="rem-new">${ic('plus')} New reminder</button></div>
     <div class="page notes-page"><div class="note-list">
@@ -3654,7 +3654,7 @@ const actions = {
   'sel-clear': () => { ui.weekSel = new Map(); render(); },
   'sel-day': el => { selPickDay(M.parseKey(el.dataset.day)); render(); },
   'sel-week': () => { for (let i = 0; i < 7; i++) selPickDay(M.addDays(ui.weekStart, i)); render(); },
-  'sel-mode': el => selEdit(t => { if (el.dataset.v) t.mode = 'untilDone'; else { delete t.mode; delete t.dueDate; } }, el.dataset.v ? 'Kept on the checklist until done' : 'Now just on their day'),
+  'sel-mode': el => selEdit(t => { if (el.dataset.v) t.mode = 'untilDone'; else { delete t.mode; delete t.dueDate; } }, el.dataset.v ? 'Kept on the checklist until done' : 'Now only on their day'),
   'sel-urgent': el => selEdit(t => { if (el.dataset.v) t.urgent = true; else delete t.urgent; }, el.dataset.v ? 'Marked urgent' : 'Not urgent'),
   'sel-checkoff': () => openModal({ type: 'sel-checkoff' }),
   'sel-checkoff-go': () => {
@@ -4534,7 +4534,7 @@ document.addEventListener('submit', async e => {
         // Keep the synced copy right away (same ID the importer gives it) so open time updates at once.
         store.upsertTask({ ...local, id: await M.stableUUID(`google:${ev.id}`), source: 'google', googleEventID: ev.id,
           sourceCalendar: ev.calendarID || 'primary', ...(ev.link ? { externalURL: ev.link } : {}) });
-        ui.booking.message = email ? `Booked “${title}” — invitation sent to ${email}.` : `Booked “${title}” in Cadence and Google Calendar.`;
+        ui.booking.message = email ? `Booked “${title}”, and an invitation was sent to ${email}.` : `Booked “${title}” in Cadence and Google Calendar.`;
       } else {
         store.upsertTask(local);
         ui.booking.message = `Booked “${title}” on your Cadence calendar.`;
@@ -4710,7 +4710,7 @@ function updateSyncUI() {
   for (const el of document.querySelectorAll('[data-sync-ui]')) {
     el.className = `syncbtn ${el.classList.contains('big') ? 'big' : ''} ${state}`;
     el.querySelector('.sync-label').textContent = label;
-    el.title = s.status === 'offline' ? `${label} — click to retry` : 'Sync now (S)';
+    el.title = s.status === 'offline' ? `${label}. Click to retry.` : 'Sync now (S)';
   }
 }
 
@@ -4762,7 +4762,7 @@ function toast(text, { icon = 'check', undo, tone } = {}) {
 // The desktop wrapper exposes window.cadenceDesktop: wake/unlock events, tray commands, a tray badge.
 if (window.cadenceDesktop) {
   window.cadenceDesktop.getOpenAtLogin?.().then(on => { ui.openAtLogin = on; if (ui.route === 'settings') render(); });
-  window.cadenceDesktop.onWake(() => reminders.checkIn('Welcome back — check your list'));
+  window.cadenceDesktop.onWake(() => reminders.checkIn('Your list for today'));
   window.cadenceDesktop.onCommand(cmd => {
     if (cmd === 'check-in') reminders.checkIn('Daily check-in', { manual: true });
     if (cmd === 'new-task') newTaskAt(new Date());
