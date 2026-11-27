@@ -78,6 +78,7 @@ function readRoute() {
 }
 
 function navigate(route) {
+  ui.moreOpen = false;
   const path = route === 'home' ? '/app' : `/app/${route}`;
   if (location.pathname !== path) history.pushState(null, '', path);
   readRoute();
@@ -113,7 +114,7 @@ function render() {
 
   const routeChanged = ui.lastRoute !== ui.route;
   ui.lastRoute = ui.route;
-  app.innerHTML = `<div class="shell">${sidebar()}<main id="main" class="${routeChanged ? 'enter' : ''}">${view()}</main></div>`;
+  app.innerHTML = `<div class="shell">${sidebar()}<main id="main" class="${routeChanged ? 'enter' : ''}">${view()}</main>${phoneNav()}</div>${moreSheet()}${installBar()}`;
   updateSyncUI();
   animateRings();
 
@@ -144,11 +145,8 @@ function sidebar() {
       lastSection = section;
     }
     if (section && folded.has(section) && ui.route !== id) return head;
-    const badge = id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
-      : id === 'habits' ? (store.countedToday(store.tasksOn(new Date())).filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task) && !o.resolved).length || '')
-      : id === 'focus' && focus.running ? (focus.pausedAt ? 'Paused' : isWorking() ? workClock() : fmtClock(focusLeft())) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
-      : id === 'flashcards' ? (store.dueCardCount || '') : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
-    return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</a>`;
+    const badge = navBadge(id);
+    return `${head}<a class="nav-item ${ui.route === id ? 'on' : ''}" href="${id === 'home' ? '/app' : `/app/${id}`}" title="${label} (${SHORTCUT_FOR[id]})">${ic(icon)}<span class="lbl">${label}</span>${badge ? `<span class="badge" data-badge="${id}">${badge}</span>` : ''}</a>`;
   }).join('');
   return `<nav class="sidebar">
     <div class="brand"><img src="/icon-192.png" alt=""><span>Cadence</span></div>
@@ -162,6 +160,71 @@ function sidebar() {
       ${syncControl()}
     </div>
   </nav>`;
+}
+
+/** The little count or clock next to a screen's name ('' for none). */
+function navBadge(id) {
+  return id === 'today' ? store.remainingToday() : id === 'reflections' ? store.reflections.size
+    : id === 'habits' ? (store.countedToday(store.tasksOn(new Date())).filter(o => M.isHabit(o.task) && !M.isUntilDone(o.task) && !o.resolved).length || '')
+    : id === 'focus' && focus.running ? (focus.pausedAt ? 'Paused' : isWorking() ? workClock() : fmtClock(focusLeft())) : id === 'study' && studyRun ? M.fmtStudyClock(studyClockMs(studyRun))
+    : id === 'flashcards' ? (store.dueCardCount || '') : id === 'projects' ? (store.projectToday().filter(d => d.item && !M.itemDone(d.item)).length || '') : '';
+}
+
+// ---------- phones ----------
+// Under 760px wide the sidebar gives way to a tab bar at the bottom (the main screens), More (a sheet with the
+// rest, New event and your account) and a + button for a new task, like an iPhone app.
+const TABS = ['home', 'today', 'todo', 'focus'];
+const screenPath = id => (id === 'home' ? '/app' : `/app/${id}`);
+function phoneNav() {
+  const tab = id => {
+    const [, label, icon] = SCREENS.find(x => x[0] === id);
+    const running = id === 'focus' && focus.running, count = id === 'today' ? navBadge('today') : 0;
+    // A running focus session shows its clock in place of the name.
+    return `<a class="${ui.route === id ? 'on' : ''}" href="${screenPath(id)}">${ic(icon)}<span ${running ? 'data-badge="focus"' : ''}>${running ? navBadge('focus') : id === 'todo' ? 'To-Do' : label}</span>${count ? `<span class="tb-badge">${count}</span>` : ''}</a>`;
+  };
+  return `<nav class="tabbar" aria-label="Screens">${TABS.map(tab).join('')}
+      <button type="button" class="${ui.moreOpen || !TABS.includes(ui.route) ? 'on' : ''}" data-act="more-open">${ic('grid')}<span>${TABS.includes(ui.route) ? 'More' : SCREENS.find(x => x[0] === ui.route)?.[1] ?? 'More'}</span></button></nav>
+    ${['settings', 'notes'].includes(ui.route) ? '' : `<button type="button" class="fab" data-act="new-task" aria-label="New task" title="New task">${ic('plus')}</button>`}`;
+}
+function moreSheet() {
+  if (!ui.moreOpen || !store.user) return '';
+  const hidden = new Set(store.device('navHidden', []));
+  const items = SCREENS.filter(([id, , , section]) => !TABS.includes(id) && !(section && hidden.has(section) && ui.route !== id))
+    .map(([id, label, icon]) => { const badge = id === 'reflections' ? '' : navBadge(id);
+      return `<a class="${ui.route === id ? 'on' : ''}" href="${screenPath(id)}">${ic(icon)}<span>${label}</span>${badge ? `<span class="tb-badge" ${id === 'study' ? 'data-badge="study"' : ''}>${badge}</span>` : ''}</a>`; });
+  return `<div class="more-sheet open"><div class="more-back" data-act="more-close"></div>
+    <div class="more-panel" role="dialog" aria-label="More screens">
+      <div class="more-grid">${items.join('')}</div>
+      <div class="row"><button type="button" class="btn" data-act="more-new-event">${ic('cal')} New event</button>
+        ${isStandalone() ? '' : `<button type="button" class="btn" data-act="install-show">${ic('share')} Add to Home Screen</button>`}</div>
+      <div class="account" style="margin-top:14px"><div class="row"><b class="grow ellipsis">${esc(store.user.username)}</b>
+        <button type="button" class="btn ghost sm" data-act="sign-out">${ic('logout')} Sign out</button></div>${syncControl()}</div>
+    </div></div>`;
+}
+
+// ---------- Add to Home Screen ----------
+// Installed (iPhone: Share › Add to Home Screen; Android/Chrome: Install), Cadence opens full screen like an app.
+// Phones get a prompt until it's installed; "Not now" puts it off for two weeks.
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const INSTALL_LATER = 'cadence:installLater';
+let installEvent = null;   // Chrome, Edge and Android: the browser's own install dialog, for the Install button
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; if (booted) render(); });
+addEventListener('appinstalled', () => { installEvent = null; ui.installShown = false; if (booted) render(); });
+function installBar() {
+  if (!store.user || isStandalone() || ui.modal || ui.moreOpen || !(isIOS || installEvent)) return '';
+  if (!ui.installShown) {
+    let later = 0;
+    try { later = Number(localStorage.getItem(INSTALL_LATER)) || 0; } catch { /* storage blocked */ }
+    if (Date.now() - later < 14 * 86_400_000) return '';
+  }
+  const how = installEvent
+    ? 'Install it to open it from your home screen, full screen like an app.'
+    : `It opens full screen, like an app. In Safari, tap <b>Share</b> <span class="share">${ic('share')}</span> (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. You’ll sign in there once more.`;
+  return `<div class="install-bar" role="dialog" aria-label="Add Cadence to your Home Screen"><img src="/apple-touch-icon.png" alt="">
+    <div class="grow"><b>Put Cadence on your Home Screen</b><div class="small muted" style="margin-top:3px">${how}</div>
+      <div class="row" style="margin-top:8px">${installEvent ? `<button type="button" class="btn sm primary" data-act="install-now">Install</button>` : ''}
+        <button type="button" class="btn sm ghost" data-act="install-later">Not now</button></div></div></div>`;
 }
 
 function view() {
@@ -825,8 +888,7 @@ function focusTick() {
       for (const el of document.querySelectorAll('[data-focus-away]')) el.textContent = M.fmtDuration(awayNow() / 1000);
       for (const el of document.querySelectorAll('[data-work-points]')) el.textContent = workTimePoints();
       for (const el of document.querySelectorAll('[data-work-bar]')) el.style.width = `${Math.min(100, focusElapsed() / (Number(el.dataset.target) * 600))}%`;
-      const badge = document.querySelector('.nav-item[href="/app/focus"] .badge');
-      if (badge) badge.textContent = t;
+      for (const b of document.querySelectorAll('[data-badge="focus"]')) b.textContent = t;
       return;
     }
     const left = focusLeft(), frac = left / (focus.minutes * 60_000);
@@ -834,8 +896,7 @@ function focusTick() {
     for (const el of document.querySelectorAll('[data-focus-ring]')) el.style.strokeDashoffset = String(2 * Math.PI * 90 * (1 - frac));
     for (const el of document.querySelectorAll('[data-focus-away]')) el.textContent = M.fmtDuration(awayNow() / 1000);
     document.body.classList.toggle('focus-final', left < 5 * 60_000);
-    const badge = document.querySelector('.nav-item[href="/app/focus"] .badge');
-    if (badge) badge.textContent = fmtClock(left);
+    for (const b of document.querySelectorAll('[data-badge="focus"]')) b.textContent = fmtClock(left);
   }, 1000);
 }
 // Time in another tab or app counts as time away (not for a task done away from the computer).
@@ -1525,6 +1586,13 @@ function settingsView() {
   return `<div class="header"><div class="grow"><h1>Settings</h1><div class="sub">Settings marked “this device” stay on this browser; everything else syncs with the Mac app.</div></div></div>
   <div class="page settings">
     ${ui.flash ? `<div class="callout"><span class="big">${ic('check')}</span><div class="grow">${esc(ui.flash)}</div><button class="btn ghost sm" data-act="clear-flash">${ic('x')}</button></div>` : ''}
+    <div><h3>Install the app</h3><div class="card">
+      ${isStandalone() ? `<div class="srow"><div>${ic('check')} Installed: you’re using Cadence as an app on this device.</div></div>` : `
+      <div class="srow"><div>iPhone or iPad<div class="small muted">In Safari, tap <b>Share</b> ${ic('share')} (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Cadence then opens from its icon, full screen like an app.</div></div></div>
+      <div class="srow"><div>Android<div class="small muted">In Chrome, open the <b>⋮</b> menu and tap <b>Install app</b> (or <b>Add to Home screen</b>).</div></div></div>
+      <div class="srow"><div>Computer<div class="small muted">Chrome and Edge show an install button at the right end of the address bar. On a Mac, the <a href="/#download">Cadence Mac app</a> does more (blocking, focus tracking).</div></div></div>
+      ${installEvent ? `<div class="srow"><div>This browser can install it right now.</div><button class="btn primary" data-act="install-now">${ic('plus')} Install Cadence</button></div>` : ''}`}
+    </div></div>
     <div><h3>Appearance</h3><div class="card">
       <div class="srow"><div>Theme<div class="small muted">This device. Dark is the default.</div></div>
         <select class="input" data-theme-pick>${[['dark', 'Dark'], ['light', 'Light'], ['system', 'Match the system']].map(([v, l]) => `<option value="${v}" ${currentTheme() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
@@ -1691,6 +1759,7 @@ function authView() {
   return `<div class="auth"><form class="auth-card" data-form="auth">
     <a href="/" class="small muted" style="text-decoration:none">← Back to home</a>
     <div class="logo"><img src="/icon-192.png" alt=""><div><h1>Cadence</h1><div class="muted small">Your checklist, calendars and reflections — on the web and on your Mac.</div></div></div>
+    ${isIOS && !isStandalone() ? `<div class="callout small"><span>${ic('share')}</span><div>On an iPhone? Put Cadence on your Home Screen first: in Safari tap <b>Share</b> (in the <b>⋯</b> menu on newer iPhones), then <b>Add to Home Screen</b>. Sign in there: it keeps its own sign-in, apart from Safari.</div></div>` : ''}
     <div class="seg" style="align-self:flex-start"><button type="button" class="${!create ? 'on' : ''}" data-act="auth-mode" data-mode="login">Sign in</button>
       <button type="button" class="${create ? 'on' : ''}" data-act="auth-mode" data-mode="register">Create account</button></div>
     <label class="field"><span>Username</span><input class="input" name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\\-]+" autofocus></label>
@@ -3272,8 +3341,7 @@ function studyTick() {
       el.style.strokeDashoffset = String(2 * Math.PI * 90 * (1 - Math.max(0, Math.min(1, ms / total))));
     }
     for (const el of document.querySelectorAll('[data-study-screen]')) el.textContent = M.fmtStudyClock(r.screenMs);
-    const badge = document.querySelector('.nav-item[href="/app/study"] .badge');
-    if (badge) badge.textContent = M.fmtStudyClock(ms);
+    for (const b of document.querySelectorAll('[data-badge="study"]')) b.textContent = M.fmtStudyClock(ms);
   }, 1000);
 }
 if (studyRun) setTimeout(studyTick, 0);
@@ -3801,6 +3869,17 @@ const actions = {
     try { input.showPicker(); } catch { input.focus(); input.click(); }
   },
   'clear-date': el => setProjectDate(el.parentElement.querySelector('input[type=date]'), ''),
+  'more-open': () => { ui.moreOpen = true; render(); },
+  'more-close': () => { ui.moreOpen = false; render(); },
+  'more-new-event': () => { ui.moreOpen = false; newEventAt(new Date()); },
+  'install-show': () => { ui.moreOpen = false; ui.installShown = true; render(); },
+  'install-later': () => { ui.installShown = false; try { localStorage.setItem(INSTALL_LATER, String(Date.now())); } catch { /* storage blocked */ } render(); },
+  'install-now': async () => {
+    const e = installEvent;
+    if (!e) return;
+    installEvent = null; ui.installShown = false; render();
+    e.prompt(); await e.userChoice.catch(() => null);
+  },
   'new-task': el => newTaskAt(el.dataset.day ? M.parseKey(el.dataset.day) : new Date()),
   'new-event': el => newEventAt(el.dataset.day ? M.parseKey(el.dataset.day) : new Date()),
   'make-kind': el => {

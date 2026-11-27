@@ -348,19 +348,61 @@ main { overflow: auto; min-width: 0; }
   .daypanel { border-left: 0; border-top: 1px solid var(--line); max-height: 38vh; }
 }
 
-/* ---------- small screens ---------- */
+/* ---------- phones: the page, a tab bar at the bottom and a + button, like an iPhone app ---------- */
+.tabbar, .fab, .more-sheet, .install-bar { display: none; }
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .sidebar { flex-direction: row; overflow-x: auto; padding: 8px; gap: 4px; border-right: 0; border-bottom: 1px solid var(--line); align-items: center; }
-  .brand span, .nav-section, .sidebar .spacer, .account, .nav-item .badge { display: none; }
-  .new-btns { flex-direction: row; flex: none; }
+  /* The sidebar gives way to the tab bar; "More" has the rest. Room for the notch and the home indicator. */
+  .shell { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-top: env(safe-area-inset-top); }
+  .sidebar { display: none; }
+  .shell main { flex: 1; min-height: 0; height: auto; }
+  .tabbar { display: flex; flex: none; border-top: 1px solid var(--line-strong); background: var(--sidebar); padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar > * { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 2px 6px; border: 0; background: none;
+    font: inherit; font-size: 10.5px; color: var(--muted); text-decoration: none; cursor: pointer; position: relative; -webkit-tap-highlight-color: transparent; }
+  .tabbar .i { font-size: 22px; }
+  .tabbar > * > span:not(.tb-badge) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabbar .on { color: var(--accent); font-weight: 600; }
+  .tabbar .tb-badge { position: absolute; top: 3px; left: calc(50% + 8px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+    background: var(--accent-2); color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+  .tabbar .tb-badge.clock { left: 50%; transform: translateX(-50%); top: -9px; background: var(--raised); color: var(--text); border: 1px solid var(--line-strong); }
+  .fab { display: grid; place-items: center; position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 70px); z-index: 40;
+    width: 54px; height: 54px; border-radius: 50%; border: 0; background: var(--accent-2); color: #fff; font-size: 26px; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); cursor: pointer; }
+  .page { padding-bottom: 96px; }   /* the last item isn't hidden under the + button */
+  /* More: every other screen, New event, and your account, in a sheet from the bottom. */
+  .more-sheet.open { display: block; position: fixed; inset: 0; z-index: 45; }
+  .more-back { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); }
+  .more-panel { position: absolute; left: 0; right: 0; bottom: 0; max-height: 85dvh; overflow-y: auto; background: var(--panel); border-top: 1px solid var(--line-strong);
+    padding: 14px 16px calc(env(safe-area-inset-bottom) + 14px); animation: rise .18s ease-out both; }
+  .more-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; }
+  .more-grid a { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 2px 8px; border: 1px solid var(--line); background: var(--raised);
+    color: var(--text); text-decoration: none; font-size: 11px; text-align: center; border-radius: var(--radius); position: relative; }
+  .more-grid a .i { font-size: 21px; color: var(--accent); }
+  .more-grid a.on { border-color: var(--accent); }
+  .more-grid .tb-badge { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent-2); color: #fff; font-size: 10px; line-height: 16px; }
+  /* Install prompt, above the tab bar. */
+  .install-bar { display: flex; position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 66px); z-index: 42; gap: 10px; align-items: flex-start;
+    padding: 12px; background: var(--raised); border: 1px solid var(--accent); box-shadow: var(--shadow); border-radius: var(--radius); }
+  .install-bar img { width: 40px; height: 40px; border-radius: 9px; flex: none; }
+  .install-bar .share { display: inline-block; vertical-align: -3px; color: var(--accent); }
+  /* Rows of boxes stack instead of squeezing side by side. */
+  .row { flex-wrap: wrap; }
+  .row > .grow:not(.ellipsis) { flex-basis: auto; }   /* (a zero basis would never wrap; truncated text still shrinks) */
+  .hero { flex-wrap: wrap; }
+  .hero > .grow { flex-basis: 60%; }   /* a ring still fits beside it; a row of buttons goes underneath */
   .header > .grow { flex-basis: 100%; }
-  .brand { padding: 0 4px; }
-  .nav-item { flex: none; padding: 6px 10px; }
-  .nav-item .lbl { font-size: 13px; }
-  .shell main { height: calc(100vh - 54px); }
+  main .mode-cards, main .mode-cards.two { grid-template-columns: 1fr; }   /* (the base rules come later in this file) */
+  .callout { flex-wrap: wrap; }
+  .callout > .grow { flex: 1 1 200px; }   /* the icon and text share a line; a button goes underneath */
+  .srow { flex-wrap: wrap; }
+  .srow > .grow:not(.ellipsis) { flex-basis: auto; }
+  /* iPhones zoom into any text field smaller than 16px; this keeps them from it. */
+  input.input, select.input, textarea.input, .input { font-size: 16px; }
+  /* Dialogs come up from the bottom, full width. */
+  .overlay { place-items: end stretch; padding: calc(env(safe-area-inset-top) + 10px) 0 0; }
+  .dialog, .dialog.sm { width: 100%; max-height: calc(100dvh - env(safe-area-inset-top) - 10px); border-left: 0; border-right: 0; border-bottom: 0; }
+  .dialog .foot { padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }
+  .dialog .body { padding: 16px; }
   .page, .header { padding-left: 16px; padding-right: 16px; }
-  .week, .month { height: calc(100vh - 54px); }
+  .week, .month { height: 100%; }
   .month { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .daypanel { border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }
   .stats { grid-template-columns: repeat(2, 1fr); }
