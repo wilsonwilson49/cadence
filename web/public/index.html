@@ -3,184 +3,344 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Cadence — a productivity app for your day, your projects and your studies</title>
-  <meta name="description" content="Cadence is a general-purpose productivity app: a checklist and calendar for the day, projects broken into subtasks, study sessions and flashcards, notes, habits, focus timers, and reminders that keep at you until things are done. Free, on the web, Mac, Windows and Linux.">
+  <title>Cadence: a planner, calendar and focus timer in one app</title>
+  <meta name="description" content="Cadence keeps your tasks, calendar, projects, study sessions and habits in one place and syncs them between your browser and your computer. Free on the web, Mac, Windows and Linux.">
   <link rel="canonical" href="https://cadenceplanner.vercel.app/">
-  <meta property="og:title" content="Cadence — a productivity app for your day, your projects and your studies">
-  <meta property="og:description" content="Tasks, calendar, projects, study, notes, habits and focus in one app that syncs everywhere.">
+  <meta property="og:title" content="Cadence: a planner, calendar and focus timer in one app">
+  <meta property="og:description" content="Tasks, calendar, projects, study sessions and habits in one app, with reminders that repeat until each task is done.">
   <meta property="og:image" content="https://cadenceplanner.vercel.app/icon-512.png">
-  <meta name="theme-color" content="#101317">
+  <meta name="theme-color" content="#fbfaf7">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="Cadence">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/css/home.css">
   <script>
-    // Before first paint: the theme (dark unless this device chose otherwise), and signed-in buttons if the app said so.
-    try { document.documentElement.dataset.theme = localStorage.getItem('cadence:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
-    try {
-      const f = localStorage.getItem('cadence:font') || 'verdana', r = document.documentElement;
-      if (f.startsWith('custom:')) { r.dataset.font = 'custom'; r.style.setProperty('--sans', `"${f.slice(7).replace(/[^\w .-]/g, '')}", Verdana, sans-serif`); }
-      else r.dataset.font = f;
-    } catch {}
+    // Before first paint: reveal animations on, and the signed-in buttons if the app said so last time.
+    document.documentElement.classList.add('js');
     try { if (localStorage.getItem('cadence:signedIn') === '1') document.documentElement.classList.add('signed-in'); } catch {}
   </script>
 </head>
 <body>
-  <header class="top"><div class="wrap">
-    <a class="brand" href="/"><img src="/icon-192.png" alt="">Cadence</a>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="week" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M9 13h6M9 17h3"/></symbol>
+    <symbol id="month" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><circle cx="8" cy="13" r=".6"/><circle cx="12" cy="13" r=".6"/><circle cx="16" cy="13" r=".6"/><circle cx="8" cy="17" r=".6"/><circle cx="12" cy="17" r=".6"/></symbol>
+    <symbol id="list" viewBox="0 0 24 24"><path d="M10 6h11M10 12h11M10 18h11"/><path d="M3 6l1.5 1.5L7 5M3 12l1.5 1.5L7 11"/><circle cx="5" cy="18" r="1.5"/></symbol>
+    <symbol id="layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+    <symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></symbol>
+    <symbol id="habit" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6"/><path d="M18 2.5v4h-4M6 21.5v-4h4"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></symbol>
+    <symbol id="note" viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v4h4M8.5 11h7M8.5 15h7M8.5 19h4"/></symbol>
+    <symbol id="quote" viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h13"/><path d="M19 13v6"/></symbol>
+    <symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9z"/></symbol>
+    <symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12A9 9 0 0 1 18.5 5.8L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
+    <symbol id="cards" viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/></symbol>
+    <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.4 0 2.6.4 3.6 1"/><circle cx="17.5" cy="16.5" r="4.5"/><path d="M17.5 14.5v2l1.5 1"/></symbol>
+    <symbol id="monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="study" viewBox="0 0 24 24"><path d="M2.5 9L12 4.5 21.5 9 12 13.5 2.5 9z"/><path d="M6.5 11v5c1.5 1.6 3.4 2.5 5.5 2.5s4-.9 5.5-2.5v-5M21.5 9v6"/></symbol>
+    <symbol id="pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="dl" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></symbol>
+    <symbol id="phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></symbol>
+    <symbol id="apple" viewBox="0 0 24 24"><path d="M16.5 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.9-.9-3.1-.8C6.9 7.4 5.4 8.3 4.6 9.8c-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8s1.9.8 3.1.8c1.3 0 2.1-1.2 2.9-2.4.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.7-1-2.7-4.1zM14.2 5.6c.6-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="windows" viewBox="0 0 24 24"><path d="M3 5.5l7.5-1v7H3zM11.5 4.4L21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="linux" viewBox="0 0 24 24"><path d="M12 2c-2.2 0-3.5 1.9-3.5 4.4 0 1.5.4 2.3-.4 3.7C6.9 12.2 5 14.4 5 17c0 1 .3 1.8.8 2.4M12 2c2.2 0 3.5 1.9 3.5 4.4 0 1.5-.4 2.3.4 3.7 1.2 2.1 3.1 4.3 3.1 6.9 0 1-.3 1.8-.8 2.4"/><path d="M8 21.5c1.2-.9 2.5-1.3 4-1.3s2.8.4 4 1.3"/><circle cx="10.4" cy="6.5" r=".7"/><circle cx="13.6" cy="6.5" r=".7"/></symbol>
+  </svg>
+
+  <header class="nav"><div class="wrap">
+    <a class="brand" href="/"><img src="/apple-touch-icon.png" alt="">Cadence</a>
     <nav class="links">
-      <a href="#contents">Contents</a><a href="#download">Download</a><a href="/privacy">Privacy</a>
-      <a class="btn" href="/app" data-signin>Sign in</a>
-      <a class="btn primary" href="/app?mode=register" data-start><span class="when-out">Create an account</span><span class="when-in">Open Cadence</span></a>
+      <a href="#features">Features</a><a href="#focus">Focus</a><a href="#download">Download</a><a href="/privacy">Privacy</a>
     </nav>
+    <div class="nav-cta">
+      <a class="btn ghost" href="/app" data-signin>Sign in</a>
+      <a class="btn dark" href="/app?mode=register" data-start><span class="when-out">Get started</span><span class="when-in">Open Cadence</span></a>
+    </div>
   </div></header>
 
-  <main class="wrap page">
-    <article>
-      <h1>Cadence</h1>
-      <div class="byline">A general-purpose productivity app · free, on the web, Mac, Windows and Linux</div>
-
-      <aside class="infobox">
-        <div class="ib-title">Cadence</div>
-        <div class="ib-logo"><img src="/icon-192.png" alt="" width="72" height="72"></div>
-        <table>
-          <tr><th>Type</th><td>Productivity app</td></tr>
-          <tr><th>Covers</th><td>Tasks, calendar, projects, study, notes, habits, focus</td></tr>
-          <tr><th>Platforms</th><td>Web, macOS, Windows, Linux<br><span class="muted">iPhone app in testing</span></td></tr>
-          <tr><th>Price</th><td>Free. No ads.</td></tr>
-          <tr><th>Sync</th><td>Across all your devices, a few seconds after each change; works offline</td></tr>
-          <tr><th>Works with</th><td>Google Calendar, Google Tasks, Calendly</td></tr>
-          <tr><th>Your data</th><td>Never sold. Export or delete it any time.</td></tr>
-        </table>
-        <div class="ib-actions">
-          <a class="btn primary" href="/app?mode=register" data-start><span class="when-out">Create an account</span><span class="when-in">Open Cadence</span></a>
-          <a class="btn" href="/app" data-signin>Sign in</a>
+  <main>
+    <section class="hero"><div class="wrap">
+      <div class="hero-text">
+        <span class="pill">Free on the web, Mac, Windows and Linux</span>
+        <h1>A planner, calendar and focus timer in one app</h1>
+        <p class="lede">Cadence keeps your tasks, calendar, projects, study sessions and habits in one place, and syncs them between your
+          browser and your computer. Reminders keep coming until each task is checked off.</p>
+        <div class="ctas">
+          <a class="btn primary lg" href="/app?mode=register" data-start><span class="when-out">Get started</span><span class="when-in">Open Cadence</span> <svg class="i"><use href="#arrow"/></svg></a>
+          <a class="btn lg" href="#download" data-os-cta><svg class="i"><use href="#dl"/></svg> <span>Download</span></a>
         </div>
-      </aside>
+        <p class="fine">No ads. Your data is never sold, and you can export or delete it at any time.</p>
+      </div>
 
-      <p class="lead"><b>Cadence</b> is a productivity app for planning work and then actually doing it. It puts the pieces most people
-        keep in separate apps into one place: a checklist and calendar for the day, projects broken down into subtasks,
-        study sessions and flashcards, notes, habits, a focus timer, and reminders that keep at you until things are done.</p>
-      <p>Everything syncs between the browser and the desktop apps. It is built for people who want one tool they can grow into:
-        it works with a mouse and buttons from the first day, and almost everything also has a keyboard shortcut once you want one.</p>
-
-      <nav class="toc" id="contents">
-        <div class="toc-title">Contents</div>
-        <ol>
-          <li><a href="#what">What it does</a></li>
-          <li><a href="#day">Planning a day</a></li>
-          <li><a href="#projects">Projects and studying</a></li>
-          <li><a href="#procrastination">Reminders for procrastinators</a></li>
-          <li><a href="#keyboard">Keyboard and mouse</a></li>
-          <li><a href="#google">Your data, and Google</a></li>
-          <li><a href="#download">Download</a></li>
-        </ol>
-      </nav>
-
-      <h2 id="what">What it does</h2>
-      <div class="table-wrap"><table class="data">
-        <thead><tr><th>Area</th><th>What you get</th></tr></thead>
-        <tbody>
-          <tr><td>Today</td><td>One list for the day: overdue items first, then today's tasks, habits, and anything kept on the list until it's done. Upcoming one-off deadlines sit underneath.</td></tr>
-          <tr><td>Calendar</td><td>Week and month views. Drag to move or resize, pick several items with Shift-drag and change them together, copy and paste with ⌘C and ⌘V.</td></tr>
-          <tr><td>Projects</td><td>Goals broken into subtasks to any depth, shown as an outline, a Gantt chart or a map. Deadlines pass down; progress rolls up.</td></tr>
-          <tr><td>Study</td><td>Timed rounds, interval presets such as a class period or 25 on / 5 off, no-computer sessions, and flashcards with spaced repetition. Study time counts toward focus.</td></tr>
-          <tr><td>Reminders</td><td>For tasks, and for anything else: drink water every hour, stretch at 11 and 3, take medicine twice a day.</td></tr>
-          <tr><td>Focus</td><td>A timer to race your list, scored by how much you finish and how long you stay in Cadence. On the Mac, screen time per app.</td></tr>
-          <tr><td>Habits</td><td>A tracker built on <i>Atomic Habits</i>: stack new habits onto old ones, keep streaks, never miss twice.</td></tr>
-          <tr><td>Notes</td><td>Plain notes that sync with everything else.</td></tr>
-          <tr><td>Reflections</td><td>Checking something off asks for a few words on how it went. Over time they show you what works.</td></tr>
-          <tr><td>Booking</td><td>Your open time for the next seven days, worked out from your calendars.</td></tr>
-        </tbody>
-      </table></div>
-
-      <h2 id="day">Planning a day</h2>
-      <figure class="thumb">
-        <div class="shot" aria-hidden="true">
-          <div class="shot-head"><span>Today</span><span class="muted">Friday, November 20 · 3 of 6 done</span></div>
-          <div class="shot-sec">Overdue</div>
-          <div class="shot-row"><i></i><span>Email Ms. Lee about the judging slot</span><em class="red">Nov 18</em></div>
-          <div class="shot-sec">Today's checklist</div>
-          <div class="shot-row done"><i></i><span>Morning run</span><em>7:00</em></div>
-          <div class="shot-row done"><i></i><span>Stand-up meeting</span><em>10:00</em></div>
-          <div class="shot-row"><i></i><span>Deep work block</span><em>13:00 – 15:00</em></div>
-          <div class="shot-sec">Until done</div>
-          <div class="shot-row"><i></i><span>Finish the history essay</span><em class="orange">due Sat</em></div>
-          <div class="shot-row done"><i></i><span>Read 20 pages</span><em>habit</em></div>
+      <div class="stage reveal" aria-hidden="true">
+        <div class="window">
+          <div class="win-bar"><i></i><i></i><i></i><span>Cadence</span></div>
+          <div class="win-body">
+            <div class="w-side">
+              <div class="w-brand"><img src="/apple-touch-icon.png" alt="">Cadence</div>
+              <div class="w-sec">Plan</div>
+              <div class="w-nav on"><svg class="i"><use href="#sun"/></svg>Today<em>3</em></div>
+              <div class="w-nav"><svg class="i"><use href="#week"/></svg>Week</div>
+              <div class="w-nav"><svg class="i"><use href="#month"/></svg>Month</div>
+              <div class="w-nav"><svg class="i"><use href="#list"/></svg>To-Do List</div>
+              <div class="w-nav"><svg class="i"><use href="#layers"/></svg>Projects</div>
+              <div class="w-sec">Focus</div>
+              <div class="w-nav"><svg class="i"><use href="#target"/></svg>Focus<em>18:42</em></div>
+              <div class="w-nav"><svg class="i"><use href="#habit"/></svg>Habits</div>
+              <div class="w-nav"><svg class="i"><use href="#note"/></svg>Notes</div>
+            </div>
+            <div class="w-main">
+              <div class="w-head">
+                <div><small>Good morning</small><b>Thursday, November 26</b><span>3 of 6 left to check off.</span></div>
+                <div class="w-ring"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27"/></svg><span><b>3</b>left</span></div>
+              </div>
+              <div class="w-add"><svg class="i"><use href="#plus"/></svg>Quick add to today</div>
+              <div class="w-title">Overdue <em>1</em></div>
+              <div class="w-row" style="--c:#e4685f"><span class="w-chk"></span><span class="w-bar"></span><div><b>Email Ms. Lee about the judging slot</b><small class="red">Tue, Nov 24 · any time</small></div></div>
+              <div class="w-title">Today’s checklist <em>5</em></div>
+              <div class="w-row done" style="--c:#5cb87a"><span class="w-chk"><svg class="i"><use href="#check"/></svg></span><span class="w-bar"></span><div><b>Morning run</b><small>7:00 AM · Mon, Wed, Fri</small></div></div>
+              <div class="w-row done" style="--c:#82a8ef"><span class="w-chk"><svg class="i"><use href="#check"/></svg></span><span class="w-bar"></span><div><b>Stand-up meeting</b><small>10:00 AM · every weekday</small></div><span class="w-tag">Google</span></div>
+              <div class="w-row" style="--c:#9d97e6"><span class="w-chk"></span><span class="w-bar"></span><div><b>Finish the history essay</b><small class="orange">due Sat · usually 1 hr 10 min</small></div></div>
+              <div class="w-row" style="--c:#30b0c7"><span class="w-chk"></span><span class="w-bar"></span><div><b>Chemistry problem set</b><small>4:00 PM · 45 min</small></div></div>
+            </div>
+            <div class="w-right">
+              <div class="w-card">
+                <small>Now working on</small>
+                <b>Finish the history essay</b>
+                <div class="w-clock">42:18</div>
+                <div class="w-meta">96% focused · <span class="green">+16 points so far</span></div>
+                <div class="w-btns"><span class="w-btn green"><svg class="i"><use href="#check"/></svg>Complete</span><span class="w-btn"><svg class="i"><use href="#pause"/></svg>Pause</span></div>
+              </div>
+              <div class="w-card">
+                <small>Latest reflection</small>
+                <p>“Reading with the phone in another room took 20 minutes less than last week.”</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <figcaption>The Today list on a Friday: overdue items first, then the day's checklist, then work that stays on the list until it's done.</figcaption>
-      </figure>
-      <p>A day in Cadence starts with one list. Tasks can happen once, repeat on a schedule, or stay on the list until you finish them.
-        Items can have a time, a length and a deadline, and can be marked urgent so they show up today no matter when they're due.
-        Your Google Calendar events and Calendly bookings appear alongside them, quietly, so the calendar shows the real shape of the day.</p>
-      <p>When you check something off, Cadence asks for a sentence or two about how it went. Those reflections build up into a record
-        of how you work best, and they're searchable later.</p>
+        <div class="float f-banner"><span class="f-ic"><svg class="i"><use href="#bell"/></svg></span><div><b>Checklist check: 3 left</b><small>Finish the history essay, Chemistry problem set</small></div></div>
+        <div class="float f-focus"><span class="f-ic violet"><svg class="i"><use href="#pause"/></svg></span><div><b>Paused while you were away</b><small>12 minutes were not counted</small></div></div>
+      </div>
+    </div></section>
 
-      <h2 id="projects">Projects and studying</h2>
-      <p>Bigger pieces of work go in <b>Projects</b>. Break a goal into subtasks, and those into smaller ones. Press Return for the next
-        subtask and Tab to tuck it under the one above. Each project can be read as an outline, as a Gantt chart against the calendar,
-        or as a map of the whole tree, and the dashed <i>+</i> boxes in each view add a subtask exactly where you want it.</p>
-      <p>The <b>Study</b> section runs timed rounds with breaks, or a sequence of intervals of your choosing, and tracks what you got wrong
-        so the next session starts there. A no-computer mode notices if you reach for the keyboard when you meant to work on paper.</p>
+    <section class="works"><div class="wrap">
+      <span>Works with</span><b>Google Calendar</b><b>Google Tasks</b><b>Calendly</b>
+    </div></section>
 
-      <h2 id="procrastination">Reminders for procrastinators</h2>
-      <p>Some reminders are easy to ignore. For the ones that matter, each task can be set to keep after you:</p>
-      <div class="table-wrap"><table class="data">
-        <thead><tr><th>Setting</th><th>What happens until you check it off</th></tr></thead>
-        <tbody>
-          <tr><td>Normal</td><td>One reminder at the times you choose.</td></tr>
-          <tr><td>Persistent</td><td>The reminder comes back every few minutes.</td></tr>
-          <tr><td>Pushy</td><td>A window opens in the middle of the screen, again and again.</td></tr>
-          <tr><td>Strict</td><td>The window covers the screen, and putting it off asks you to say why. On the Mac, the apps and websites you list are blocked until it's done.</td></tr>
-        </tbody>
-      </table></div>
+    <section id="features" class="section"><div class="wrap">
+      <div class="head reveal">
+        <span class="kicker">Features</span>
+        <h2>Everything you plan, in the place you do it</h2>
+        <p>Most people keep a to-do list, a calendar, a timer and a notes app separately. Cadence puts them together, so a task you plan
+          in the morning is the same task you time, check off and write about later.</p>
+      </div>
 
-      <h2 id="keyboard">Keyboard and mouse</h2>
-      <p>Nothing in Cadence requires a shortcut. There are buttons, menus and right-click options throughout. But if you like to keep
-        your hands on the keyboard: single letters move between pages, ⌘Z undoes, ⌘C / ⌘X / ⌘V copy, cut and paste calendar items and
-        subtasks, Tab indents, the arrow keys move between rows, and ⌘/ shows the full list wherever you are.</p>
+      <div class="feature reveal">
+        <div class="f-text">
+          <span class="f-icon" style="--h:#3a61ad"><svg class="i"><use href="#sun"/></svg></span>
+          <h3>One list for the day</h3>
+          <p>Today shows overdue items first, then the day’s tasks and habits, then work you keep on the list until it is done. Your Google
+            Calendar events and Calendly meetings appear next to them, and the week and month calendars show the same items by time.</p>
+          <ul>
+            <li>Tasks can happen once, repeat on a schedule, or stay on the list until you finish them.</li>
+            <li>On the calendar, drag an item to move it, or drag its bottom edge to change its length.</li>
+            <li>Checking a task off asks for a short reflection on how it went.</li>
+          </ul>
+        </div>
+        <div class="f-visual">
+          <div class="panel week-mock">
+            <div class="wk-head"><span></span><span>Mon<b>23</b></span><span>Tue<b>24</b></span><span>Wed<b>25</b></span><span class="today">Thu<b>26</b></span><span>Fri<b>27</b></span></div>
+            <div class="wk-grid">
+              <div class="wk-hours"><span>9 AM</span><span>10 AM</span><span>11 AM</span><span>12 PM</span><span>1 PM</span><span>2 PM</span></div>
+              <div class="wk-col"><i style="--t:0;--h:1;--c:#82a8ef">Stand-up</i><i style="--t:2;--h:1.5;--c:#9d97e6">Essay outline</i></div>
+              <div class="wk-col"><i style="--t:0;--h:1;--c:#82a8ef">Stand-up</i><i style="--t:3.2;--h:1.6;--c:#30b0c7">Lab report</i></div>
+              <div class="wk-col"><i style="--t:0;--h:1;--c:#82a8ef">Stand-up</i><i style="--t:1.4;--h:2;--c:#5cb87a">Deep work</i></div>
+              <div class="wk-col today"><i style="--t:0;--h:1;--c:#82a8ef">Stand-up</i><i style="--t:2.2;--h:1.8;--c:#9d97e6">History essay</i><b class="now" style="--t:3.4"></b></div>
+              <div class="wk-col"><i style="--t:0;--h:1;--c:#82a8ef">Stand-up</i><i style="--t:1.5;--h:1;--c:#e3a23e">Call with Sam</i></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <h2 id="google">Your data, and Google</h2>
-      <p>Connecting Google is optional. If you do, Cadence asks Google for permission to see and edit your calendar events and your
-        Google Tasks, and uses it only for these features:</p>
-      <ul>
-        <li><b>Show and import.</b> Your Google events appear on Cadence's week and month calendars, and your Google Tasks on your list.
-          They sync to your other devices and update when they change in Google; checking off a Google task in Cadence completes it in Google.</li>
-        <li><b>Find open time.</b> Your busy times are used to show the time you have free over the next 7 days on the Booking page.</li>
-        <li><b>Create and edit on request.</b> Cadence adds, edits, or deletes a Google event only when you ask it to, for example a new event set to sync with Google.</li>
-      </ul>
-      <p>We never sell your data or use it for ads, and you can disconnect at any time. Cadence's use of information received from
+      <div class="feature flip reveal" id="focus">
+        <div class="f-text">
+          <span class="f-icon" style="--h:#c0476f"><svg class="i"><use href="#target"/></svg></span>
+          <h3>Focus sessions that measure the work</h3>
+          <p>Start a timer on one task, or pick a list of tasks and see how many you finish before the time runs out. Points come from the
+            time you work and the tasks you finish, and staying focused for 90% of the session multiplies them by 1.5.</p>
+          <ul>
+            <li>With no input for 5 minutes, or with the computer asleep, the session pauses, so time away is not counted.</li>
+            <li>On the Mac, the apps and websites you mark as distracting are blocked while a session runs.</li>
+            <li>Each task keeps the times it took, and Cadence estimates the next one from a weighted average of them.</li>
+          </ul>
+        </div>
+        <div class="f-visual">
+          <div class="panel focus-mock">
+            <div class="fm-ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="arc" cx="60" cy="60" r="52"/></svg>
+              <div><b>18:42</b><small>2 of 3 done</small></div></div>
+            <div class="fm-side">
+              <div class="fm-item done"><span><svg class="i"><use href="#check"/></svg></span>Chemistry problem set</div>
+              <div class="fm-item done"><span><svg class="i"><use href="#check"/></svg></span>Email Ms. Lee</div>
+              <div class="fm-item"><span></span>Read chapter 7</div>
+              <div class="fm-bonus"><svg class="i"><use href="#star"/></svg>Bonus: 20 push-ups <em>+15</em></div>
+              <div class="fm-score"><b>94%</b> focused · ×1.5</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature reveal">
+        <div class="f-text">
+          <span class="f-icon" style="--h:#c46a1a"><svg class="i"><use href="#bell"/></svg></span>
+          <h3>Reminders that continue until the task is done</h3>
+          <p>Each task can be set to keep reminding you. A persistent reminder comes back every few minutes. A pushy one opens a window in
+            the middle of the screen. A strict one covers the screen and asks why you are putting it off, and on the Mac it blocks the apps
+            and websites you chose until the task is checked off.</p>
+          <ul>
+            <li>Reminders for things that are not tasks, such as drinking water every hour, are set separately.</li>
+            <li>Cadence checks in when you open or unlock your computer.</li>
+          </ul>
+        </div>
+        <div class="f-visual">
+          <div class="panel strict-mock">
+            <span class="sm-ic"><svg class="i"><use href="#lock"/></svg></span>
+            <b>Finish the history essay</b>
+            <small>Due today · put off 2 times</small>
+            <div class="sm-field">Why not now? <span>Dinner with family, back at 8</span></div>
+            <div class="sm-btns"><span class="w-btn green"><svg class="i"><use href="#check"/></svg>Start it now</span><span class="w-btn">Put it off</span></div>
+            <div class="sm-foot"><svg class="i"><use href="#lock"/></svg>YouTube and Instagram are blocked until this is checked off</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature flip reveal">
+        <div class="f-text">
+          <span class="f-icon" style="--h:#2f8a5f"><svg class="i"><use href="#layers"/></svg></span>
+          <h3>Projects and studying</h3>
+          <p>A project is split into subtasks, and those into smaller ones, each with its own deadline. The same project can be read as an
+            outline, a Gantt chart or a map. The Study page runs timed intervals, such as 25 minutes on and 5 off, and keeps flashcards that
+            come back sooner when you miss them.</p>
+          <ul>
+            <li>Subtasks due soon appear on the Today list by themselves.</li>
+            <li>A no-computer study session notes it when you use the computer during it.</li>
+          </ul>
+        </div>
+        <div class="f-visual">
+          <div class="panel gantt-mock">
+            <div class="gm-head"><b>Science fair entry</b><span>4 of 9 done · due Dec 12</span></div>
+            <div class="gm-row"><span>Choose a question</span><i style="--l:0;--w:14;--c:#5cb87a" class="done"></i></div>
+            <div class="gm-row"><span>Background reading</span><i style="--l:10;--w:22;--c:#5cb87a" class="done"></i></div>
+            <div class="gm-row"><span>Run the experiment</span><i style="--l:28;--w:30;--c:#82a8ef"></i></div>
+            <div class="gm-row sub"><span>Trial 1</span><i style="--l:28;--w:9;--c:#82a8ef" class="done"></i></div>
+            <div class="gm-row sub"><span>Trials 2 and 3</span><i style="--l:38;--w:18;--c:#82a8ef"></i></div>
+            <div class="gm-row"><span>Write the report</span><i style="--l:56;--w:26;--c:#9d97e6"></i></div>
+            <div class="gm-row"><span>Make the poster</span><i style="--l:74;--w:20;--c:#e3a23e"></i></div>
+            <b class="gm-today" style="--l:46"></b>
+          </div>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="section tint"><div class="wrap">
+      <div class="head reveal">
+        <span class="kicker">Also in Cadence</span>
+        <h2>The rest of the toolkit</h2>
+      </div>
+      <div class="grid">
+        <div class="card reveal"><span class="f-icon sm" style="--h:#2f8a5f"><svg class="i"><use href="#habit"/></svg></span><h4>Habits</h4><p>Streaks, a 30-day grid, and a rule against missing twice in a row.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#5b55c8"><svg class="i"><use href="#quote"/></svg></span><h4>Reflections</h4><p>Every reflection you write is kept and can be searched later.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#3a61ad"><svg class="i"><use href="#note"/></svg></span><h4>Notes</h4><p>Plain notes that sync with the rest of your account.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#c46a1a"><svg class="i"><use href="#star"/></svg></span><h4>Bonus tasks</h4><p>Optional tasks that earn extra points when you do them during a focus session.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#1f8aa0"><svg class="i"><use href="#people"/></svg></span><h4>Booking</h4><p>Your open time for the next 7 days, worked out from your calendars.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#c0476f"><svg class="i"><use href="#monitor"/></svg></span><h4>Screen time</h4><p>On the Mac, the time spent in each app, with a daily limit for distracting ones.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#5b55c8"><svg class="i"><use href="#cards"/></svg></span><h4>Flashcards</h4><p>Cards you miss come back soon, and cards you know come back less often.</p></div>
+        <div class="card reveal"><span class="f-icon sm" style="--h:#2f8a5f"><svg class="i"><use href="#sync"/></svg></span><h4>Sync</h4><p>Changes reach your other devices within seconds, and the apps keep working offline.</p></div>
+      </div>
+    </div></section>
+
+    <section class="section"><div class="wrap">
+      <div class="head reveal">
+        <span class="kicker">How it works</span>
+        <h2>A day in three steps</h2>
+      </div>
+      <div class="steps">
+        <div class="step reveal"><span>1</span><h4>Plan</h4><p>Add today’s tasks, set the ones that repeat, and connect your calendars so meetings appear on their own.</p></div>
+        <div class="step reveal"><span>2</span><h4>Do</h4><p>Cadence reminds you at the times you set, times your focus sessions, and checks in when you come back to the computer.</p></div>
+        <div class="step reveal"><span>3</span><h4>Reflect</h4><p>When you check something off, write a few words on how it went. Over time this shows what works for you.</p></div>
+      </div>
+    </div></section>
+
+    <section id="google" class="section tint"><div class="wrap narrow">
+      <div class="head reveal">
+        <span class="kicker">Your data</span>
+        <h2>How Cadence uses Google Calendar and Google Tasks</h2>
+        <p>Connecting Google is optional. If you do, Cadence asks Google for permission to see and edit your calendar events and your
+          Google Tasks, and uses it only for these features:</p>
+      </div>
+      <div class="data-list reveal">
+        <div><b>Show and import.</b> Your Google events appear on Cadence's week and month calendars, and your Google Tasks on your list.
+          They sync to your other devices and update when they change in Google; checking off a Google task in Cadence completes it in Google.</div>
+        <div><b>Find open time.</b> Your busy times are used to show the time you have free over the next 7 days on the Booking page.</div>
+        <div><b>Create and edit on request.</b> Cadence adds, edits, or deletes a Google event only when you ask it to, for example a new event set to sync with Google.</div>
+      </div>
+      <p class="fine reveal">We never sell your data or use it for ads, and you can disconnect at any time. Cadence's use of information received from
         Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Read the details in our
         <a href="/privacy#google">Privacy Policy</a>.</p>
+    </div></section>
 
-      <h2 id="download">Download</h2>
-      <p>The desktop apps keep reminders running in the background and check in when you open your computer. Sign in with the same
-        account and everything stays in sync. Or use Cadence in your browser: <a href="/app">open the web app</a>.</p>
-      <div class="table-wrap"><table class="data downloads">
-        <thead><tr><th>System</th><th>Requirements</th><th></th></tr></thead>
-        <tbody>
-          <tr data-os="mac"><td>Mac</td><td>macOS 14 or later, Apple Silicon or Intel.<div class="note">First launch: if macOS can't verify it, open System Settings › Privacy &amp; Security › <b>Open Anyway</b>.</div></td>
-            <td><a class="btn primary" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence-mac.zip">Download</a></td></tr>
-          <tr data-os="windows"><td>Windows</td><td>Windows 10 or 11. Lives in the system tray and starts with Windows.<div class="note">If SmartScreen appears, click <b>More info › Run anyway</b>.</div></td>
-            <td><a class="btn primary" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence-Setup.exe">Download</a></td></tr>
-          <tr data-os="linux"><td>Linux</td><td>AppImage for any distribution, or a .deb for Debian and Ubuntu.<div class="note">AppImage: run <code>chmod +x Cadence.AppImage</code>, then open it.</div></td>
-            <td class="btns"><a class="btn primary" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence.AppImage">AppImage</a>
-              <a class="btn" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence.deb">.deb</a></td></tr>
-        </tbody>
-      </table></div>
-      <p class="muted small">All releases are on <a href="https://github.com/wilsonwilson49/cadence/releases">GitHub</a>.</p>
-
-      <div class="band">
-        <div><b>Start with today's list.</b> It takes under a minute, and it's free.</div>
-        <a class="btn primary" href="/app?mode=register" data-start><span class="when-out">Create an account</span><span class="when-in">Open Cadence</span></a>
+    <section id="download" class="section"><div class="wrap">
+      <div class="head reveal">
+        <span class="kicker">Download</span>
+        <h2>Cadence on each of your devices</h2>
+        <p>The desktop apps keep reminders running in the background and check in when you open your computer. Sign in with the same
+          account on each device and everything stays in sync.</p>
       </div>
-    </article>
+      <div class="downloads">
+        <div class="dl reveal" data-os="mac">
+          <span class="dl-ic"><svg class="i"><use href="#apple"/></svg></span>
+          <h4>Mac</h4><p>macOS 14 or later, Apple Silicon or Intel.</p>
+          <a class="btn primary" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence-mac.zip"><svg class="i"><use href="#dl"/></svg> Download for Mac</a>
+          <small>On first launch, if macOS cannot verify it, open System Settings › Privacy &amp; Security and click <b>Open Anyway</b>.</small>
+        </div>
+        <div class="dl reveal" data-os="windows">
+          <span class="dl-ic"><svg class="i"><use href="#windows"/></svg></span>
+          <h4>Windows</h4><p>Windows 10 or 11. It runs in the system tray and starts with Windows.</p>
+          <a class="btn primary" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence-Setup.exe"><svg class="i"><use href="#dl"/></svg> Download for Windows</a>
+          <small>If SmartScreen appears, click <b>More info</b>, then <b>Run anyway</b>.</small>
+        </div>
+        <div class="dl reveal" data-os="linux">
+          <span class="dl-ic"><svg class="i"><use href="#linux"/></svg></span>
+          <h4>Linux</h4><p>An AppImage for any distribution, or a .deb for Debian and Ubuntu.</p>
+          <div class="dl-row"><a class="btn primary" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence.AppImage"><svg class="i"><use href="#dl"/></svg> AppImage</a>
+            <a class="btn" href="https://github.com/wilsonwilson49/cadence/releases/latest/download/Cadence.deb">.deb</a></div>
+          <small>For the AppImage, run <code>chmod +x Cadence.AppImage</code>, then open it.</small>
+        </div>
+        <div class="dl reveal" data-os="phone">
+          <span class="dl-ic"><svg class="i"><use href="#phone"/></svg></span>
+          <h4>iPhone and Android</h4><p>Use the web app from your home screen. It opens without the browser bars.</p>
+          <a class="btn primary" href="/app"><svg class="i"><use href="#arrow"/></svg> Open the web app</a>
+          <small>On iPhone, tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>. On Android, choose <b>Install app</b> in Chrome’s menu.</small>
+        </div>
+      </div>
+      <p class="fine center reveal">All releases are on <a href="https://github.com/wilsonwilson49/cadence/releases">GitHub</a>.</p>
+    </div></section>
+
+    <section class="section last"><div class="wrap">
+      <div class="band reveal">
+        <div><h2>Start with today’s list</h2><p>Creating an account takes under a minute, and Cadence is free.</p></div>
+        <a class="btn light lg" href="/app?mode=register" data-start><span class="when-out">Create an account</span><span class="when-in">Open Cadence</span> <svg class="i"><use href="#arrow"/></svg></a>
+      </div>
+    </div></section>
   </main>
 
   <footer><div class="wrap">
+    <a class="brand" href="/"><img src="/apple-touch-icon.png" alt="">Cadence</a>
+    <nav><a href="/app">Open the app</a><a href="#download">Download</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:cadencemain26@gmail.com">Contact</a></nav>
     <span>© 2026 Cadence</span>
-    <a href="/app">Open the app</a><a href="#download">Download</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:cadencemain26@gmail.com">Contact</a>
   </div></footer>
 
   <script>
@@ -196,10 +356,29 @@
       try { signedIn ? localStorage.setItem('cadence:signedIn', '1') : localStorage.removeItem('cadence:signedIn'); } catch {}
       if (signedIn) document.querySelectorAll('[data-start]').forEach(a => { a.href = '/app'; });
     }).catch(() => {});
-    // Mark the download for this computer.
-    const ua = navigator.userAgent;
-    const os = /Mac/.test(ua) ? 'mac' : /Win/.test(ua) ? 'windows' : /Linux|X11/.test(ua) && !/Android/.test(ua) ? 'linux' : null;
-    if (os) document.querySelector(`tr[data-os="${os}"]`)?.classList.add('mine');
+    // The download for this device: marked in the list, and named on the hero's second button.
+    const ua = navigator.userAgent, touchMac = /Mac/.test(ua) && navigator.maxTouchPoints > 1;
+    const os = /iPhone|iPad|iPod|Android/.test(ua) || touchMac ? 'phone' : /Mac/.test(ua) ? 'mac' : /Win/.test(ua) ? 'windows' : /Linux|X11/.test(ua) ? 'linux' : null;
+    if (os) {
+      document.querySelector(`.dl[data-os="${os}"]`)?.classList.add('mine');
+      const label = { mac: 'Download for Mac', windows: 'Download for Windows', linux: 'Download for Linux', phone: 'Add to your home screen' }[os];
+      document.querySelector('[data-os-cta] span').textContent = label;
+    }
+    // Smooth scrolling only for clicks on links within this page.
+    document.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]');
+      const target = a && document.querySelector(a.getAttribute('href'));
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      history.replaceState(null, '', a.getAttribute('href'));
+    });
+    // Sections fade in as they scroll into view; anything on screen at load shows straight away.
+    const reveals = [...document.querySelectorAll('.reveal')];
+    for (const el of reveals) { const r = el.getBoundingClientRect(); if (r.top < innerHeight && r.bottom > 0) el.classList.add('instant', 'in'); }
+    requestAnimationFrame(() => requestAnimationFrame(() => reveals.forEach(el => el.classList.remove('instant'))));
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12 });
+    reveals.filter(el => !el.classList.contains('in')).forEach(el => io.observe(el));
   </script>
 </body>
 </html>
