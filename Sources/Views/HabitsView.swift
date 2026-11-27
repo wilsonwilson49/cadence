@@ -23,7 +23,7 @@ struct HabitsView: View {
             if let i = identities.firstIndex(where: { $0.0 == id }) { identities[i].1 += stats[t.id]?.votes ?? 0 } else { identities.append((id, stats[t.id]?.votes ?? 0)) }
         } }
         return VStack(spacing: 0) {
-            ScreenHeader(title: "Habits", subtitle: "Small habits, repeated. Every check-off is a vote for the person you're becoming.") {
+            ScreenHeader(title: "Habits", subtitle: "Habits are tasks that repeat on a schedule. This page shows the streak and history of each one.") {
                 Button { model.newHabit() } label: { Label("New Habit", systemImage: "plus") }.buttonStyle(.borderedProminent)
             }
             ScrollView {
@@ -47,7 +47,7 @@ struct HabitsView: View {
                         VStack(spacing: 8) {
                             Image(systemName: "arrow.triangle.2.circlepath.circle").font(.system(size: 36)).foregroundStyle(.secondary)
                             Text("No habits yet").font(.app(.title3).weight(.semibold))
-                            Text("Start tiny: pick one thing you want to do every day, and the 2-minute version of it.").foregroundStyle(.secondary)
+                            Text("Add one thing you want to do every day, together with a 2-minute version of it for days with little time.").foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 30)
                     } else {
@@ -112,7 +112,7 @@ struct HabitsView: View {
                     .padding(.vertical, 6)
                 }
             }
-            Text("Rate each one good (+), neutral (=) or bad (–) for who you want to be. “Replace it” starts a habit that takes a bad one's place.")
+            Text("Rate each one good (+), neutral (=) or bad (–). “Replace it” starts a new habit to take the place of a bad one.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -127,10 +127,10 @@ struct HabitsView: View {
     private var laws: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
             ForEach(Array([
-                ("Make it obvious", "Give it a cue: a time and place, or stack it after a habit you already have."),
-                ("Make it attractive", "Pair it with something you enjoy, and spend time with people who already do it."),
-                ("Make it easy", "Shrink it to a 2-minute version. Showing up matters more than doing it well."),
-                ("Make it satisfying", "Reward yourself right after, and don't break the chain: never miss twice."),
+                ("Make it obvious", "Give it a cue, such as a time and place, or do it right after a habit you already have."),
+                ("Make it attractive", "Pair it with something you enjoy, or do it with people who already have the habit."),
+                ("Make it easy", "Make a 2-minute version of it. Doing it every day matters more than doing it well."),
+                ("Make it satisfying", "Reward yourself right after it, and do not miss it two days in a row."),
             ].enumerated()), id: \.offset) { i, law in
                 HStack(alignment: .top, spacing: 10) {
                     Text("\(i + 1)").font(.app(.callout).bold()).foregroundStyle(Color.accentColor)
@@ -311,7 +311,7 @@ private struct HabitCard: View {
                 StepChecklist(occ: occ) { model.beginReflection($0) }
             }
             if stats.missTwice {
-                Label("Missed last time. Never miss twice: even the 2-minute version counts today.", systemImage: "exclamationmark.circle")
+                Label("This was missed last time. To avoid missing it twice in a row, even the 2-minute version counts today.", systemImage: "exclamationmark.circle")
                     .font(.app(.caption)).foregroundStyle(.orange)
                     .padding(8).frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))

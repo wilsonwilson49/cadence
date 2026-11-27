@@ -70,7 +70,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(greeting(now) + (sync.username.map { ", \($0)" } ?? "")).font(.app(.title3)).foregroundStyle(.secondary)
                 Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day())).font(Theme.heading(32))
-                Text(total == 0 ? "Nothing on your checklist today." : open == 0 ? "Everything is checked off. Nice work." : "\(open) thing\(open == 1 ? "" : "s") left today.")
+                Text(total == 0 ? "Nothing on your checklist today." : open == 0 ? "Everything is checked off." : "\(open) thing\(open == 1 ? "" : "s") left today.")
                     .foregroundStyle(.secondary)
             }
             Spacer()

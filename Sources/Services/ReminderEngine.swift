@@ -12,7 +12,7 @@ final class ReminderEngine: ObservableObject {
         var title: String {
             switch self {
             case .launch: return "Time to check in"
-            case .wake, .unlock: return "Welcome back — check your list"
+            case .wake, .unlock: return "Your list for today"
             case .manual: return "Daily check-in"
             }
         }
@@ -181,7 +181,7 @@ final class ReminderEngine: ObservableObject {
         if occ.isEvent {
             var body = "Today"
             if let start = occ.start {
-                body = offset == 0 ? "Starting now (\(timeString(start)))" : offset < 0 ? offsetString(offset) : "Starts at \(timeString(start)) — \(offsetString(offset))"
+                body = offset == 0 ? "Starting now (\(timeString(start)))" : offset < 0 ? offsetString(offset) : "Starts at \(timeString(start)) (\(offsetString(offset)))"
             }
             if !occ.task.notes.isEmpty { body += " · \(occ.task.notes)" }
             return AlertContent(kind: .event, title: occ.task.title, body: body, symbol: "calendar", tint: occ.task.color.color)
@@ -191,26 +191,26 @@ final class ReminderEngine: ObservableObject {
             if offset < 0, let end = occ.end {
                 body = "Check-in: \(offsetString(offset)) (until \(timeString(end)))"
             } else {
-                body = offset == 0 ? "Starting now (\(timeString(start)))" : "At \(timeString(start)) — \(offsetString(offset))"
+                body = offset == 0 ? "Starting now (\(timeString(start)))" : "At \(timeString(start)) (\(offsetString(offset)))"
             }
         } else {
             body = offset >= 1440 ? "Coming up \(occ.day.formatted(.dateTime.weekday(.wide)))" : "On today's checklist"
         }
         // Long-term and until-done tasks say where they stand, since they come back every day.
         if occ.task.isUntilDone || occ.task.isLongTerm, let plan = occ.task.planSummary { body += " · \(plan)" }
-        body += ". Check it off with a reflection when you're done."
+        body += ". When it is done, check it off with a reflection."
         return AlertContent(kind: .task, title: occ.task.title, body: body,
                             symbol: "checkmark.circle", tint: occ.task.color.color, occurrence: occ)
     }
 
     private func nudgeContent(_ open: [Occurrence]) -> AlertContent {
         guard !open.isEmpty else {
-            return AlertContent(kind: .nudge, title: "Checklist check", body: "All done for today. Nice work.",
+            return AlertContent(kind: .nudge, title: "Checklist", body: "Everything on today's list is done.",
                                 symbol: "checkmark.seal.fill", tint: .green)
         }
         let names = open.prefix(3).map(\.task.title).joined(separator: ", ")
         let more = open.count > 3 ? " +\(open.count - 3) more" : ""
-        return AlertContent(kind: .nudge, title: "Checklist check — \(open.count) left",
+        return AlertContent(kind: .nudge, title: "Checklist: \(open.count) left",
                             body: names + more, symbol: "checklist", tint: .indigo)
     }
 }

@@ -200,11 +200,11 @@ final class MobileModel: ObservableObject {
                     let c = UNMutableNotificationContent()
                     c.title = occ.task.title
                     if occ.isEvent {
-                        c.body = occ.start.map { off == 0 ? "Starting now (\(timeString($0)))" : "Starts at \(timeString($0)) — \(offsetString(off))" } ?? "Today"
+                        c.body = occ.start.map { off == 0 ? "Starting now (\(timeString($0)))" : "Starts at \(timeString($0)) (\(offsetString(off)))" } ?? "Today"
                     } else {
-                        c.body = occ.start.map { off < 0 ? offsetString(off) : off == 0 ? "Starting now (\(timeString($0)))" : "At \(timeString($0)) — \(offsetString(off))" }
+                        c.body = occ.start.map { off < 0 ? offsetString(off) : off == 0 ? "Starting now (\(timeString($0)))" : "At \(timeString($0)) (\(offsetString(off)))" }
                             ?? "On today's checklist"
-                        c.body += ". Check it off with a reflection when you're done."
+                        c.body += ". When it is done, check it off with a reflection."
                     }
                     c.sound = .default
                     c.userInfo = ["occ": occ.id]
@@ -223,7 +223,7 @@ final class MobileModel: ObservableObject {
             while n < 8 && fire < now.addingTimeInterval(4 * 3600) {
                 let c = UNMutableNotificationContent()
                 c.title = "Still not done: \(occ.task.title)"
-                c.body = "It keeps coming back every \(occ.task.nagMinutes) min until it's checked off."
+                c.body = "It comes back every \(occ.task.nagMinutes) min until it is checked off."
                 c.sound = .default
                 c.userInfo = ["occ": occ.id]
                 c.interruptionLevel = occ.task.nagLevel == .strict ? .timeSensitive : .active
@@ -262,7 +262,7 @@ final class MobileModel: ObservableObject {
         }
         if focus.running && !focus.isPaused {
             let c = UNMutableNotificationContent()
-            c.title = "Time! Your focus session is over"
+            c.title = "Your focus session is over"
             c.body = "Open Cadence to see your score and write your reflections."
             c.sound = .default
             center.add(UNNotificationRequest(identifier: "focus-end", content: c,

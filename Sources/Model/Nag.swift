@@ -15,9 +15,9 @@ enum NagLevel: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .normal: return "One reminder at the times you choose."
-        case .persistent: return "The reminder comes back every few minutes until it's checked off."
+        case .persistent: return "The reminder comes back every few minutes until the task is checked off."
         case .pushy: return "A window opens in the middle of the screen, again and again."
-        case .strict: return "Covers the screen, putting it off asks why, and the Mac blocks your distracting apps and sites until it's done."
+        case .strict: return "A window covers the screen and asks for a reason when you put it off, and the Mac blocks your distracting apps and sites until the task is done."
         }
     }
     var symbol: String {

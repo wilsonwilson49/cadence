@@ -143,7 +143,7 @@ struct SettingsView: View {
                 Button("Preview the strict cover") { model.nag.preview(.strict) }
             }
         } header: { Text("Tough love") } footer: {
-            Text("A task set to Strict (in its editor, under “For things you'd rather put off”) blocks these until it's checked off. Blocked apps are hidden as soon as they come to the front. Websites are blocked in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera and Firefox. The first time, macOS asks whether Cadence may control the browser. Firefox can't be controlled that way, so it needs Cadence turned on in System Settings › Privacy & Security › Accessibility, and a blocked Firefox tab is closed and replaced by the blocked page (⌘⇧T brings it back afterwards).")
+            Text("A task set to Strict (in its editor, under “For things you'd rather put off”) blocks these until it is checked off. Blocked apps are hidden as soon as they come to the front. Websites are blocked in Safari, Chrome, Arc, Brave, Edge, Vivaldi, Opera and Firefox. The first time, macOS asks whether Cadence may control the browser. Firefox can't be controlled that way, so it needs Cadence turned on in System Settings › Privacy & Security › Accessibility, and a blocked Firefox tab is closed and replaced by the blocked page (⌘⇧T brings it back afterwards).")
         }
     }
 
@@ -175,7 +175,7 @@ struct SettingsView: View {
             Toggle(isOn: $allowanceOn) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Give me a set time when I sit down, then make me decide")
-                    Text("When you open or unlock your Mac (or come back after 5 minutes away), the clock starts. When it runs out, a wall covers the screen: work on a task, keep going with a reason, or stop.")
+                    Text("When you open or unlock your Mac, or come back after 5 minutes away, a timer starts. When it runs out, a wall covers the screen and asks you to work on a task, continue with a reason, or stop.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
@@ -186,14 +186,14 @@ struct SettingsView: View {
                 }
                 .onChange(of: allowanceMinutes) { _, _ in model.guardian.restartAllowance() }
                 if let ends = model.guardian.allowanceEnds {
-                    Text("This time: until \(timeString(ends)). Focus, work and study sessions count as a decision; you get fresh time after them.")
+                    Text("This time: until \(timeString(ends)). A focus, work or study session counts as a decision, and the time starts again after it.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
             Toggle(isOn: $awayOn) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("When I've been away, ask what happened")
-                    Text("Back after a while away during your active hours, a wall asks you to write why before you carry on. Time covered by a closed task or event, or a no-computer study session, doesn't count.")
+                    Text("When you come back after a while away during your active hours, a wall asks you to write why before you continue. Time covered by a closed task or event, or by a no-computer study session, is not counted.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
@@ -211,7 +211,7 @@ struct SettingsView: View {
                 Button("Preview the away wall") { model.walls.show(.away(from: Date().addingTimeInterval(-47 * 60), to: Date()), preview: true) }
             }
         } header: { Text("Screen time walls") } footer: {
-            Text("Walls cover every screen until you answer. If you ever need out, ⌥⌘Q quits Cadence completely. Your answers are kept under Reflections.")
+            Text("Walls cover every screen until you answer. To get out of one, ⌥⌘Q quits Cadence completely. Your answers are kept under Reflections.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -222,7 +222,7 @@ struct SettingsView: View {
             Toggle(isOn: $aiCheckOn) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Check that reflections are real")
-                    Text("Before a reflection (or a wall answer) is accepted, Google's Gemini reads it and sends back keyboard mashing, padding and copy-paste. Honest short answers pass. If Gemini can't be reached, it's accepted as usual.")
+                    Text("Before a reflection or a wall answer is accepted, Google's Gemini reads it and rejects keyboard mashing, padding and copied text. Short honest answers are accepted. If Gemini cannot be reached, the answer is accepted as usual.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
             }
@@ -252,7 +252,7 @@ struct SettingsView: View {
                 if let aiTest { Text(aiTest).font(.app(.caption)).foregroundStyle(aiTest.hasPrefix("Working") ? .green : .orange) }
             }
         } header: { Text("AI check") } footer: {
-            Text("Get a key at aistudio.google.com (API keys). Reflection text is sent to Google only when this is on; the key never leaves this Mac and isn't synced.")
+            Text("Get a key at aistudio.google.com under API keys. Reflection text is sent to Google only while this is on, and the key stays on this Mac and is not synced.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -295,7 +295,7 @@ struct SettingsView: View {
                 }
                 .disabled(sync.draftUsername.isEmpty || syncPassword.isEmpty || sync.isSigningIn)
                 if case .error(let m) = sync.status { Text(m).font(.app(.caption)).foregroundStyle(.red) }
-                Text("Use the same username and password as on cadenceplanner.vercel.app (or create an account here). You stay signed in on this Mac until you sign out.")
+                Text("Use the same username and password as on cadenceplanner.vercel.app, or create an account here. You stay signed in on this Mac until you sign out.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
             }
         } header: {
@@ -379,7 +379,7 @@ struct SettingsView: View {
             Picker("Until-done tasks and project subtasks count today when", selection: $store.settings.projectTodayDays) {
                 ForEach(projectTodayChoices, id: \.0) { Text($0.1).tag($0.0) }
             }
-            Text("Click the ring on Today to switch quickly. Urgent items always count today. Syncs to your iPhone and the web.")
+            Text("Clicking the ring on Today also switches between them. Urgent items are always counted today. This setting syncs to your iPhone and the web.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Today's progress ring")
@@ -454,7 +454,7 @@ struct SettingsView: View {
                  : "Turn on to have macOS keep Cadence running all the time, even if it crashes or is force-quit.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
             if let keepAliveError { Text(keepAliveError).font(.app(.caption)).foregroundStyle(.red) }
-            Text("Closing the window never quits Cadence: it keeps running in the menu bar, so reminders, nudges, check-ins and blocking keep working\(dockMode == .never ? ", with no Dock icon at all" : ""). To quit completely, press ⌥⌘Q or use the menu bar icon.")
+            Text("Closing the window does not quit Cadence. It keeps running in the menu bar, so reminders, check-ins and blocking keep working\(dockMode == .never ? ", with no Dock icon at all" : ""). To quit completely, press ⌥⌘Q or use the menu bar icon.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Running in the background")
@@ -615,7 +615,7 @@ struct SettingsView: View {
                 Spacer()
                 if let s = importer.lastSummary { Text(s).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(2) }
             }
-            Text("Imported items never notify you (you can turn notifications on for any single one in its editor). Deleting one hides it for good. Google Calendar is re-checked every 2 minutes (and when Cadence comes to the front), so edits, moves and deletions there show up here quickly; Calendly every 30 minutes.")
+            Text("Imported items never send notifications, but you can turn them on for one item in its editor. Deleting an imported item hides it permanently. Google Calendar is re-checked every 2 minutes (and when Cadence comes to the front), so edits, moves and deletions there show up here quickly; Calendly every 30 minutes.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         } header: {
             Text("Calendar imports")
@@ -643,7 +643,7 @@ struct SettingsView: View {
         } header: {
             Text("Task presets")
         } footer: {
-            Text("Saved combinations of conditions (repeat, keep until done, due date, reminders, color…). Pick one at the top of the New Task window, or save the current one there with “Save as preset”.")
+            Text("A preset is a saved set of conditions, such as the repeat schedule, due date, reminders and color. Pick one at the top of the New Task window, or save the current conditions there with “Save as preset”.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -663,7 +663,7 @@ struct SettingsView: View {
         } header: {
             Text("Open hours")
         } footer: {
-            Text("When you're normally free to be booked. Booking shows what's left of these hours after your closed tasks and events.")
+            Text("The hours when you can normally be booked. Booking shows what remains of these hours after your closed tasks and events.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -691,7 +691,7 @@ struct SettingsView: View {
         switch authStatus {
         case .authorized: return "Notifications are allowed"
         case .provisional: return "Notifications are delivered quietly"
-        case .denied: return "Notifications are turned off for Cadence — on-screen banners are used instead"
+        case .denied: return "Notifications are turned off for Cadence, so on-screen banners are used instead"
         default: return "Notification permission not requested yet"
         }
     }

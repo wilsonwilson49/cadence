@@ -217,7 +217,7 @@ struct DecisionWall: View {
             Image(systemName: "hourglass.bottomhalf.filled").font(.system(size: 38)).foregroundStyle(.orange)
             Text("TIME TO DECIDE").font(.app(.caption).weight(.bold)).tracking(1.4).foregroundStyle(.secondary)
             Text("Your \(Focus.label(model.guardian.allowanceMinutes)) are up").font(Theme.heading(36, .bold))
-            Text("You gave yourself \(Focus.label(model.guardian.allowanceMinutes)) when you sat down. What now?")
+            Text("You gave yourself \(Focus.label(model.guardian.allowanceMinutes)) when you sat down. Choose what to do next.")
                 .font(.app(.title3)).foregroundStyle(.secondary)
 
             if !open.isEmpty {
@@ -272,14 +272,14 @@ struct AwayWall: View {
             Image(systemName: "moon.zzz.fill").font(.system(size: 38)).foregroundStyle(Theme.accent)
             Text("WHILE YOU WERE AWAY").font(.app(.caption).weight(.bold)).tracking(1.4).foregroundStyle(.secondary)
             Text("You were away for \(Focus.label(mins))").font(Theme.heading(36, .bold))
-            Text("\(timeString(from)) – \(timeString(to)). Before you carry on: what happened, and was it what you meant to do?")
+            Text("\(timeString(from)) – \(timeString(to)). Before you continue, write what happened and whether it was what you meant to do.")
                 .font(.app(.title3)).foregroundStyle(.secondary)
             let missed = store.todayChecklist().filter { !$0.isResolved && ($0.start.map { $0 >= from && $0 <= to } ?? false) }
             if !missed.isEmpty {
                 Label("Due while you were away: \(missed.map(\.task.title).joined(separator: ", "))", systemImage: "clock.badge.exclamationmark")
                     .font(.app(.callout)).foregroundStyle(.orange)
             }
-            WallWriting(prompt: "What were you doing, and why? Honest is fine: a nap, your phone, a friend dropped by…",
+            WallWriting(prompt: "What were you doing, and why? Any honest answer is accepted, such as a nap, your phone or a visitor.",
                         about: "Away from the computer for \(mins) minutes during the day (\(timeString(from))–\(timeString(to)))",
                         minWords: max(8, store.settings.minReflectionWords / 2), buttonTitle: "Carry on") { text in
                 if walls.previewing { walls.hide(); return }

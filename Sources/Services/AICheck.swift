@@ -106,7 +106,7 @@ enum AICheck {
             }
             let genuine = verdict["genuine"] as? Bool ?? true
             let reason = (verdict["reason"] as? String) ?? ""
-            return .success(Verdict(genuine: genuine, reason: reason.isEmpty ? "That doesn't read like a real reflection. Say what actually happened." : reason))
+            return .success(Verdict(genuine: genuine, reason: reason.isEmpty ? "This does not look like a real reflection. Write what actually happened." : reason))
         } catch {
             return .failure(error)
         }

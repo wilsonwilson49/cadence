@@ -89,7 +89,7 @@ final class NagEngine: ObservableObject {
         case .normal: return
         case .persistent:
             model.notifier.deliver(AlertContent(kind: .task, title: "Still not done: \(occ.task.title)",
-                                                body: n == 1 ? "This one keeps reminding you until it's checked off." : "Reminder \(n). It'll keep coming back every \(occ.task.nagMinutes) min until it's checked off.",
+                                                body: n == 1 ? "This task keeps reminding you until it is checked off." : "Reminder \(n). It comes back every \(occ.task.nagMinutes) min until it is checked off.",
                                                 symbol: NagLevel.persistent.symbol, tint: .orange, occurrence: occ),
                                    channels: [.notification, .banner, .sound])
         case .pushy: showPanel(occ)
@@ -227,7 +227,7 @@ struct NagView: View {
 
     var body: some View {
         VStack(spacing: strict ? 18 : 12) {
-            if preview { Text("Preview — this is what it looks like").font(.app(.caption)).foregroundStyle(.secondary) }
+            if preview { Text("Preview of how it looks").font(.app(.caption)).foregroundStyle(.secondary) }
             Image(systemName: strict ? "lock.fill" : "exclamationmark.bubble.fill")
                 .font(.system(size: strict ? 40 : 28)).foregroundStyle(strict ? Color.red : .orange)
             Text("STILL NOT DONE").font(.app(.caption).weight(.semibold)).tracking(1.5).foregroundStyle(.secondary)

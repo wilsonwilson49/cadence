@@ -21,7 +21,7 @@ struct TodoView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "To-Do List", subtitle: "Every task in one place. Repeating things are habits now: they're on the Habits page.") {
+            ScreenHeader(title: "To-Do List", subtitle: "Every task, in one list. Tasks that repeat are habits, and they are listed on the Habits page.") {
                 Picker("", selection: $mode) {
                     ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
                 }

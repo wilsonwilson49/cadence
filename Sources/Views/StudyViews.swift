@@ -7,7 +7,7 @@ struct StudyView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "Study", subtitle: "Interval presets (the class period, 25 on / 5 off, your own) or time away from the screen.") {
+            ScreenHeader(title: "Study", subtitle: "Study in timed intervals, such as the class period or 25 minutes on and 5 off, or away from the screen.") {
                 Picker("", selection: $tab) {
                     Text("Session").tag("session"); Text("Presets").tag("courses"); Text("History").tag("history")
                 }
@@ -147,7 +147,7 @@ private struct StudySetup: View {
             }
             HStack {
                 Text(draft.taskBased ? "Tick off each interval's tasks, then move on."
-                     : "About \(durationString(seconds: draft.cycleMinutes * draft.repeats * 60)) in all. Change any length; it's just for this session unless you save it.")
+                     : "About \(durationString(seconds: draft.cycleMinutes * draft.repeats * 60)) in all. Changes to the lengths apply to this session only, unless you save them.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
                 Spacer()
                 if let c = saved {
@@ -173,7 +173,7 @@ private struct StudySetup: View {
                 MinutesField(value: $offlineMinutes, range: 0...600, choices: [30, 45, 60, 90, 120, 180])
                 Text(offlineMinutes == 0 ? "(0 = until I stop)" : "").font(.app(.caption)).foregroundStyle(.secondary)
             }
-            Text("Close the laptop or walk away from it. If you use the computer during the session, Cadence notes it and reminds you.")
+            Text("Close the laptop or move away from it. If you use the computer during the session, Cadence records it and reminds you.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -326,7 +326,7 @@ private struct TimedRunView: View {
                          caption: st.onBreak ? "break" : "studying", tint: st.onBreak ? .green : .accentColor)
                 VStack(alignment: .leading, spacing: 10) {
                     Text(st.onBreak ? "Break" : "Round \(st.round) of \(run.rounds)").font(.app(.title3).bold())
-                    Text(st.onBreak ? "Stand up, stretch, drink some water, look away from the screen." : "Just \(run.title). Phone away.")
+                    Text(st.onBreak ? "Stand up, stretch, drink some water and look away from the screen." : "Just \(run.title). Phone away.")
                         .foregroundStyle(.secondary)
                     HStack(spacing: 5) {
                         ForEach(1...max(1, run.rounds), id: \.self) { i in
@@ -355,7 +355,7 @@ private struct OfflineRunView: View {
                          caption: left == nil ? "away" : (left ?? 0) < 0 ? "over" : "left", tint: .teal)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Away from the screen").font(.app(.title3).bold())
-                    Text("Close the laptop or walk away. Paper, textbook, whiteboard. Come back and end the session when you're done.")
+                    Text("Close the laptop or move away from it, and work on paper. Come back and end the session when you are done.")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Label(run.screenSeconds < 10 ? "Computer not used so far" : "Computer used \(durationString(seconds: run.screenSeconds)) so far",
                           systemImage: run.screenSeconds < 10 ? "checkmark.circle" : "desktopcomputer")
@@ -425,7 +425,7 @@ private struct ClassPeriodRunView: View {
                             }
                             .padding(.top, 2)
                         } else if run.taskBased {
-                            Text("No tasks programmed for this period. Add them under Courses, or move on when you're done.")
+                            Text("This period has no tasks. Add them under Presets, or move on when you are done.")
                                 .font(.app(.caption)).foregroundStyle(.secondary)
                         }
                     }
@@ -478,7 +478,7 @@ private struct ClassPeriodRunView: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Label(run.showPhase == false ? "All intervals done" : "Cycle \(run.cycle) done", systemImage: "flag.checkered").font(.app(.title2).bold())
-                Text(run.showPhase == false ? "Go again, or finish and log it." : "Repeat and move on to the next phase if it seems good.").foregroundStyle(.secondary)
+                Text(run.showPhase == false ? "Go again, or finish and log it." : "Repeat the phase, or move on to the next one if you are ready.").foregroundStyle(.secondary)
                 HStack(spacing: 10) {
                     Button { study.update { $0.repeatCycle(phase: run.phase) } } label: {
                         Label("Repeat \(run.phase.title.lowercased())", systemImage: "arrow.counterclockwise")
@@ -653,7 +653,7 @@ private struct CoursesPanel: View {
                 .fixedSize()
                 .padding(.top, 4)
                 if courses.isEmpty {
-                    Text("A preset is a set of intervals you study with: the class period, 25 on / 5 off, or your own. Make one per subject if you like (Chemistry, CS), each with its own lengths, tasks and phase.")
+                    Text("A preset is a set of study intervals, such as the class period, 25 minutes on and 5 off, or your own. You can make one for each subject, each with its own lengths, tasks and phase.")
                         .font(.app(.caption)).foregroundStyle(.secondary).padding(.top, 6)
                 }
             }
@@ -704,7 +704,7 @@ private struct CourseEditor: View {
                         ForEach(StudyPhase.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented).labelsHidden()
-                    Text("These overlap a lot with the class periods, so it's guidance: some ideas to try while studying.")
+                    Text("These overlap with the class periods, so they are suggestions to try while studying rather than rules.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
                         GridRow {
@@ -736,7 +736,7 @@ private struct CourseEditor: View {
                         }
                         .pickerStyle(.segmented).fixedSize().labelsHidden()
                     }
-                    Text(c.taskBased ? "Each interval ends when you've ticked off its tasks." : "Each interval ends when its time is up (\(durationString(seconds: c.cycleMinutes * 60)) per round). Tasks are a checklist along the way.")
+                    Text(c.taskBased ? "Each interval ends when you've ticked off its tasks." : "Each interval ends when its time is up (\(durationString(seconds: c.cycleMinutes * 60)) per round). Tasks are a checklist to tick off during each period.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                     HStack(spacing: 14) {
                         HStack(spacing: 4) { Text("Repeat"); MinutesField(value: Binding(get: { c.repeats }, set: { v in edit { $0.repeats = v } }), range: 1...20, suffix: "×", choices: [1, 2, 3, 4, 6, 8]) }

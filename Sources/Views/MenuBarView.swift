@@ -92,7 +92,7 @@ struct MenuBarView: View {
                 Button("Open Cadence") { model.openChecklist() }
                 Spacer()
                 Button("Quit completely") { StayRunning.quitCompletely() }.buttonStyle(.borderless).foregroundStyle(.secondary)
-                    .help("Stops reminders until Cadence is opened again (⌥⌘Q). Closing the window or ⌘Q keeps it running here.")
+                    .help("Stops reminders until Cadence is opened again (⌥⌘Q). Closing the window or pressing ⌘Q keeps it running in the menu bar.")
             }
             .controlSize(.small)
         }
@@ -235,7 +235,7 @@ private struct MenuRow: View {
             }
             Spacer(minLength: 6)
             if occ.task.isBonus {
-                Image(systemName: "star").font(.system(size: 10)).foregroundStyle(.yellow).help("Bonus: optional, +\(Bonus.points) points in a focus session")
+                Image(systemName: "star").font(.system(size: 10)).foregroundStyle(.yellow).help("Bonus: optional, +\(Bonus.points) points when done in a focus session")
             } else if later && hovering {
                 Button("Urgent") { store.setUrgent(occ.task.id, true) }
                     .buttonStyle(.borderless).font(.app(.caption).weight(.semibold)).foregroundStyle(.red)

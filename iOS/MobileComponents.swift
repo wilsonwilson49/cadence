@@ -198,7 +198,7 @@ struct ReflectionSheet: View {
                         Text(target.occ.day.formatted(.dateTime.weekday(.wide).month().day())).font(.app(.caption)).foregroundStyle(.secondary)
                     }
                 }
-                Text(target.missed ? "Write at least \(min) words about why you didn't or couldn't do it. It's marked as not done, not failed: this is for learning."
+                Text(target.missed ? "Write at least \(min) words about why you didn't or couldn't do it. It is marked as not done rather than failed, and the reflection is for learning what got in the way."
                                    : "Write at least \(min) words before checking this off.")
                     .font(.app(.callout))
                 VStack(alignment: .leading, spacing: 4) {
@@ -317,10 +317,10 @@ struct EditorSheet: View {
                     TextField("Title", text: $task.title)
                     TextField("Notes", text: $task.notes, axis: .vertical).lineLimit(1...4)
                 } footer: {
-                    Text(task.isEvent ? "Events show on your calendar only: no checkbox, no reflection."
-                         : task.isBonus ? "Optional extras: listed on Today, never required, never overdue, no reminders. Each one finished during a focus session is worth +\(Bonus.points) points."
-                         : task.isHabit ? "Habits repeat and are tracked on the Habits tab: streaks, and never missing twice."
-                         : "Tasks go on your checklist; checking one off asks for a short reflection.")
+                    Text(task.isEvent ? "Events appear on the calendar only. They have no checkbox and no reflection."
+                         : task.isBonus ? "Bonus tasks are optional. They are listed on Today but are never overdue and never send reminders. Each one finished during a focus session gives +\(Bonus.points) points."
+                         : task.isHabit ? "Habits repeat on a schedule and are tracked on the Habits tab, which shows their streaks."
+                         : "Tasks go on your checklist, and checking one off asks for a short reflection.")
                 }
                 if !task.isEvent {
                     Section("Priority and hardness") {
@@ -337,8 +337,8 @@ struct EditorSheet: View {
                         }
                     } footer: {
                         Text(task.offComputer == true
-                             ? "Focus on it from the Mac or the web keeps running while you're away from the computer."
-                             : "Focus on it from the Mac or the web pauses after 5 minutes away from the computer.")
+                             ? "A focus session on this task, on the Mac or the web, keeps running while you are away from the computer."
+                             : "A focus session on this task, on the Mac or the web, pauses after 5 minutes without input.")
                     }
                 }
                 if task.isBonus {
@@ -382,8 +382,8 @@ struct EditorSheet: View {
                             }
                         }
                     } header: { Text("Comes back") } footer: {
-                        if task.recurrence.isRepeating { Text("Each time it comes around it's a fresh start: anything not checked off doesn't carry over.") }
-                        else if task.cycleGapDays != nil { Text("Once it's been checked off, it takes a break, then comes back.") }
+                        if task.recurrence.isRepeating { Text("Each time it comes around the count starts again, and unused check-offs do not carry over.") }
+                        else if task.cycleGapDays != nil { Text("After it has been checked off, it takes a break and then comes back.") }
                     }
                 }
                 if !task.isBonus {
@@ -437,8 +437,8 @@ struct EditorSheet: View {
                         }
                     } footer: {
                         if task.isUntilDone {
-                            Text(task.recurrence.isRepeating ? "Each one stays on your list until you finish it, or until the next one arrives."
-                                 : "It shows up every day until you check it off or mark it “didn't do it”.")
+                            Text(task.recurrence.isRepeating ? "Each one stays on your list until you finish it, or until the next one replaces it."
+                                 : "It appears every day until you check it off or mark it “didn't do it”.")
                         }
                     }
                 }
@@ -467,7 +467,7 @@ struct EditorSheet: View {
                         }
                     } header: { Text("For things you'd rather put off") } footer: {
                         Text(task.nagLevel == .normal ? task.nagLevel.detail
-                             : "On iPhone it's a notification that keeps coming back. The pop-ups and app blocking happen on the Mac and the web.")
+                             : "On iPhone this is a notification that keeps coming back. The windows and app blocking only happen on the Mac and the web.")
                     }
                 }
                 if !task.isEvent { timeTakenSection }
@@ -579,7 +579,7 @@ struct EditorSheet: View {
                 TextField("Add a step", text: $newStep).submitLabel(.done).onSubmit(addStep)
             }
         } header: { Text("Steps") } footer: {
-            Text("Optional. Tick them off each time; they start fresh every time it comes around. Ticking the last one opens the check-off. Swipe a step to delete it.")
+            Text("Optional. Steps are ticked off each time and start unticked the next time the habit comes around. Ticking the last step opens the check-off. Swipe a step to delete it.")
         }
     }
 

@@ -152,7 +152,7 @@ struct CheckButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(done ? "Mark as not done" : "Complete — you'll write a short reflection first")
+        .help(done ? "Mark as not done" : "Check it off (you write a short reflection first)")
     }
 }
 
@@ -179,7 +179,7 @@ struct MissButton: View {
         .buttonStyle(.plain)
         .opacity(dimmed ? 0.35 : 1)
         .onHover { hovering = $0 }
-        .help(missed ? "Undo “didn't do it”" : "Didn't do it / couldn't — you'll reflect on why")
+        .help(missed ? "Undo “didn't do it”" : "Mark it as not done (you write a short reflection on why)")
     }
 }
 
@@ -201,7 +201,7 @@ struct ChecklistRow: View {
             if occ.task.isBonus {
                 // Optional: there's nothing to miss, so no X box.
                 Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(.yellow).frame(width: 18)
-                    .help("Bonus task: optional, +\(Bonus.points) points when you finish it during a focus session")
+                    .help("Bonus task. It is optional, and finishing it during a focus session gives +\(Bonus.points) points.")
             } else {
                 MissButton(missed: occ.isMissed, dimmed: occ.isDone) {
                     if let onMiss { onMiss(occ) } else { model.toggleMissed(occ) }
@@ -266,7 +266,7 @@ struct ChecklistRow: View {
                     if occ.task.nagLevel != .normal && !occ.isResolved {
                         Label(occ.task.nagLevel.title, systemImage: occ.task.nagLevel.symbol)
                             .foregroundStyle(occ.task.nagLevel == .strict ? .red : .orange)
-                            .help("Keeps after you until it's checked off: \(occ.task.nagLevel.detail)")
+                            .help("Reminds you repeatedly until it is checked off. \(occ.task.nagLevel.detail)")
                     }
                     if occ.task.isPastDue { Text("Past due").foregroundStyle(.red).fontWeight(.medium) }
                     if occ.isOverdue { Text("Overdue").foregroundStyle(.red).fontWeight(.medium) }
@@ -457,7 +457,7 @@ struct ReflectionForm: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(missed ? "Write at least \(minWords) words about why you didn't or couldn't do it. It's marked as not done, not failed — this is for learning. Some prompts:"
+                Text(missed ? "Write at least \(minWords) words about why you didn't or couldn't do it. It is marked as not done rather than failed, and the reflection is for learning what got in the way. Some prompts:"
                             : "Write at least \(minWords) words before checking this off. Some prompts:")
                     .font(.app(.callout))
                 ForEach(promptsFor(occurrence), id: \.self) { p in
@@ -511,7 +511,7 @@ struct ReflectionForm: View {
                 .buttonStyle(.borderedProminent)
                 .tint(missed ? .red : .accentColor)
                 .disabled(!ready || checking)
-                .help(ready ? "⌘↩ to submit" : count < minWords ? "Write \(minWords - count) more word\(minWords - count == 1 ? "" : "s")" : "The time taken isn't a length (try 45 or 1:30), or clear it")
+                .help(ready ? "⌘↩ to submit" : count < minWords ? "Write \(minWords - count) more word\(minWords - count == 1 ? "" : "s")" : "The time taken is not a length. Enter something like 45 or 1:30, or clear it.")
             }
         }
         .padding(22)

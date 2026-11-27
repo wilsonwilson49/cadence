@@ -57,7 +57,7 @@ struct CheckInView: View {
                 }
             } else {
                 if done == items.count {
-                    Label("Everything is checked off. Nice work.", systemImage: "checkmark.seal.fill")
+                    Label("Everything is checked off.", systemImage: "checkmark.seal.fill")
                         .foregroundStyle(.green)
                 }
                 ScrollView {

@@ -108,10 +108,10 @@ struct TaskEditor: View {
                 .frame(width: 330)
             }
             .padding([.horizontal, .top], 20)
-            Text(task.isEvent ? "Events show on your calendars only: no checkbox, no reflection."
-                 : task.isBonus ? "Bonus tasks are optional extras: listed on Today and in Focus, but never required, never overdue and never reminding you. Each one you finish during a focus session is worth +\(Bonus.points) points."
-                 : task.isHabit ? "Habits repeat on a schedule and are tracked on the Habits page: streaks, never missing twice, and who you're becoming."
-                 : "Tasks go on your checklist; checking one off asks for a short reflection.")
+            Text(task.isEvent ? "Events appear on the calendars only. They have no checkbox and no reflection."
+                 : task.isBonus ? "Bonus tasks are optional. They are listed on Today and in Focus, but they are never overdue and never send reminders. Each one finished during a focus session gives +\(Bonus.points) points."
+                 : task.isHabit ? "Habits repeat on a schedule and are tracked on the Habits page, which shows their streaks."
+                 : "Tasks go on your checklist, and checking one off asks for a short reflection.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -141,8 +141,8 @@ struct TaskEditor: View {
                         }
                     } footer: {
                         Text(task.offComputer == true
-                             ? "A focus session on it keeps running while you're away or the Mac sleeps, and a locked screen doesn't count as time away."
-                             : "In a focus session, 5 minutes away from the computer (or the Mac going to sleep) pauses it until you're back.")
+                             ? "A focus session on this task keeps running while you are away or the Mac sleeps, and a locked screen is not counted as time away."
+                             : "A focus session on this task pauses after 5 minutes without input, or when the Mac sleeps, and resumes when you come back.")
                             .font(.app(.caption)).foregroundStyle(.secondary)
                     }
                 }
@@ -186,8 +186,8 @@ struct TaskEditor: View {
                     Text("Your time")
                 } footer: {
                     Text(task.isBusy
-                         ? "Blocks this time: it's taken out of your open time on Booking\(task.source == "google" || syncGoogle ? ", and shows as busy in Google Calendar" : "")."
-                         : "Just for info: it shows on your calendars, but you're still free to be booked then.")
+                         ? "It blocks this time, so it is taken out of your open time on Booking\(task.source == "google" || syncGoogle ? ", and shows as busy in Google Calendar" : "")."
+                         : "It is shown on your calendars for information, and you can still be booked at that time.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
 
@@ -196,7 +196,7 @@ struct TaskEditor: View {
                         ForEach(overlaps, id: \.self) { line in
                             Label(line, systemImage: "square.stack.3d.up").font(.app(.callout))
                         }
-                        Text("That's fine: this task's reminders will still fire on time, even in the middle of the other one.")
+                        Text("This task's reminders still fire on time, even during the other item.")
                             .font(.app(.caption)).foregroundStyle(.secondary)
                     } header: {
                         Text("Overlaps with")
@@ -233,12 +233,12 @@ struct TaskEditor: View {
                                 .labelsHidden().fixedSize()
                         }
                         Stepper("Times in total: \(cycleTimes)", value: $cycleTimes, in: 1...99)
-                        Label("No dates: it stays on your list every day until you check it off (or mark it “didn't do it”), then takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back — \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total, then it's finished for good.",
+                        Label("It has no dates. It stays on your list every day until you check it off or mark it “didn't do it”, then takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back, \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total. After that it is finished.",
                               systemImage: "flame")
                             .font(.app(.caption)).foregroundStyle(.secondary)
                     } else if task.isLongTerm {
                         DatePicker("Every day until", selection: $endDate, in: task.startDate..., displayedComponents: .date)
-                        Label("On your checklist and reminds you every day until \(endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) (\(max(0, Calendar.current.dateComponents([.day], from: task.startDate.startOfDay, to: endDate.startOfDay).day ?? 0) + 1) days). Check off each day on its own.",
+                        Label("It is on your checklist and reminds you every day until \(endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) (\(max(0, Calendar.current.dateComponents([.day], from: task.startDate.startOfDay, to: endDate.startOfDay).day ?? 0) + 1) days). Each day is checked off separately.",
                               systemImage: "repeat")
                             .font(.app(.caption)).foregroundStyle(.secondary)
                     } else if task.recurrence.isRepeating {
@@ -269,8 +269,8 @@ struct TaskEditor: View {
                         }
                         if task.isUntilDone {
                             Text(task.recurrence.isRepeating
-                                 ? "Each one shows up and reminds you every day until you check it off or mark it “didn't do it”, or until the next one arrives and takes its place."
-                                 : "It shows up and reminds you every day until you check it off or mark it “didn't do it”. Then it's gone.")
+                                 ? "Each one appears and reminds you every day until you check it off or mark it “didn't do it”, or until the next one replaces it."
+                                 : "It appears and reminds you every day until you check it off or mark it “didn't do it”, and then it leaves the list.")
                                 .font(.app(.caption)).foregroundStyle(.secondary)
                             if !task.recurrence.isRepeating {
                                 Toggle("Has a due date", isOn: $hasDue)
@@ -289,7 +289,7 @@ struct TaskEditor: View {
                 Section {
                     Toggle(isOn: Binding(get: { !task.channels.isEmpty },
                                          set: { task.channels = $0 ? store.settings.defaultChannels : [] })) {
-                        Label(task.channels.isEmpty ? "No notifications — stays on the checklist quietly" : "Notify me about this task",
+                        Label(task.channels.isEmpty ? "No notifications. It stays on the checklist without reminders." : "Notify me about this task",
                               systemImage: task.channels.isEmpty ? "bell.slash" : "bell")
                     }
                     if !task.channels.isEmpty {
@@ -368,7 +368,7 @@ struct TaskEditor: View {
                     }
                 }
                 if task.source == "gtasks" {
-                    Section { Label("Synced with Google Tasks: title, notes, due date and checking it off update Google too.", systemImage: "arrow.triangle.2.circlepath").font(.app(.caption)) }
+                    Section { Label("Synced with Google Tasks. Changing the title, notes or due date, or checking it off, also updates Google.", systemImage: "arrow.triangle.2.circlepath").font(.app(.caption)) }
                 }
 
                 if google.isConnected && task.googleEventID == nil && task.source == nil && !task.isHabit && !task.isBonus {
@@ -504,9 +504,9 @@ struct TaskEditor: View {
                 }
             }
         } header: { Text("Bonus") } footer: {
-            Text(limit <= 0 ? "No limit: check it off as many times as you like (several times a day too)\(repeats ? ", each time it comes around" : "")."
-                 : limit == 1 ? (repeats ? "Check it off once each time it comes around." : "Check it off once and it's done for good. It never shows as overdue or missed if you don't.")
-                 : "It stays on your list until you've checked it off \(limit) times (several times a day is fine)\(repeats ? ", then waits until it comes around again" : ", then it's done for good").")
+            Text(limit <= 0 ? "No limit: it can be checked off any number of times, including several times a day\(repeats ? ", each time it comes around" : "")."
+                 : limit == 1 ? (repeats ? "Check it off once each time it comes around." : "It can be checked off once, and then it is finished. If it is never done, it is not shown as overdue or missed.")
+                 : "It stays on your list until you've checked it off \(limit) times (it can be checked off several times a day)\(repeats ? ", then waits until it comes around again" : ", and then it is finished").")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
         Section {
@@ -522,7 +522,7 @@ struct TaskEditor: View {
                         .labelsHidden().fixedSize()
                 }
                 Stepper("Times in total: \(cycleTimes)", value: $cycleTimes, in: 1...99)
-                Label("Once it's been checked off\(limit == 1 ? "" : " \(limit) times"), it takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back: \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total.",
+                Label("After it has been checked off\(limit == 1 ? "" : " \(limit) times"), it takes a \(cycleGap)-\(cycleWeeks ? "week" : "day") break and comes back, \(cycleTimes) time\(cycleTimes == 1 ? "" : "s") in total.",
                       systemImage: "flame")
                     .font(.app(.caption)).foregroundStyle(.secondary)
             } else if task.recurrence.isRepeating {
@@ -543,7 +543,7 @@ struct TaskEditor: View {
                 } else if endMode == 2 {
                     Stepper("\(endCount) times", value: $endCount, in: 1...999)
                 }
-                Text("\(previewRecurrence.summary(start: task.startDate)). Each time it comes around it's a fresh start: anything not checked off doesn't carry over.")
+                Text("\(previewRecurrence.summary(start: task.startDate)). Each time it comes around the count starts again, and unused check-offs do not carry over.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
             }
         } header: { Text("Comes back") }
@@ -616,7 +616,7 @@ struct TaskEditor: View {
             }
             .disabled(task.title.trimmingCharacters(in: .whitespaces).isEmpty)
         } header: { Text("Then") } footer: {
-            Text("Follow-ups wait off your list until this is checked off, then come up on their own: chain the next step to the last.")
+            Text("A follow-up stays off your list until this task is checked off, and then comes up by itself. This way the next step of a piece of work can be set in advance.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -670,12 +670,12 @@ struct TaskEditor: View {
             }
             HStack {
                 Image(systemName: "plus.circle.fill").foregroundStyle(task.color.color)
-                TextField("Add a step — press Return", text: $newStep).textFieldStyle(.plain).onSubmit(addStep)
+                TextField("Add a step, then press Return", text: $newStep).textFieldStyle(.plain).onSubmit(addStep)
             }
         } header: {
             Text("Steps")
         } footer: {
-            Text("Optional. Break the habit into steps you tick off each time, e.g. stretch, journal, make the bed. They start fresh every time it comes around; ticking the last one opens the check-off.")
+            Text("Optional. Steps are small parts of the habit, such as stretching or making the bed, that you tick off each time. They start unticked each time the habit comes around, and ticking the last step opens the check-off.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -718,7 +718,7 @@ struct TaskEditor: View {
         } header: {
             Text("Make it stick")
         } footer: {
-            Text("Who you're becoming (identity), make it obvious (cue), easy (2 minutes) and satisfying (reward). For a habit to break, the Mac's screen time can track an app against a daily limit.")
+            Text("Who you want to become (identity), a cue, a 2-minute version and a reward. For a habit you want to break, the Mac's screen time can track an app against a daily limit.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
     }
@@ -911,7 +911,7 @@ struct TaskEditor: View {
                     model.editingTask = nil
                 } catch {
                     store.upsert(t)
-                    self.error = "Saved in Cadence only — Google Tasks failed: \(error.localizedDescription)"
+                    self.error = "Saved in Cadence only, because Google Tasks failed: \(error.localizedDescription)"
                 }
                 saving = false
             }
@@ -956,7 +956,7 @@ struct TaskEditor: View {
                     model.editingTask = nil
                 } catch {
                     store.upsert(t)
-                    self.error = "Saved in Cadence only — Google Calendar failed: \(error.localizedDescription)"
+                    self.error = "Saved in Cadence only, because Google Calendar failed: \(error.localizedDescription)"
                 }
                 saving = false
             }

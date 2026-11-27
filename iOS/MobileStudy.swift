@@ -97,7 +97,7 @@ final class MobileStudy: ObservableObject {
             var t = 0.0
             for n in 1...max(1, r.rounds) {
                 t += Double(r.studyMinutes * 60)
-                if n == r.rounds { events.append((t, "Study session done", "\(r.rounds) rounds of \(r.title). Nice work.")) }
+                if n == r.rounds { events.append((t, "Study session done", "\(r.rounds) rounds of \(r.title) finished.")) }
                 else {
                     events.append((t, "Break: \(r.breakMinutes) min", "Round \(n) of \(r.rounds) done. Stand up and stretch."))
                     t += Double(r.breakMinutes * 60)
@@ -211,7 +211,7 @@ private struct MobileStudySetup: View {
                     }
                 }
             } footer: {
-                if mode == .offline { Text("Put the phone face down or in another room. Time with Cadence open counts as phone use.") }
+                if mode == .offline { Text("Put the phone face down or in another room. Time with Cadence open is counted as phone use.") }
             }
             Section {
                 Button { start() } label: { Label("Start \(mode == .offline ? "no-phone" : "interval") session", systemImage: "play.fill").frame(maxWidth: .infinity) }
@@ -290,7 +290,7 @@ private struct MobileRunningStudy: View {
                         Label(r.screenSeconds < 10 ? "Phone not used so far" : "Cadence open \(durationString(seconds: r.screenSeconds))",
                               systemImage: r.screenSeconds < 10 ? "checkmark.circle" : "iphone")
                             .foregroundStyle(r.screenSeconds < 10 ? .green : .orange)
-                    } footer: { Text("Put the phone down. You'll get a notification when the time's up.") }
+                    } footer: { Text("Put the phone down. A notification arrives when the time is up.") }
                 }
             }
             .confirmationDialog("End this session?", isPresented: $confirmEnd, titleVisibility: .visible) {
@@ -423,7 +423,7 @@ struct CoursesScreen: View {
             } label: { Image(systemName: "plus") }
         }
         .navigationDestination(item: $open) { CourseScreen(id: $0) }
-        .overlay { if store.activeCourses.isEmpty { ContentUnavailableView("No presets yet", systemImage: "timer", description: Text("A preset is a set of intervals: the class period, 25 on / 5 off, or your own.")) } }
+        .overlay { if store.activeCourses.isEmpty { ContentUnavailableView("No presets yet", systemImage: "timer", description: Text("A preset is a set of study intervals, such as the class period, 25 minutes on and 5 off, or your own.")) } }
     }
 }
 
@@ -445,7 +445,7 @@ struct CourseScreen: View {
             }
             Section {
                 Toggle("Phase, note rules and mistakes", isOn: Binding(get: { c.showPhase }, set: { v in edit { $0.showPhase = v } }))
-            } footer: { Text("The class-period way of studying. Turn it off for simple on/off intervals.") }
+            } footer: { Text("This is the class-period way of studying. Turn it off for plain on/off intervals.") }
             if c.showPhase {
             Section {
                 Picker("Phase", selection: Binding(get: { c.phase }, set: { v in edit { $0.phase = v } })) {
@@ -534,7 +534,7 @@ struct FlashcardsScreen: View {
                 }
             }
             if courses.isEmpty {
-                Text("Flashcards belong to a preset (one per subject works well). Make one under Study › Presets first.").foregroundStyle(.secondary)
+                Text("Flashcards belong to a study preset, usually one for each subject. Make one under Study › Presets first.").foregroundStyle(.secondary)
             } else {
                 Section("New card") {
                     Picker("Course", selection: Binding(get: { UUID(uuidString: addTo).flatMap(store.course)?.id.uuidString ?? courses[0].id.uuidString }, set: { addTo = $0 })) {

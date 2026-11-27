@@ -20,9 +20,9 @@ enum StudyMode: String, Codable, CaseIterable, Identifiable {
     var symbol: String { self == .timed ? "timer" : self == .dynamic ? "graduationcap" : "book.closed" }
     var blurb: String {
         switch self {
-        case .timed: return "Study and break on a clock, for as many rounds as you like."
-        case .dynamic: return "Run a preset of intervals: the class period, 25 on / 5 off, or your own. Every length is adjustable."
-        case .offline: return "Put the computer away and study on paper. Cadence keeps time and notes if you come back to the screen."
+        case .timed: return "Study and break periods on a clock, for as many rounds as you choose."
+        case .dynamic: return "Run a preset of intervals, such as the class period, 25 minutes on and 5 off, or your own. Every length can be changed."
+        case .offline: return "Put the computer away and study on paper. Cadence keeps the time and records it if you use the computer during the session."
         }
     }
 }
@@ -34,10 +34,10 @@ enum StudyPhase: String, Codable, CaseIterable, Identifiable {
     var title: String { rawValue.capitalized }
     var blurb: String {
         switch self {
-        case .reading: return "The chapter seems like a pile of words and you don't understand it yet."
-        case .learning: return "You're beginning to understand."
-        case .understanding: return "You understand it; now make it stick."
-        case .testing: return "Test yourself the way the real test will."
+        case .reading: return "You have read the chapter but do not understand it yet."
+        case .learning: return "You are beginning to understand the chapter."
+        case .understanding: return "You understand the chapter, and the goal now is to remember it."
+        case .testing: return "Test yourself in the same way the real test will."
         }
     }
     var next: StudyPhase? {
@@ -83,13 +83,13 @@ enum PeriodKind: String, Codable, CaseIterable, Identifiable {
     }
     var defaultBlurb: String {
         switch self {
-        case .lecture: return "The whole chapter, just an info dump. Go slowly so you pick up a lot; take what you can and leave the rest for later. Memorization can wait."
-        case .questions: return "Your chance to begin understanding. Ask AI, ask a partner, look things up."
-        case .homework: return "Solve as many problems as you can. Ask AI, check the back of the textbook."
-        case .officeHours: return "Ask about the problems you got stuck on: a friend who's studying it, AI, a teacher. Learn as much as you can."
-        case .quiz: return "Try to retain as much as you can. Write down what you got wrong; you'll start there next session."
+        case .lecture: return "Go through the whole chapter once. Read slowly enough to take in most of it, and leave the rest for later. Memorizing comes afterwards."
+        case .questions: return "Work out what you did not understand. Ask AI or a partner, or look it up."
+        case .homework: return "Solve as many problems as you can, checking answers with AI or the back of the textbook."
+        case .officeHours: return "Ask about the problems you got stuck on, whether to a friend studying the same thing, AI or a teacher."
+        case .quiz: return "Answer from memory. Write down what you got wrong, because the next session starts there."
         case .custom, .study: return ""
-        case .breakTime: return "Stand up, stretch, drink some water, look away from the screen."
+        case .breakTime: return "Stand up, stretch, drink some water and look away from the screen."
         }
     }
     var symbol: String {

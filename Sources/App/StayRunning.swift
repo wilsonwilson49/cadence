@@ -56,7 +56,7 @@ enum StayRunning {
         if !UserDefaults.standard.bool(forKey: hintKey) {
             UserDefaults.standard.set(true, forKey: hintKey)
             AppModel.shared.notifier.deliver(AlertContent(kind: .nudge, title: "Cadence is still running",
-                body: "It's in the menu bar, so reminders keep coming. To quit completely, press ⌥⌘Q or use the menu bar icon.",
+                body: "Cadence is still running in the menu bar, so reminders keep coming. To quit it completely, press ⌥⌘Q or use the menu bar icon.",
                 symbol: "menubar.arrow.up.rectangle", tint: .blue), channels: [.banner])
         }
         return .terminateCancel

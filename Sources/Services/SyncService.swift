@@ -259,7 +259,7 @@ final class SyncService: ObservableObject {
             status = .idle
         } catch SyncError.unauthorized {
             signOut()
-            status = .error("Signed out — your session expired. Sign in again.")
+            status = .error("Signed out because your session expired. Sign in again.")
         } catch {
             status = .error(error.localizedDescription)
         }

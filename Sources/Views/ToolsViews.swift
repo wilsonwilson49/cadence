@@ -17,7 +17,7 @@ struct FlashcardsView: View {
     var body: some View {
         let courses = store.activeCourses
         VStack(spacing: 0) {
-            ScreenHeader(title: "Flashcards", subtitle: "Spaced repetition: what you know comes back less often, what you miss comes back soon.") {
+            ScreenHeader(title: "Flashcards", subtitle: "Cards you answer correctly come back less often, and cards you miss come back soon.") {
                 Picker("Course", selection: $courseKey) {
                     Text("All courses").tag("")
                     ForEach(courses) { Text($0.title).tag($0.id.uuidString) }
@@ -27,7 +27,7 @@ struct FlashcardsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if courses.isEmpty {
-                        Card { Text("Flashcards belong to a preset (one per subject works well). Make one under Study › Presets first.").foregroundStyle(.secondary) }
+                        Card { Text("Flashcards belong to a study preset, usually one for each subject. Make one under Study › Presets first.").foregroundStyle(.secondary) }
                     } else if reviewing {
                         CardReview(courseIDs: course.map { [$0.id] } ?? courses.map(\.id)) { reviewing = false }
                     } else {
@@ -204,7 +204,7 @@ struct NotesView: View {
     var body: some View {
         let notes = store.sortedNotes.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) || $0.body.localizedCaseInsensitiveContains(search) }
         VStack(spacing: 0) {
-            ScreenHeader(title: "Notes", subtitle: "Quick notes that sync to your iPhone and the web.") {
+            ScreenHeader(title: "Notes", subtitle: "Notes sync to your iPhone and the web.") {
                 Button { newNote() } label: { Label("New Note", systemImage: "square.and.pencil") }
                     .keyboardShortcut("n", modifiers: [.command, .option])
             }

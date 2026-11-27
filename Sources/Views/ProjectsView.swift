@@ -28,7 +28,7 @@ private struct ProjectList: View {
         let active = store.activeProjects
         let archived = store.projects.filter { $0.archived == true }
         VStack(spacing: 0) {
-            ScreenHeader(title: "Projects", subtitle: "Break a big goal into subtasks, give each a deadline, and see it all on a Gantt chart.") {
+            ScreenHeader(title: "Projects", subtitle: "A project is split into subtasks, each with its own deadline, and can be viewed as an outline, a Gantt chart or a map.") {
                 Picker("View", selection: $gantt) {
                     Label("Cards", systemImage: "square.grid.2x2").tag(false)
                     Label("Gantt", systemImage: "chart.bar.xaxis").tag(true)
@@ -41,7 +41,7 @@ private struct ProjectList: View {
                 VStack(alignment: .leading, spacing: 18) {
                     if gantt && !active.isEmpty {
                         HStack {
-                            Text("Every project on one chart. Click a project's name to fold it; click a subtask to open its project.")
+                            Text("Every project on one chart. Click a project's name to fold it, or click a subtask to open its project.")
                                 .font(.app(.caption)).foregroundStyle(.secondary)
                             Spacer()
                             Button("Fold all") { collapsed = Set(active.map(\.id)) }.controlSize(.small)
@@ -58,7 +58,7 @@ private struct ProjectList: View {
                         Card {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("No projects yet", systemImage: "square.stack.3d.up").font(.app(.headline))
-                                Text("A project is anything with several steps: an essay, a science fair entry, a trip. Add subtasks, split those into smaller ones, and give any of them a deadline. Deadlines coming up show on your Today list.")
+                                Text("A project is any piece of work with several steps, such as an essay or a science fair entry. Subtasks can be split into smaller ones, and any of them can have a deadline. Subtasks with a deadline coming up appear on the Today list.")
                                     .foregroundStyle(.secondary)
                                 Button { newProject() } label: { Label("Start a project", systemImage: "plus") }
                                     .buttonStyle(.borderedProminent).padding(.top, 4)
@@ -319,7 +319,7 @@ private struct ProjectDetail: View {
         Card {
             VStack(alignment: .leading, spacing: 0) {
                 if rows.isEmpty {
-                    Text("No subtasks yet. Add the first one below, then use the + boxes to break it down further.")
+                    Text("There are no subtasks yet. Add the first one below, then use the + boxes to split it into smaller ones.")
                         .foregroundStyle(.secondary).padding(.vertical, 6)
                 }
                 ForEach(entries(rows)) { e in
@@ -334,7 +334,7 @@ private struct ProjectDetail: View {
                 }
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill").foregroundStyle(p.color.color)
-                    TextField("Add a subtask — press Return", text: $newTitle)
+                    TextField("Add a subtask, then press Return", text: $newTitle)
                         .textFieldStyle(.plain)
                         .onSubmit(addTop)
                 }
@@ -361,7 +361,7 @@ private struct ProjectDetail: View {
                     band = nil
                 })
         }
-        Text("Tip: Return adds the next subtask, Tab moves it in a level, ⇧Tab out. Click a row's edge to pick it (⌘ or ⇧ for several, or ⇧-drag a box), then change them all from the bar. Press ⌘/ for every shortcut.")
+        Text("Return adds the next subtask, Tab moves it in a level and ⇧Tab moves it out. Click a row's edge to pick it (⌘ or ⇧ picks several, as does ⇧-dragging a box), then change the picked rows from the bar. Press ⌘/ to see every shortcut.")
             .font(.app(.caption)).foregroundStyle(.secondary)
     }
 
@@ -606,7 +606,7 @@ struct ProjectTodayMenu: View {
             Text("On today: \(projectTodayChoices.first { $0.0 == store.settings.projectTodayDays }?.1.lowercased() ?? "due today")")
         }
         .menuStyle(.borderlessButton).fixedSize().font(.app(.caption))
-        .help("Which until-done tasks and project subtasks join today’s list and its progress ring (urgent ones always do)")
+        .help("Which until-done tasks and project subtasks are added to today’s list and its progress ring. Urgent ones are always added.")
     }
 }
 

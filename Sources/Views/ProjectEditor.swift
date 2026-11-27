@@ -325,7 +325,7 @@ struct ProjectKeysButton: View {
                             GridRow { Text(k).font(.callout.monospaced().weight(.semibold)); Text(v).font(.app(.callout)).foregroundStyle(.secondary) }
                         }
                     }
-                    Text("No shortcuts needed: the + boxes add subtasks, the bar above the list changes picked ones, and right-click has the rest.")
+                    Text("None of these are required: the + boxes add subtasks, the bar above the list changes the picked rows, and right-clicking a row shows the other actions.")
                         .font(.app(.caption)).foregroundStyle(.secondary).frame(width: 380, alignment: .leading)
                 }
                 .padding(16)

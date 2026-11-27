@@ -423,7 +423,7 @@ struct TimedBlock: View {
                 drag = .zero
                 if st.days != 0 || st.minutes != 0 { model.applyEdit(item, start: s.adding(days: st.days).adding(minutes: st.minutes)) }
             })
-        .help("\(item.isBusy ? "Closed" : "Open (just for info)") · click for details and quick edits\(canMove ? " · drag to move it, drag its bottom edge to change its length" : "") · double-click to add a task at this time")
+        .help("\(item.isBusy ? "Closed" : "Open (for information only)") · click for details and quick edits\(canMove ? " · drag to move it, drag its bottom edge to change its length" : "") · double-click to add a task at this time")
         .contextMenu { AddDuringMenu(item: item) }
         .popover(isPresented: $showing, arrowEdge: .trailing) { ItemDetail(item: item) { showing = false } }
     }

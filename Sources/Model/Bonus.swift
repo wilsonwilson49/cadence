@@ -145,7 +145,7 @@ extension PlanTask {
     /// This round: "Once", "Done", "2 of 3 done", "Done 5 times · no limit".
     func bonusSummary(on day: Date = Date()) -> String {
         let n = bonusRoundKeys(on: day).count
-        guard let max = bonusMax else { return n == 0 ? "As often as you like" : "Done \(n) time\(n == 1 ? "" : "s") · no limit" }
+        guard let max = bonusMax else { return n == 0 ? "No limit" : "Done \(n) time\(n == 1 ? "" : "s") · no limit" }
         if max == 1 { return n == 0 ? "Once" : "Done" }
         return n == 0 ? "Up to \(max) times" : "\(Swift.min(n, max)) of \(max) done"
     }

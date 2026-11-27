@@ -100,12 +100,12 @@ final class ScreenTimeTracker: ObservableObject {
         let s = model.store.settings
         if s.screenLimitMinutes > 0, totalToday > s.screenLimitMinutes * 60, nudged.insert("total").inserted {
             model.notifier.deliver(AlertContent(kind: .nudge, title: "Screen time: over your \(durationString(seconds: s.screenLimitMinutes * 60)) limit",
-                                                body: "\(durationString(seconds: totalToday)) today. Maybe a good moment for a break, or a focus session.",
+                                                body: "\(durationString(seconds: totalToday)) of screen time today.",
                                                 symbol: "desktopcomputer", tint: .cyan), channels: s.nudgeChannels)
         }
         if s.distractingLimitMinutes > 0, distractingToday > s.distractingLimitMinutes * 60, nudged.insert("distracting").inserted {
             model.notifier.deliver(AlertContent(kind: .nudge, title: "Distracting apps: over your limit",
-                                                body: "\(durationString(seconds: distractingToday)) in distracting apps today. Back to your list?",
+                                                body: "\(durationString(seconds: distractingToday)) in distracting apps today.",
                                                 symbol: "exclamationmark.triangle", tint: .pink), channels: s.nudgeChannels)
         }
     }
@@ -263,12 +263,12 @@ final class FocusEngine: ObservableObject {
         if Double(away) <= Self.autoResumeLimit {
             resume(); autoResumedAt = now
             model.notifier.deliver(AlertContent(kind: .nudge, title: "Welcome back: \(what) is running again",
-                body: "Paused for \(gone) while you were away. That time doesn't count.",
+                body: "It was paused for \(gone) while you were away, so that time is not counted.",
                 symbol: "play.circle", tint: .pink), channels: [.banner])
         } else {
             autoResume = false; lastPauseNudge = now
             model.notifier.deliver(AlertContent(kind: .nudge, title: "Still on \(what)?",
-                body: "It paused while you were away (\(gone)). Resume it, or end it.",
+                body: "It has been paused for \(gone), since you left the computer. Resume it or end it.",
                 symbol: "pause.circle", tint: .pink), channels: [.banner])
         }
     }
@@ -460,8 +460,8 @@ final class FocusEngine: ObservableObject {
         // Time's up: the reflections for what you finished come up right away, over everything, until they're written.
         let done = s.finishedIds.compactMap(occurrence) + ticked
         model.walls.reflect(on: done)
-        model.notifier.deliver(AlertContent(kind: .nudge, title: "Time! \(s.finished) done\(s.bonusCount > 0 ? " + \(s.bonusCount) bonus" : "")",
-                                            body: "\(percent)% focused · +\(s.points) points. Write your reflections to check them off.",
+        model.notifier.deliver(AlertContent(kind: .nudge, title: "Focus session over: \(s.finished) done\(s.bonusCount > 0 ? " + \(s.bonusCount) bonus" : "")",
+                                            body: "\(percent)% focused · +\(s.points) points. Write a reflection for each finished task to check it off.",
                                             symbol: "scope", tint: .pink), channels: model.store.settings.defaultChannels)
         model.screen = .focus
         model.windows.showMain()

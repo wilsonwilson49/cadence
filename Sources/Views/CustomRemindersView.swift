@@ -7,7 +7,7 @@ struct CustomRemindersView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "Reminders", subtitle: "Get notified about anything: drink water, stretch, take medicine. Syncs to your iPhone and the web.") {
+            ScreenHeader(title: "Reminders", subtitle: "Reminders for things that are not tasks, such as drinking water or taking medicine. They sync to your iPhone and the web.") {
                 Menu {
                     Button("Blank") { add(CustomReminder(title: "New reminder")) }
                     Divider()

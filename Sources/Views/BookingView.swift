@@ -39,7 +39,7 @@ struct BookingView: View {
         let week = Self.plans(store: store, google: google, busy: busy)
         let total = week.reduce(0) { $0 + $1.total }
         VStack(spacing: 0) {
-            ScreenHeader(title: "Booking", subtitle: "Your open time for the next 7 days. Click a green stretch to book it; click anything else to change it, or drag it to move it.") {
+            ScreenHeader(title: "Booking", subtitle: "Your open time for the next 7 days. Click a green stretch to book it. Click any other item to edit it, or drag it to move it.") {
                 CalendarsMenu()
                 Button { Task { await loadBusy() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     .disabled(loading)
@@ -53,7 +53,7 @@ struct BookingView: View {
                             Image(systemName: "calendar.badge.exclamationmark").font(.app(.title2)).foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Google Calendar isn't connected").font(.app(.callout).weight(.semibold))
-                                Text("Open time only accounts for what's in Cadence, and bookings are saved as Cadence events without sending invites.")
+                                Text("Without Google Calendar, open time only accounts for items in Cadence, and bookings are saved as Cadence events without sending invitations.")
                                     .font(.app(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -85,7 +85,7 @@ struct BookingView: View {
 
                     if calendly.isConnected && !calendly.eventTypes.isEmpty { calendlyLinks }
 
-                    Text("Closed items take their time out of your open time; open ones are just for info. Events you make in Cadence start out closed and tasks start out open — change it in any item's editor. “Copy open times” puts the list on your clipboard to paste into an email.")
+                    Text("Closed items are taken out of your open time, and open items are shown for information only. Events made in Cadence start out closed and tasks start out open, which you can change in each item's editor. “Copy open times” copies the list so you can paste it into an email.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
                 .padding(22)
@@ -109,8 +109,8 @@ struct BookingView: View {
                 RoundedRectangle(cornerRadius: 3).fill(Color.green.opacity(0.25))
                     .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.green, lineWidth: 1))
             }
-            legendItem("Closed — blocks time") { RoundedRectangle(cornerRadius: 3).fill(Color.accentColor.opacity(0.6)) }
-            legendItem("Open — just for info") {
+            legendItem("Closed: blocks the time") { RoundedRectangle(cornerRadius: 3).fill(Color.accentColor.opacity(0.6)) }
+            legendItem("Open: for information only") {
                 RoundedRectangle(cornerRadius: 3).fill(.clear).background(OpenStripes(color: .secondary, opacity: 0.5))
                     .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.secondary, style: StrokeStyle(lineWidth: 1, dash: [2, 2])))
             }
@@ -260,7 +260,7 @@ struct BookingView: View {
     private var calendlyLinks: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle(text: "Your Calendly links", symbol: "link")
-            Text("Public links anyone can book from. Booked meetings land on your calendar automatically.")
+            Text("Public links that anyone can book a meeting from. Booked meetings are added to your calendar automatically.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
             ForEach(calendly.eventTypes) { t in
                 HStack(spacing: 10) {
@@ -479,7 +479,7 @@ private struct AllDayChip: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .contentShape(Rectangle())
             .onTapGesture { showing = true }
-            .help(item.isBusy ? "Closed: blocks the whole day" : "Open: just for info")
+            .help(item.isBusy ? "Closed: blocks the whole day" : "Open: for information only")
             .popover(isPresented: $showing, arrowEdge: .trailing) { ItemDetail(item: item) { showing = false } }
     }
 }
@@ -580,7 +580,7 @@ private struct BookingSheet: View {
                     local.sourceCalendar = ev.calendarID; local.externalURL = ev.link?.absoluteString
                     store.upsert(local)
                 }
-                done(mail.isEmpty ? "Booked “\(finalTitle)” in Cadence and Google Calendar." : "Booked “\(finalTitle)” — invitation sent to \(mail).")
+                done(mail.isEmpty ? "Booked “\(finalTitle)” in Cadence and Google Calendar." : "Booked “\(finalTitle)”, and an invitation was sent to \(mail).")
             } catch {
                 self.error = error.localizedDescription
             }

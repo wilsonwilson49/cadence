@@ -7,7 +7,7 @@ struct RemindersScreen: View {
     var body: some View {
         List {
             if store.customReminders.isEmpty {
-                Text("Get notified about anything: drink water, stretch, take medicine. Tap + to make one.").foregroundStyle(.secondary)
+                Text("Reminders for things that are not tasks, such as drinking water or taking medicine. Tap + to make one.").foregroundStyle(.secondary)
             }
             ForEach(store.customReminders) { r in
                 NavigationLink { MobileReminderEditor(id: r.id) } label: {

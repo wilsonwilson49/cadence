@@ -19,7 +19,7 @@ struct ReflectionsView: View {
         let groups = Dictionary(grouping: filtered) { $0.createdAt.startOfDay }
             .sorted { $0.key > $1.key }
         VStack(spacing: 0) {
-            ScreenHeader(title: "Reflections", subtitle: "A record of what you wrote each time you checked something off, or didn't get to it.") {
+            ScreenHeader(title: "Reflections", subtitle: "What you wrote each time you checked an item off or marked it as not done.") {
                 Button { export() } label: { Label("Export…", systemImage: "square.and.arrow.up") }
                     .disabled(store.reflections.isEmpty)
             }
@@ -49,7 +49,7 @@ struct ReflectionsView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "text.quote").font(.system(size: 36)).foregroundStyle(.secondary)
                     Text("No reflections yet").font(.app(.title3).weight(.semibold))
-                    Text("Each time you check off a task you'll write a short reflection (at least \(store.settings.minReflectionWords) words). They collect here.")
+                    Text("Each time you check off a task, you write a short reflection of at least \(store.settings.minReflectionWords) words. They are listed here.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

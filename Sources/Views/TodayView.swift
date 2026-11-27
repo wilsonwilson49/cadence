@@ -42,7 +42,7 @@ struct TodayView: View {
 
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor).font(.app(.title3))
-                    TextField("Quick add to today — press Return", text: $quickAdd)
+                    TextField("Add to today, then press Return", text: $quickAdd)
                         .textFieldStyle(.plain)
                         .font(.app(.body))
                         .onSubmit(addQuick)
@@ -74,7 +74,7 @@ struct TodayView: View {
                                 Image(systemName: "sun.max").font(.app(.title2)).foregroundStyle(.orange)
                                 VStack(alignment: .leading) {
                                     Text(ongoing.isEmpty ? "Nothing scheduled for today." : "Nothing else scheduled for today.")
-                                    Text("Add a task above, or press ⌘N for one with a time and repeat schedule.")
+                                    Text("Add a task in the box above. To give it a time or a repeat schedule, press ⌘N instead.")
                                         .font(.app(.caption)).foregroundStyle(.secondary)
                                 }
                             }
@@ -159,7 +159,7 @@ struct TodayView: View {
                 ProjectUpcomingSection()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Checking an item off asks for a reflection of at least \(store.settings.minReflectionWords) words. They're saved under Reflections.")
+                    Text("Checking an item off asks for a reflection of at least \(store.settings.minReflectionWords) words, which is saved under Reflections.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                 }
 
@@ -170,7 +170,7 @@ struct TodayView: View {
                     }
                     Card {
                         if events.isEmpty {
-                            Text("No events today. Events show on your calendars but never on the checklist.").foregroundStyle(.secondary)
+                            Text("No events today. Events appear on the calendars only, not on the checklist.").foregroundStyle(.secondary)
                         } else {
                             VStack(spacing: 0) {
                                 ForEach(Array(events.enumerated()), id: \.element.id) { i, ev in
@@ -207,7 +207,7 @@ struct TodayView: View {
                      : "Recurring checklist reminders are off")
                     .font(.app(.callout).weight(.medium))
                 Text(s.nudgeEnabled
-                     ? "Next one around \(timeString(engine.nextNudge)). You'll also get a check-in whenever the Mac wakes or unlocks."
+                     ? "The next one is around \(timeString(engine.nextNudge)). A check-in also appears whenever the Mac wakes or unlocks."
                      : "Turn them on in Settings.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
             }
@@ -228,7 +228,7 @@ struct TodayView: View {
 
     private func statusLine(done: Int, settled: Int, total: Int) -> String {
         if total == 0 { return "A clear day." }
-        if done == total { return "Everything is checked off. Nice work." }
+        if done == total { return "Everything is checked off." }
         if settled == total { return "All settled: \(done) done, \(total - done) not done." }
         return "\(total - settled) of \(total) left to check off."
     }

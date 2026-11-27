@@ -97,7 +97,7 @@ struct TodayScreen: View {
                 let bonus = store.bonusTasks()
                 if !bonus.isEmpty {
                     Section { ForEach(bonus) { MobileRow(occ: $0) } } header: { Text("Bonus") } footer: {
-                        Text("Optional extras, not counted in today's progress. Each one you finish during a focus session is +\(Bonus.points) points.")
+                        Text("Optional tasks, not counted in today's progress. Each one finished during a focus session gives +\(Bonus.points) points.")
                     }
                 }
                 if !later.isEmpty {
@@ -145,7 +145,7 @@ struct TodayScreen: View {
         if total == 0 { return "A clear day." }
         let pd = proj.filter { $0.item?.isDone == true }.count
         let done = all.filter(\.isDone).count + pd, settled = all.filter(\.isResolved).count + pd
-        if done == total { return "Everything is checked off. Nice work." }
+        if done == total { return "Everything is checked off." }
         if settled == total { return "All settled: \(done) done, \(total - done) not done." }
         return "\(total - settled) of \(total) left to check off."
     }
@@ -176,7 +176,7 @@ struct HabitsScreen: View {
                         VStack(spacing: 8) {
                             Image(systemName: "arrow.triangle.2.circlepath.circle").font(.system(size: 40)).foregroundStyle(.secondary)
                             Text("No habits yet").font(.app(.title3).weight(.semibold))
-                            Text("Start tiny: one thing you want to do every day, and its 2-minute version.").foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            Text("Add one thing you want to do every day, together with a 2-minute version of it.").foregroundStyle(.secondary).multilineTextAlignment(.center)
                             Button("New Habit") { model.newHabit() }.buttonStyle(.borderedProminent)
                         }
                         .frame(maxWidth: .infinity).padding(.top, 60)
@@ -283,7 +283,7 @@ struct HabitsScreen: View {
             }
             .font(.app(.caption)).foregroundStyle(.secondary)
             if st.missTwice {
-                Label("Missed last time. Never miss twice: even the 2-minute version counts.", systemImage: "exclamationmark.circle")
+                Label("This was missed last time. To avoid missing it twice in a row, even the 2-minute version counts.", systemImage: "exclamationmark.circle")
                     .font(.app(.caption)).foregroundStyle(.orange)
             }
             HStack {
@@ -431,7 +431,7 @@ struct FocusScreen: View {
                 }
                 .buttonStyle(.plain)
             }
-        } footer: { Text("Tick each as you finish. You'll write the reflections when time's up. Leaving Cadence counts as time away.") }
+        } footer: { Text("Tick each task as you finish it. The reflections are written after the time is up. Time outside Cadence is counted as away.") }
         let bonus = store.bonusTasks().filter { !$0.isDone || focus.bonusDone($0.task.id) > 0 }
         if !bonus.isEmpty {
             Section {
@@ -470,7 +470,7 @@ struct FocusScreen: View {
             let unreflected = (r.finishedIds + (r.bonusIds ?? [])).compactMap(model.occurrence).filter { !$0.isResolved && !$0.task.bonusUsedUp }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Time! \(r.finished) of \(r.picked) done").font(.app(.headline))
+                    Text("Session over: \(r.finished) of \(r.picked) done").font(.app(.headline))
                     Text("\(r.focusPercent)% focused · +\(r.points) points\(r.bonusCount > 0 ? " · \(r.bonusCount) bonus" : "")").foregroundStyle(.secondary)
                 }
                 ForEach(unreflected) { o in
@@ -512,7 +512,7 @@ struct FocusScreen: View {
                 .disabled(lengths.count >= 8)
             }
         } header: { Text("How long?") } footer: {
-            Text("Type any length up to \(Focus.maxMinutes / 60) hours. Touch and hold a button to remove it.")
+            Text("Type a length of up to \(Focus.maxMinutes / 60) hours. Touching and holding a button removes it.")
         }
         Section("What will you get through?") {
             if open.isEmpty { Text("Nothing open on today's list.").foregroundStyle(.secondary) }
@@ -543,7 +543,7 @@ struct FocusScreen: View {
             .buttonStyle(.borderedProminent).disabled(selected.isEmpty && store.openBonusTasks().isEmpty)
             .listRowBackground(Color.clear)
         } footer: {
-            Text("10 points per item finished in time, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.")
+            Text("Each item finished in time gives 10 points. Staying 90% focused multiplies this by 1.5 (75% by 1.25), and finishing the whole list adds 20.")
         }
     }
 }
@@ -619,7 +619,7 @@ struct ReflectionsScreen: View {
         let list = store.reflections.filter { search.isEmpty || $0.text.localizedCaseInsensitiveContains(search) || $0.taskTitle.localizedCaseInsensitiveContains(search) }
             .sorted { $0.createdAt > $1.createdAt }
         List {
-            if list.isEmpty { Text("Each time you check something off you write a short reflection. They collect here.").foregroundStyle(.secondary) }
+            if list.isEmpty { Text("Each time you check something off, you write a short reflection. They are listed here.").foregroundStyle(.secondary) }
             ForEach(list) { r in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -668,7 +668,7 @@ struct SettingsScreen: View {
                     ForEach(mobileProjectTodayChoices, id: \.0) { Text($0.1).tag($0.0) }
                 }
             } header: { Text("Today's progress ring") } footer: {
-                Text("What's left starts full and empties as you check things off; what's done fills up. Tap the ring on Today to switch.")
+                Text("With “what's left”, the ring starts full and empties as you check things off. With “what's done”, it fills up instead. Tapping the ring on Today also switches between them.")
             }
             Section {
                 Toggle("Morning check-in notification (8:30)", isOn: $store.settings.checkInOnLaunch)
@@ -683,7 +683,7 @@ struct SettingsScreen: View {
                 Stepper("At least \(store.settings.minReflectionWords) words", value: $store.settings.minReflectionWords, in: 20...200, step: 5)
             } header: { Text("Reflections") } footer: { Text("Every check-off needs a reflection. The minimum can't go below 20 words.") }
             Section {
-                Text("Google Calendar, Calendly, Google Tasks, booking and screen time are set up on the Mac app or the website; what they bring in syncs here.")
+                Text("Google Calendar, Calendly, Google Tasks, booking and screen time are set up in the Mac app or on the website, and the items they bring in sync here.")
                     .font(.app(.footnote)).foregroundStyle(.secondary)
             }
         }
@@ -724,7 +724,7 @@ struct AccountScreen: View {
                     .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty || password.isEmpty || sync.isSigningIn)
                     if case .error(let msg) = sync.status { Text(msg).foregroundStyle(.red).font(.app(.footnote)) }
                 } footer: {
-                    Text("Use the same account as the Mac app and the website. You can also use Cadence on this iPhone without an account; it just won't sync.")
+                    Text("Use the same account as the Mac app and the website. Cadence also works on this iPhone without an account, but then nothing syncs.")
                 }
             }
         }

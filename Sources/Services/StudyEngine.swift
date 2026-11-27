@@ -68,10 +68,10 @@ final class StudyEngine: ObservableObject {
         switch r.mode {
         case .timed:
             let st = r.timedState(now)
-            if st.finished { notify("Study session done", "\(r.rounds) round\(r.rounds == 1 ? "" : "s") of \(r.title). Nice work."); finish(); return }
+            if st.finished { notify("Study session done", "\(r.rounds) round\(r.rounds == 1 ? "" : "s") of \(r.title) finished."); finish(); return }
             let key = "\(st.round)|\(st.onBreak)"
             if notified.insert(key).inserted, !(st.round == 1 && !st.onBreak) {
-                if st.onBreak { notify("Break: \(r.breakMinutes) min", "Round \(st.round) of \(r.rounds) done. Stand up, stretch, look away from the screen.", symbol: "cup.and.saucer") }
+                if st.onBreak { notify("Break: \(r.breakMinutes) min", "Round \(st.round) of \(r.rounds) done. Stand up, stretch and look away from the screen.", symbol: "cup.and.saucer") }
                 else { notify("Round \(st.round) of \(r.rounds)", "Back to \(r.title).", symbol: "timer") }
             }
         case .dynamic:
@@ -80,7 +80,7 @@ final class StudyEngine: ObservableObject {
                 let last = r.index + 1 >= r.periods.count && r.cycle >= (r.repeats ?? 1)
                 let next = r.periods.indices.contains(r.index + 1) ? r.periods[r.index + 1] : r.periods.first
                 if r.autoAdvance == true {
-                    if last { notify("Session done", "\(r.title): all intervals finished. Nice work."); finish(); return }
+                    if last { notify("Session done", "\(r.title): all intervals finished."); finish(); return }
                     update { $0.nextPeriod(now) }
                     if let n = run?.period { notify("\(n.title): \(n.minutes) min", n.kind == .breakTime ? "Break time. Look away from the screen." : "Back to \(r.title).", symbol: n.kind.symbol) }
                 } else {
@@ -95,7 +95,7 @@ final class StudyEngine: ObservableObject {
                 pendingScreen += 1
                 if pendingScreen + r.screenSeconds >= 20, now.timeIntervalSince(lastScreenNudge) > 120 {
                     lastScreenNudge = now
-                    notify("No-computer session", "You're on the computer. Back to \(r.title) on paper?", symbol: "book.closed")
+                    notify("No-computer session", "This is a no-computer session, but the computer is in use. \(r.title) is meant to be done on paper.", symbol: "book.closed")
                 }
             }
             if pendingScreen >= 15 { update { _ in } }

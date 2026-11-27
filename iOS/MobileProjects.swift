@@ -18,7 +18,7 @@ struct ProjectsScreen: View {
             }
             if active.isEmpty {
                 Section {
-                    Text("A project is anything with several steps: an essay, a science fair entry, a trip. Add subtasks, split those into smaller ones, and give any of them a deadline.")
+                    Text("A project is any piece of work with several steps, such as an essay or a science fair entry. Subtasks can be split into smaller ones, and any of them can have a deadline.")
                         .foregroundStyle(.secondary)
                     Button { newProject() } label: { Label("Start a project", systemImage: "plus") }
                 }
@@ -30,7 +30,7 @@ struct ProjectsScreen: View {
                         if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
                     })
                     .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
-                } footer: { Text("Tap a project's name to fold it, a subtask to open its project. Scroll the chart sideways.") }
+                } footer: { Text("Tap a project's name to fold it, or tap a subtask to open its project. The chart scrolls sideways.") }
             } else {
                 Section { ForEach(active) { p in row(p) } }
             }

@@ -19,8 +19,8 @@ struct FocusView: View {
         let lv = Focus.level(points: points)
         VStack(spacing: 0) {
             ScreenHeader(title: "Focus", subtitle: (modeRaw == "work" && !focus.running) || focus.isWorking
-                         ? "Work on one thing: pick it, and it stays up front with distractions blocked until you complete it."
-                         : "Race the clock: set a time, then see how much of your list you can finish before it runs out.") { EmptyView() }
+                         ? "Pick one task. It stays at the top of the page, with distractions blocked, until you complete it."
+                         : "Set a length of time and pick tasks from your list. The session ends when the time runs out or every task is done.") { EmptyView() }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if focus.isWorking { working } else {
@@ -89,7 +89,7 @@ struct FocusView: View {
             }
             .frame(width: 230, height: 230)
             VStack(alignment: .leading, spacing: 10) {
-                Text("Tick each one as you finish it. You'll write the reflections when time's up, so the clock is only for doing. Switching to a distracting app counts against your focus.")
+                Text("Tick each task as you finish it. The reflections are written after the time is up, so they do not use any of the session. Time in a distracting app lowers your focus score.")
                     .font(.app(.caption)).foregroundStyle(.secondary)
                 awayRule
                 if !occs.isEmpty {
@@ -124,14 +124,14 @@ struct FocusView: View {
 
     private var pausedNote: String {
         focus.isAutoPaused
-            ? "Paused by itself while you were away\(focus.pauseReason == "sleep" ? " (the Mac slept)" : ""): the clock stopped at your last input, so that time doesn't count."
-            : "On a break: the clock is stopped, nothing counts as distracted, and blocking is lifted until you resume."
+            ? "The session paused because you were away\(focus.pauseReason == "sleep" ? " and the Mac slept" : ""). The clock stopped at your last input, so the time away is not counted."
+            : "The session is paused. The clock is stopped, nothing is counted as distracted, and blocking is lifted until you resume."
     }
 
     /// What happens if you leave the computer during this session.
     private var awayRule: some View {
-        Label(focus.isOffComputer ? "Off the computer: it keeps running while you're away or the Mac sleeps."
-              : "Away for 5 minutes (or the Mac asleep) and it pauses by itself, from your last input, until you're back.",
+        Label(focus.isOffComputer ? "This task is done away from the computer, so the session keeps running while you are away or the Mac sleeps."
+              : "If there is no input for 5 minutes, or the Mac sleeps, the session pauses. The pause starts at your last input, so the time away is not counted.",
               systemImage: focus.isOffComputer ? "figure.walk" : "moon.zzz")
             .font(.app(.caption)).foregroundStyle(.secondary)
     }
@@ -146,7 +146,7 @@ struct FocusView: View {
         .keyboardShortcut("p", modifiers: [.command, .shift])
         .tint(focus.isPaused ? .green : nil)
         .buttonStyle(.bordered)
-        .help(focus.isPaused ? "Back to it (⇧⌘P)" : "Take a break (⇧⌘P): the clock stops and nothing counts until you resume")
+        .help(focus.isPaused ? "Back to it (⇧⌘P)" : "Pause the session (⇧⌘P). The clock stops and nothing is counted until you resume.")
     }
 
     // MARK: Bonus tasks
@@ -185,9 +185,9 @@ struct FocusView: View {
             Card {
                 VStack(alignment: .leading, spacing: 12) {
                     SectionTitle(text: "What are you working on?", symbol: "scope")
-                    Text("Click one and it starts straight away: it goes up front as your headline, the clock runs, and distracting apps and websites (Settings › Tough love) are blocked until you complete it or stop.")
+                    Text("Clicking a task starts the session at once. The task stays at the top of the page, the clock runs, and distracting apps and websites (Settings › Tough love) are blocked until you complete it or stop.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
-                    Text("Score: 2 points for every 5 minutes you work (pauses don't count), plus 10 for completing it, all ×1.5 if you stay 90% focused (×1.25 at 75%), and +20 when you complete it.")
+                    Text("Every 5 minutes of work gives 2 points, and paused time is not counted. Completing the task adds 10. Staying 90% focused multiplies both by 1.5 (75% by 1.25), and completing the task adds another 20.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                     HStack {
                         TextField("Something else? Type it and press Return", text: $newWork).onSubmit(startNewWork)
@@ -273,7 +273,7 @@ struct FocusView: View {
                                 .font(.app(.caption)).foregroundStyle(.secondary)
                             Text("+\(focus.timePointsSoFar) points for time so far")
                                 .font(.app(.caption).monospacedDigit()).foregroundStyle(.green)
-                                .help("2 points for every 5 minutes, times your focus multiplier. Completing it adds more.")
+                                .help("2 points for every 5 minutes, multiplied by your focus multiplier. Completing the task adds more.")
                         }
                     }
                     if let target {
@@ -300,7 +300,7 @@ struct FocusView: View {
                     Button { focus.completeWork() } label: { Label("Complete", systemImage: "checkmark").padding(.horizontal, 8) }
                         .buttonStyle(.borderedProminent).controlSize(.large).tint(.green)
                         .keyboardShortcut(.return, modifiers: .command)
-                        .help("Check it off (⌘↩): you'll write the reflection, with the time already filled in")
+                        .help("Check it off (⌘↩). The reflection opens with the time already filled in.")
                     pauseButton.controlSize(.large)
                     let others = workChoices.filter { $0.id != o.id }
                     let otherBonus = store.openBonusTasks().filter { $0.task.id != t.id }
@@ -339,7 +339,7 @@ struct FocusView: View {
                     FocusLengthPicker(minutes: $minutes)
                     SectionTitle(text: "What will you get through?", symbol: "checklist", count: selected.count)
                     if open.isEmpty {
-                        Text(bonus.isEmpty ? "Nothing open on today's list. Add a task first." : "Nothing open on today's list, but there are bonus tasks.").foregroundStyle(.secondary)
+                        Text(bonus.isEmpty ? "There is nothing left on today's list. Add a task first." : "There is nothing left on today's list, but there are bonus tasks.").foregroundStyle(.secondary)
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), alignment: .leading)], alignment: .leading, spacing: 6) {
                             ForEach(open) { o in
@@ -358,12 +358,12 @@ struct FocusView: View {
                         }
                     }
                     if !bonus.isEmpty {
-                        Label("Bonus: \(bonus.map(\.task.title).joined(separator: ", ")). They're listed while the clock runs: tick off any you do for +\(Bonus.points) points each.",
+                        Label("Bonus: \(bonus.map(\.task.title).joined(separator: ", ")). They are listed while the clock runs, and each one you tick off gives +\(Bonus.points) points.",
                               systemImage: "star")
                             .font(.app(.caption)).foregroundStyle(.secondary).lineLimit(3)
                     }
                     HStack {
-                        Text("Score: 10 points per task finished in time, \(Bonus.points) per bonus task, ×1.5 if you stay 90% focused (×1.25 at 75%), +20 for clearing the list.")
+                        Text("Each task finished in time gives 10 points and each bonus task \(Bonus.points). Staying 90% focused multiplies this by 1.5 (75% by 1.25), and finishing the whole list adds 20.")
                             .font(.app(.caption)).foregroundStyle(.secondary)
                         Spacer()
                         Button {
@@ -385,7 +385,7 @@ struct FocusView: View {
             Text("\(r.finished)").font(.system(size: 44, weight: .heavy).monospacedDigit()).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 4) {
                 Text(r.isWork ? "\(r.finished > 0 ? "Done" : "Stopped"): \(r.title ?? "work") after \(Focus.label(max(1, r.actualMinutes)))"
-                              : "Time! \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.app(.headline))
+                              : "Session over: \(r.finished) of \(r.picked) done in \(r.actualMinutes) min").font(.app(.headline))
                 Text("\(r.focusPercent)% focused (\(durationString(seconds: r.distractingSeconds + r.awaySeconds)) away or distracted) · ×\(String(format: "%g", Focus.multiplier(r.focusPercent))) · +\(r.points) points")
                     .font(.app(.caption)).foregroundStyle(.secondary)
                 if r.bonusCount > 0 {
@@ -470,7 +470,7 @@ struct ScreenTimeView: View {
         let s = store.settings
         let focusToday = store.focusSessions.filter { $0.startedAt.isToday }.reduce(0) { $0 + $1.actualMinutes * 60 }
         return VStack(spacing: 0) {
-            ScreenHeader(title: "Screen Time", subtitle: "Where your computer time goes, so focus time and habits can use it.") {
+            ScreenHeader(title: "Screen Time", subtitle: "The time spent in each app on this Mac. Focus sessions and habits use it.") {
                 Toggle("Track on this Mac", isOn: $screenTime.enabled).toggleStyle(.switch)
             }
             ScrollView {
@@ -480,7 +480,7 @@ struct ScreenTimeView: View {
                             Image(systemName: "desktopcomputer").font(.app(.title2)).foregroundStyle(.cyan)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Turn on screen time").font(.app(.callout).weight(.semibold))
-                                Text("Cadence notes which app is in front while you're using your Mac (not when it's idle, locked or asleep) and keeps a daily total per app. Only those totals sync to your account; nothing else about what you do is recorded.")
+                                Text("Cadence records which app is in front while you use the Mac, but not while it is idle, locked or asleep, and keeps a daily total for each app. Only those totals sync to your account, and nothing else about what you do is recorded.")
                                     .font(.app(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -595,7 +595,7 @@ struct ScreenTimeView: View {
                     limitPicker("Daily limit for distracting apps", $store.settings.distractingLimitMinutes)
                     Divider()
                     Text("Distracting apps").font(.app(.callout).weight(.medium))
-                    Text("During a focus session, Cadence nudges you back when one of these comes to the front, and time in them lowers your focus score.")
+                    Text("During a focus session, Cadence reminds you when one of these comes to the front, and time spent in them lowers your focus score.")
                         .font(.app(.caption)).foregroundStyle(.secondary)
                     FlowRow(store.settings.distractingApps.map { app in
                         AnyView(HStack(spacing: 4) {
@@ -681,7 +681,7 @@ struct FocusLengthPicker: View {
                     .help(lengths.count >= 8 ? "You can keep up to 8 lengths. Right-click one to remove it." : "Add \(Focus.label(minutes)) to the length buttons")
                 }
             }
-            Text("Type any length up to \(Focus.maxMinutes / 60) hours. Save it to keep it as a button; right-click a button to remove it.")
+            Text("Type a length of up to \(Focus.maxMinutes / 60) hours. Saving a length adds it as a button, and right-clicking a button removes it.")
                 .font(.app(.caption)).foregroundStyle(.secondary)
         }
         .onAppear { text = String(minutes) }
