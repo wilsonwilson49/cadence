@@ -2,27 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Terms of Service · Cadence</title>
   <meta name="description" content="The terms for using Cadence.">
   <link rel="icon" type="image/png" href="/favicon.png">
+  <meta name="theme-color" content="#fbfaf7">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/site.css">
   <link rel="stylesheet" href="/css/legal.css">
   <script>
-    // Theme before first paint, so there's no flash. Dark unless this device chose otherwise.
-    try { document.documentElement.dataset.theme = localStorage.getItem('cadence:theme') || 'dark'; } catch { document.documentElement.dataset.theme = 'dark'; }
-    try {
-      const f = localStorage.getItem('cadence:font') || 'verdana', r = document.documentElement;
-      if (f.startsWith('custom:')) { r.dataset.font = 'custom'; r.style.setProperty('--sans', `"${f.slice(7).replace(/[^\w .-]/g, '')}", Verdana, sans-serif`); }
-      else r.dataset.font = f;
-    } catch {}
+    // Before first paint: the signed-in buttons, if the app said so last time.
+    try { if (localStorage.getItem('cadence:signedIn') === '1') document.documentElement.classList.add('signed-in'); } catch {}
   </script>
 </head>
 <body>
-<header><div class="bar"><img src="/icon-192.png" alt=""><b>Cadence</b>
-  <nav><a href="/privacy">Privacy</a><a href="/terms" aria-current="page">Terms</a><a href="/">Open Cadence</a></nav></div></header>
-<main>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="/"><img src="/apple-touch-icon.png" alt="">Cadence</a>
+  <nav class="links">
+    <a href="/#features">Features</a><a href="/#focus">Focus</a><a href="/#download">Download</a><a href="/privacy">Privacy</a>
+  </nav>
+  <div class="nav-cta">
+    <a class="btn ghost" href="/app" data-signin>Sign in</a>
+    <a class="btn dark" href="/app?mode=register" data-start><span class="when-out">Get started</span><span class="when-in">Open Cadence</span></a>
+  </div>
+</div></header>
+<section class="doc-head"><div class="wrap">
+  <span class="kicker">Legal</span>
   <h1>Terms of Service</h1>
   <div class="meta">Last updated October 1, 2026</div>
+  <nav class="doc-tabs" aria-label="Legal pages"><a href="/privacy">Privacy Policy</a><a href="/terms" aria-current="page">Terms of Service</a></nav>
+</div></section>
+<main class="wrap doc">
+  <aside class="toc" aria-label="Contents"></aside>
+  <article class="doc-body">
 
   <div class="summary">
     <h2>The short version</h2>
@@ -102,7 +114,14 @@
   <h2>18. Contact</h2>
   <p>Cadence · <a href="mailto:cadencemain26@gmail.com">cadencemain26@gmail.com</a></p>
 
-  <footer>See also our <a href="/privacy">Privacy Policy</a>.</footer>
+  <div class="doc-foot">See also our <a href="/privacy">Privacy Policy</a>.</div>
+  </article>
 </main>
+<footer><div class="wrap">
+  <a class="brand" href="/"><img src="/apple-touch-icon.png" alt="">Cadence</a>
+  <nav><a href="/app">Open the app</a><a href="/#download">Download</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:cadencemain26@gmail.com">Contact</a></nav>
+  <span>© 2026 Cadence</span>
+</div></footer>
+<script src="/js/site.js"></script>
 </body>
 </html>

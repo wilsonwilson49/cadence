@@ -1,61 +1,5 @@
-/* The public page: a light, plain product page. The product shots are drawn in HTML in the app's own dark colours,
-   so they look like the app does. */
-:root {
-  --bg: #fbfaf7; --surface: #ffffff; --tint: #f4f2ed; --ink: #16181d; --muted: #5b616b; --faint: #8b9099;
-  --line: #e7e3dc; --line-strong: #d6d1c7;
-  --accent: #3a61ad; --accent-hover: #2f5196; --accent-soft: #e8eefa;
-  --red: #c9423a; --orange: #b76a12; --green: #237a50;
-  /* The app (dark), for the product shots */
-  --a-bg: #101317; --a-panel: #171b21; --a-side: #13161b; --a-raised: #1d2229; --a-line: #2a3038; --a-text: #e4e6e9; --a-muted: #9aa2ac;
-  --a-faint: #646d78; --a-accent: #82a8ef;
-  --sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --radius: 14px;
-  color-scheme: light;
-}
-* { box-sizing: border-box; }
-html { scroll-padding-top: 84px; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-img { display: block; }
-code { font: 13px ui-monospace, Menlo, Consolas, monospace; background: var(--tint); padding: 1px 5px; border-radius: 5px; }
-.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-.wrap { width: min(1160px, 100% - 48px); margin: 0 auto; }
-.wrap.narrow { width: min(820px, 100% - 48px); }
-.red { color: #e4685f; } .orange { color: #e3a23e; } .green { color: #5cb87a; }
-
-/* ---------- buttons ---------- */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px;
-  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 500 14.5px/1 var(--sans); white-space: nowrap;
-  transition: background-color .15s, border-color .15s, color .15s, transform .12s; }
-.btn:hover { text-decoration: none; border-color: var(--ink); }
-.btn:active { transform: scale(.97); }
-.btn.lg { height: 48px; padding: 0 24px; font-size: 15.5px; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.btn.dark { background: var(--ink); border-color: var(--ink); color: #fff; }
-.btn.dark:hover { background: #2b2f37; }
-.btn.ghost { border-color: transparent; background: transparent; }
-.btn.ghost:hover { background: var(--tint); border-color: transparent; }
-.btn.light { background: #fff; border-color: #fff; color: var(--ink); }
-.btn.light:hover { background: #eef1f6; }
-/* Signed in: "Open Cadence" instead of "Get started", and no Sign in. */
-.when-in { display: none; }
-.signed-in .when-in { display: inline; }
-.signed-in .when-out, .signed-in [data-signin] { display: none; }
-
-/* ---------- top bar ---------- */
-.nav { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(1.4) blur(14px);
-  -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid transparent; transition: border-color .2s; }
-.nav .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
-.brand:hover { text-decoration: none; }
-.brand img { width: 30px; height: 30px; border-radius: 8px; box-shadow: 0 0 0 1px var(--line); }
-.links { display: flex; gap: 26px; flex: 1; }
-.links a { color: var(--muted); font-size: 14.5px; }
-.links a:hover { color: var(--ink); text-decoration: none; }
-.nav-cta { display: flex; gap: 8px; }
-
+/* The home page, on top of site.css: a light, plain product page. The product shots are drawn in HTML in the app's
+   own dark colours, so they look like the app does. */
 /* ---------- hero ---------- */
 .hero { padding: 72px 0 40px; position: relative; overflow: hidden; }
 .hero::before { content: ""; position: absolute; inset: -30% -10% auto; height: 760px; z-index: -1;
@@ -251,14 +195,6 @@ h4 { font-size: 17px; letter-spacing: -.01em; font-weight: 650; margin: 14px 0 6
 .band h2 { margin: 0 0 8px; color: #fff; }
 .band p { margin: 0; color: #b6bcc6; font-size: 17px; }
 
-/* ---------- footer ---------- */
-footer { border-top: 1px solid var(--line); padding: 30px 0 calc(30px + env(safe-area-inset-bottom)); color: var(--faint); font-size: 14px; }
-footer .wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
-footer nav { display: flex; gap: 20px; flex: 1; flex-wrap: wrap; }
-footer nav a { color: var(--muted); }
-footer .brand { font-size: 15px; }
-footer .brand img { width: 24px; height: 24px; border-radius: 6px; }
-
 /* ---------- reveal on scroll ---------- */
 .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s cubic-bezier(.2, .7, .2, 1), transform .7s cubic-bezier(.2, .7, .2, 1); }
 .js .reveal.in { opacity: 1; transform: none; }
@@ -279,8 +215,6 @@ footer .brand img { width: 24px; height: 24px; border-radius: 6px; }
   .downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
-  .links { display: none; }
-  .nav .wrap { justify-content: space-between; }
   .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
   .feature.flip .f-text { order: 0; }
   .steps { grid-template-columns: 1fr; }
@@ -288,9 +222,6 @@ footer .brand img { width: 24px; height: 24px; border-radius: 6px; }
   .section { padding: 76px 0; }
 }
 @media (max-width: 640px) {
-  .wrap, .wrap.narrow { width: calc(100% - 32px); }
-  .nav .wrap { height: 60px; gap: 12px; }
-  .nav-cta .btn { height: 36px; padding: 0 14px; font-size: 14px; }
   .hero { padding: 44px 0 20px; }
   .ctas .btn { width: 100%; }
   .stage { margin-top: 40px; }
